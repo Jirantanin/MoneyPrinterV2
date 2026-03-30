@@ -19,8 +19,8 @@
 
 ### TTS Prosody
 
-- [ ] **TTS-01**: TTS narration is generated at a globally increased speaking rate (+20%) to sound energetic, applied to the full script
-- [ ] **TTS-02**: TTS rate value is preserved as a config option in `config.json` so it can be adjusted without code changes
+- [x] **TTS-01**: TTS narration is generated at a globally increased speaking rate (+20%) to sound energetic, applied to the full script
+- [x] **TTS-02**: TTS rate value is preserved as a config option in `config.json` so it can be adjusted without code changes
 
 ## v2 Requirements
 
@@ -54,8 +54,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TTS-01 | Phase 1 | Pending |
-| TTS-02 | Phase 1 | Pending |
+| TTS-01 | Phase 1 | Complete |
+| TTS-02 | Phase 1 | Complete |
 | HOOK-01 | Phase 2 | Pending |
 | HOOK-02 | Phase 2 | Pending |
 | HOOK-03 | Phase 2 | Pending |

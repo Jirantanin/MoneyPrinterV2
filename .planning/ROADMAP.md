@@ -12,7 +12,7 @@ Three phases transform flat, static YouTube Shorts into scroll-stopping clips. T
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: TTS Prosody** - Increase speaking rate and expose config value so narration sounds energetic
+- [x] **Phase 1: TTS Prosody** - Increase speaking rate and expose config value so narration sounds energetic (completed 2026-03-30)
 - [ ] **Phase 2: Hook Generation** - Generate and inject a contextual opening hook sentence via LLM
 - [ ] **Phase 3: Visual Motion** - Add Ken Burns pan drift and zoom-push scene transitions in Remotion
 
@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 1 plan
 
 Plans:
-- [ ] 01-01-PLAN.md — Add get_tts_rate() config getter and wire rate= into edge_tts.Communicate
+- [x] 01-01-PLAN.md — Add get_tts_rate() config getter and wire rate= into edge_tts.Communicate
 
 ### Phase 2: Hook Generation
 **Goal**: Every generated script opens with an LLM-selected hook sentence that matches the topic and is spoken and subtitled from frame 0
@@ -60,6 +60,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. TTS Prosody | 0/1 | Not started | - |
+| 1. TTS Prosody | 1/1 | Complete   | 2026-03-30 |
 | 2. Hook Generation | 0/TBD | Not started | - |
 | 3. Visual Motion | 0/TBD | Not started | - |
