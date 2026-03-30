@@ -29,7 +29,7 @@ Every generated clip must stop the scroll within the first 3 seconds — hook + 
 - [ ] **Hook generation** — LLM selects and generates an engaging opening line (question / stat / bold/controversial) matched to each topic; hook is injected as the first sentence of the script
 - [ ] **Ken Burns effect** — each image gets zoom/pan motion (slow drift) during its screen time in Remotion
 - [ ] **Zoom/push scene transitions** — animated cut between scenes instead of hard cuts in Remotion
-- [ ] **TTS prosody improvements** — increase speaking rate and add pitch variation in edge-tts to make narration feel energetic and less monotone
+- [x] **TTS prosody improvements** — increase speaking rate and add pitch variation in edge-tts to make narration feel energetic and less monotone — Validated in Phase 01: tts-prosody
 
 ### Out of Scope
 
@@ -61,7 +61,7 @@ Every generated clip must stop the scroll within the first 3 seconds — hook + 
 |----------|-----------|---------|
 | Ken Burns in Remotion (not Python/Pillow) | Remotion controls timing per frame; Python can't sync motion with audio | — Pending |
 | Hook selected by LLM (not hardcoded templates) | LLM can match tone/style to topic better than rules | — Pending |
-| edge-tts prosody via SSML tags | Minimal change — no provider swap, just tune existing wrapper | — Pending |
+| edge-tts prosody via rate= kwarg | rate= kwarg works; SSML not needed; pitch= silently ignored by Microsoft since v6.0.3 | Phase 01 complete |
 | Zoom/push transition over fade | Higher energy, better fit for Shorts/Reels format | — Pending |
 
 ## Evolution
@@ -82,4 +82,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after initialization*
+*Last updated: 2026-03-31 — Phase 01 (tts-prosody) complete*
