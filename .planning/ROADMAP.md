@@ -26,7 +26,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. A generated WAV file plays noticeably faster than the baseline (approximately +20% rate audible on first listen)
   2. The speaking rate value can be changed in `config.json` and the next generated video reflects the new value without any code changes
   3. The pipeline does not crash or produce a silent WAV when the rate config key is missing or set to the default value
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Add get_tts_rate() config getter and wire rate= into edge_tts.Communicate
 
 ### Phase 2: Hook Generation
 **Goal**: Every generated script opens with an LLM-selected hook sentence that matches the topic and is spoken and subtitled from frame 0
@@ -57,6 +60,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. TTS Prosody | 0/TBD | Not started | - |
+| 1. TTS Prosody | 0/1 | Not started | - |
 | 2. Hook Generation | 0/TBD | Not started | - |
 | 3. Visual Motion | 0/TBD | Not started | - |
