@@ -1,5 +1,7 @@
 wheel
 termcolor
+google-api-python-client
+google-auth-oauthlib
 schedule
 kittentts @ https://github.com/KittenML/KittenTTS/releases/download/0.8.1/kittentts-0.8.1-py3-none-any.whl
 soundfile
@@ -16,3 +18,5 @@ faster-whisper
 srt_equalizer
 undetected_chromedriver
 platformdirs
+pytrends
+newsapi-python

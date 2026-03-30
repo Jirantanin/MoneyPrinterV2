@@ -183,6 +183,9 @@ def add_product(product: dict) -> None:
             "products": products
         }, file, indent=4)
     
+def get_discovered_topics_cache_path() -> str:
+    return os.path.join(get_cache_path(), 'discovered_topics.json')
+
 def get_results_cache_path() -> str:
     """
     Gets the path to the results cache file.

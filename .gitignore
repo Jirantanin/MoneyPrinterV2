@@ -8,3 +8,6 @@ niche.txt
 *.exe
 auto.sh
 .DS_Store
+remotion/public/assets/
+remotion/.render-props*.json
+remotion/node_modules/

@@ -32,5 +32,14 @@
   "tts_rate": "+20%",
   "font": "bold_font.ttf",
   "imagemagick_path": "Path to magick.exe or on linux/macOS just /usr/bin/convert",
-  "script_sentence_length": 4
+  "script_sentence_length": 4,
+  "topic_discovery": {
+    "enabled": false,
+    "youtube_api_key": "",
+    "news_api_key": "",
+    "anthropic_api_key": "",
+    "scoring_provider": "ollama",
+    "geo": "US",
+    "max_topic_age_hours": 24
+  }
 }

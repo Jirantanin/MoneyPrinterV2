@@ -138,12 +138,15 @@ def main():
                 error("Invalid account selected. Please try again.", "red")
                 main()
             else:
+                from datetime import datetime
+                _run_dir = os.path.join(ROOT_DIR, ".mp", datetime.now().strftime("%Y%m%d_%H%M%S"))
+                os.makedirs(_run_dir, exist_ok=True)
                 youtube = YouTube(
                     selected_account["id"],
                     selected_account["nickname"],
-                    selected_account["firefox_profile"],
                     selected_account["niche"],
-                    selected_account["language"]
+                    selected_account["language"],
+                    run_dir=_run_dir,
                 )
 
                 while True:
@@ -182,34 +185,74 @@ def main():
                         else:
                             warning(" No videos found.")
                     elif user_input == 3:
+                        # Setup Upload CRON
                         info("How often do you want to upload?")
 
                         info("\n============ OPTIONS ============", False)
-                        for idx, cron_option in enumerate(YOUTUBE_CRON_OPTIONS):
+                        for idx, cron_option in enumerate(YOUTUBE_UPLOAD_CRON_OPTIONS):
                             print(colored(f" {idx + 1}. {cron_option}", "cyan"))
-
                         info("=================================\n", False)
 
                         user_input = int(question("Select an Option: "))
 
                         cron_script_path = os.path.join(ROOT_DIR, "src", "cron.py")
-                        command = ["python", cron_script_path, "youtube", selected_account['id'], get_active_model()]
+                        upload_cmd = ["python", cron_script_path, "youtube", selected_account['id'], get_active_model()]
 
-                        def job():
-                            subprocess.run(command)
+                        def upload_job():
+                            subprocess.run(upload_cmd)
 
                         if user_input == 1:
-                            # Upload Once
-                            schedule.every(1).day.do(job)
-                            success("Set up CRON Job.")
+                            schedule.every(1).day.do(upload_job)
+                            success("Set up Upload CRON (once a day).")
                         elif user_input == 2:
-                            # Upload Twice a day
-                            schedule.every().day.at("10:00").do(job)
-                            schedule.every().day.at("16:00").do(job)
-                            success("Set up CRON Job.")
+                            schedule.every().day.at("10:00").do(upload_job)
+                            schedule.every().day.at("16:00").do(upload_job)
+                            success("Set up Upload CRON (twice a day).")
                         else:
                             break
+
                     elif user_input == 4:
+                        # Setup Discovery CRON
+                        info("What time should discovery run daily?")
+
+                        info("\n============ OPTIONS ============", False)
+                        for idx, cron_option in enumerate(YOUTUBE_DISCOVERY_CRON_OPTIONS):
+                            print(colored(f" {idx + 1}. {cron_option}", "cyan"))
+                        info("=================================\n", False)
+
+                        user_input = int(question("Select an Option: "))
+
+                        cron_script_path = os.path.join(ROOT_DIR, "src", "cron.py")
+                        discover_cmd = ["python", cron_script_path, "discover", selected_account['id'], get_active_model()]
+
+                        def discover_job():
+                            subprocess.run(discover_cmd)
+
+                        time_map = {1: "06:00", 2: "07:00", 3: "08:00"}
+                        if user_input in time_map:
+                            run_time = time_map[user_input]
+                        elif user_input == 4:
+                            run_time = question("Enter time (HH:MM): ").strip()
+                        else:
+                            break
+
+                        schedule.every().day.at(run_time).do(discover_job)
+                        success(f"Set up Discovery CRON (daily at {run_time}).")
+
+                    elif user_input == 5:
+                        # Discover Trending Topics (run now)
+                        from topic_discovery import run_discovery
+                        info("Running topic discovery...")
+                        result = run_discovery(selected_account.get("language", "English"))
+                        if result and "winner" in result:
+                            success(f"Best topic: {result['winner']['topic']}")
+                            info(f"Angle: {result['winner']['angle']}")
+                            info(f"Reasoning: {result.get('reasoning', '')}")
+                            for r in result.get("runners_up", []):
+                                info(f"  Runner-up: {r['topic']} (score: {r['score']})")
+                        else:
+                            warning("Topic discovery failed or returned no results.")
+                    elif user_input == 6:
                         if get_verbose():
                             info(" => Climbing Options Ladder...", False)
                         break

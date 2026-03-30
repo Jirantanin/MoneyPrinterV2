@@ -298,6 +298,31 @@ def get_whisper_compute_type() -> str:
     with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
         return json.load(file).get("whisper_compute_type", "int8")
     
+def get_topic_discovery_config() -> dict:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+        return json.load(file).get("topic_discovery", {})
+
+def get_topic_discovery_enabled() -> bool:
+    return get_topic_discovery_config().get("enabled", False)
+
+def get_topic_discovery_youtube_api_key() -> str:
+    return get_topic_discovery_config().get("youtube_api_key", "")
+
+def get_topic_discovery_news_api_key() -> str:
+    return get_topic_discovery_config().get("news_api_key", "")
+
+def get_topic_discovery_anthropic_api_key() -> str:
+    return get_topic_discovery_config().get("anthropic_api_key", "")
+
+def get_topic_discovery_scoring_provider() -> str:
+    return get_topic_discovery_config().get("scoring_provider", "ollama")
+
+def get_topic_discovery_geo() -> str:
+    return get_topic_discovery_config().get("geo", "US")
+
+def get_topic_discovery_max_age_hours() -> int:
+    return get_topic_discovery_config().get("max_topic_age_hours", 24)
+
 def equalize_subtitles(srt_path: str, max_chars: int = 10) -> None:
     """
     Equalizes the subtitles in a SRT file.

@@ -30,14 +30,24 @@ TWITTER_CRON_OPTIONS = [
 YOUTUBE_OPTIONS = [
     "Upload Short",
     "Show all Shorts",
-    "Setup CRON Job",
+    "Setup Upload CRON",
+    "Setup Discovery CRON",
+    "Discover Trending Topics",
     "Quit"
 ]
 
-YOUTUBE_CRON_OPTIONS = [
+YOUTUBE_UPLOAD_CRON_OPTIONS = [
     "Once a day",
     "Twice a day",
     "Thrice a day",
+    "Quit"
+]
+
+YOUTUBE_DISCOVERY_CRON_OPTIONS = [
+    "06:00",
+    "07:00",
+    "08:00",
+    "Custom time",
     "Quit"
 ]
 
