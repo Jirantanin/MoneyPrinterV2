@@ -233,6 +233,21 @@ def get_tts_voice() -> str:
     with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
         return json.load(file).get("tts_voice", "Jasper")
 
+def get_tts_rate() -> str:
+    """
+    Gets the TTS speaking rate from the config file.
+    Uses edge-tts rate format: percentage string with explicit sign, e.g. "+20%".
+    Defaults to "+20%" (energetic Shorts pacing) if key is absent from config.
+
+    NOTE: Do NOT add a tts_pitch getter. The pitch= kwarg on edge_tts.Communicate
+    is silently ignored by Microsoft's backend since edge-tts v6.0.3.
+
+    Returns:
+        rate (str): The TTS rate string
+    """
+    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+        return json.load(file).get("tts_rate", "+20%")
+
 def get_assemblyai_api_key() -> str:
     """
     Gets the AssemblyAI API key.
