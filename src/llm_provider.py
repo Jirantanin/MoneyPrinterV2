@@ -61,3 +61,39 @@ def generate_text(prompt: str, model_name: str = None) -> str:
     )
 
     return response["message"]["content"].strip()
+
+
+def generate_text_structured(
+    prompt: str,
+    system_prompt: str,
+    schema: dict,
+    model_name: str = None,
+) -> str:
+    """
+    Generates text using Ollama with structured JSON output.
+
+    Args:
+        prompt (str): User prompt
+        system_prompt (str): System prompt for role/instructions
+        schema (dict): JSON schema dict (e.g. from Pydantic model_json_schema())
+        model_name (str): Optional model name override
+
+    Returns:
+        response (str): Raw JSON string matching the provided schema
+    """
+    model = model_name or _selected_model
+    if not model:
+        raise RuntimeError(
+            "No Ollama model selected. Call select_model() first or pass model_name."
+        )
+
+    response = _client().chat(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+        format=schema,
+    )
+
+    return response["message"]["content"].strip()
