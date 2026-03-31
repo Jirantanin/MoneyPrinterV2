@@ -53,8 +53,10 @@ Plans:
   2. Consecutive images drift in different directions (zoom-in, zoom-out, pan left, pan right cycling) so the clip does not look like a looping template
   3. A visible push/zoom transition plays between each pair of scenes; no hard cuts or black frames appear at scene boundaries
   4. The rendered video's total duration matches the TTS audio length — no silent tail and no audio cutoff caused by TransitionSeries frame overlap
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 1 plan
+
+Plans:
+- [ ] 03-01-PLAN.md — Install @remotion/transitions, rewrite ImageSlideshow with 4-direction Ken Burns cycle and slide transitions
 
 ## Progress
 
@@ -65,4 +67,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. TTS Prosody | 1/1 | Complete   | 2026-03-30 |
 | 2. Hook Generation | 0/1 | Not started | - |
-| 3. Visual Motion | 0/TBD | Not started | - |
+| 3. Visual Motion | 0/1 | Not started | - |
