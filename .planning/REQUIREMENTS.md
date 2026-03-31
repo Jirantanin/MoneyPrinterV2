@@ -13,9 +13,9 @@
 
 ### Visual Motion
 
-- [ ] **VIS-01**: Every image in a generated clip has Ken Burns motion (zoom and/or pan drift) synced to its on-screen duration
-- [ ] **VIS-02**: Ken Burns direction varies per scene (zoom-in, zoom-out, pan directions) so clips don't look templated
-- [ ] **VIS-03**: Scene transitions use zoom/push (not hard cuts or fade) with 15-20 frame duration at 30fps
+- [x] **VIS-01**: Every image in a generated clip has Ken Burns motion (zoom and/or pan drift) synced to its on-screen duration
+- [x] **VIS-02**: Ken Burns direction varies per scene (zoom-in, zoom-out, pan directions) so clips don't look templated
+- [x] **VIS-03**: Scene transitions use zoom/push (not hard cuts or fade) with 15-20 frame duration at 30fps
 
 ### TTS Prosody
 
@@ -59,9 +59,9 @@
 | HOOK-01 | Phase 2 | Complete |
 | HOOK-02 | Phase 2 | Complete |
 | HOOK-03 | Phase 2 | Complete |
-| VIS-01 | Phase 3 | Pending |
-| VIS-02 | Phase 3 | Pending |
-| VIS-03 | Phase 3 | Pending |
+| VIS-01 | Phase 3 | Complete |
+| VIS-02 | Phase 3 | Complete |
+| VIS-03 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 8 total

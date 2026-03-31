@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 02-hook-generation 02-01-PLAN.md
-last_updated: "2026-03-31T04:19:30.496Z"
+stopped_at: Completed 03-visual-motion 03-01-PLAN.md
+last_updated: "2026-03-31T10:07:55.617Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
   percent: 0
 ---
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01-tts-prosody P01 | 2 | 2 tasks | 3 files |
 | Phase 02-hook-generation P02-01 | 15 | 2 tasks | 2 files |
+| Phase 03-visual-motion P03-01 | 2 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [Phase 02-hook-generation]: Hook receives both topic AND script body as LLM context to prevent semantic disconnect
 - [Phase 02-hook-generation]: max_attempts=2 with template fallback — one retry before _hook_template_fallback() ensures pipeline never crashes on hook failure
 - [Phase 02-hook-generation]: Markdown stripping (re.sub asterisk/hash) applied in generate_hook() — Ollama 3B-7B models inject formatting markers despite instructions
+- [Phase 03-visual-motion]: linearTiming over springTiming for exact duration compensation math in TransitionSeries
+- [Phase 03-visual-motion]: KenBurnsFrame as separate sub-component so useCurrentFrame() is sequence-scoped, not global
+- [Phase 03-visual-motion]: slide() push transition satisfies VIS-03; Ken Burns zoom-in/out inside scenes provides zoom energy
 
 ### Pending Todos
 
@@ -83,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31T04:16:35.223Z
-Stopped at: Completed 02-hook-generation 02-01-PLAN.md
+Last session: 2026-03-31T10:07:55.612Z
+Stopped at: Completed 03-visual-motion 03-01-PLAN.md
 Resume file: None

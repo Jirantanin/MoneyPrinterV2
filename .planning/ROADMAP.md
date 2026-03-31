@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: TTS Prosody** - Increase speaking rate and expose config value so narration sounds energetic (completed 2026-03-30)
 - [ ] **Phase 2: Hook Generation** - Generate and inject a contextual opening hook sentence via LLM
-- [ ] **Phase 3: Visual Motion** - Add Ken Burns pan drift and zoom-push scene transitions in Remotion
+- [x] **Phase 3: Visual Motion** - Add Ken Burns pan drift and zoom-push scene transitions in Remotion (completed 2026-03-31)
 
 ## Phase Details
 
@@ -56,7 +56,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 03-01-PLAN.md — Install @remotion/transitions, rewrite ImageSlideshow with 4-direction Ken Burns cycle and slide transitions
+- [x] 03-01-PLAN.md — Install @remotion/transitions, rewrite ImageSlideshow with 4-direction Ken Burns cycle and slide transitions
 
 ## Progress
 
@@ -67,4 +67,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. TTS Prosody | 1/1 | Complete   | 2026-03-30 |
 | 2. Hook Generation | 0/1 | Not started | - |
-| 3. Visual Motion | 0/1 | Not started | - |
+| 3. Visual Motion | 1/1 | Complete   | 2026-03-31 |
