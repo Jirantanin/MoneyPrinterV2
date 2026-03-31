@@ -9,12 +9,13 @@ import assemblyai as aai
 from utils import *
 from cache import *
 from .Tts import TTS
-from llm_provider import generate_text
+from llm_provider import generate_text, generate_text_structured
 from config import *
 from status import *
 from uuid import uuid4
 from constants import *
 from typing import List
+from pydantic import BaseModel
 from moviepy.editor import *
 from termcolor import colored
 from moviepy.video.fx.all import crop
@@ -31,6 +32,19 @@ from PIL import Image as PILImage
 
 # Set ImageMagick Path
 change_settings({"IMAGEMAGICK_BINARY": get_imagemagick_path()})
+
+
+class HookOutput(BaseModel):
+    hook_type: str   # "question" | "stat" | "bold"
+    hook_text: str   # opening sentence, target 10-15 words
+
+
+_HOOK_TEMPLATES = {
+    "breaking_news":   "This just happened and you need to know about it.",
+    "science_facts":   "This scientific fact will completely change how you see the world.",
+    "weird_viral":     "You will not believe what happened next.",
+    "default":         "What you are about to learn will surprise you.",
+}
 
 
 class YouTube:
@@ -737,6 +751,68 @@ class YouTube:
 
         return combined_image_path
 
+    def generate_hook(self) -> str:
+        """
+        Generates a contextual opening hook sentence via Ollama structured output.
+        Falls back to a template hook if the LLM returns unusable output.
+
+        Uses self.subject (topic) and self.script (body) to generate a hook
+        that teases the actual script content, avoiding semantic disconnect.
+
+        Returns:
+            hook (str): A single hook sentence under 15 words.
+        """
+        system_prompt = (
+            "You write opening hooks for YouTube Shorts. "
+            "Output ONLY valid JSON matching the provided schema. "
+            "hook_text must be under 15 words. No markdown, no asterisks, no quotes."
+        )
+
+        user_prompt = (
+            f"Topic: {self.subject}\n\n"
+            f"Script body:\n{self.script}\n\n"
+            "Write a single opening hook sentence (10-15 words) that teases the content above.\n"
+            "Choose the archetype that best fits:\n"
+            "  question — rhetorical question (e.g. 'Did you know...' / 'What if...')\n"
+            "  stat     — leads with a concrete number or surprising fact\n"
+            "  bold     — makes a provocative or counterintuitive claim\n"
+        )
+
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                raw_json = generate_text_structured(
+                    prompt=user_prompt,
+                    system_prompt=system_prompt,
+                    schema=HookOutput.model_json_schema(),
+                )
+                result = HookOutput.model_validate_json(raw_json)
+                hook_text = re.sub(r"[*#\"]", "", result.hook_text).strip()
+                word_count = len(hook_text.split())
+                if not hook_text or word_count > 15:
+                    raise ValueError(f"Hook failed validation: {word_count} words, text='{hook_text}'")
+                if get_verbose():
+                    info(f" => Hook ({result.hook_type}): {hook_text}")
+                return hook_text
+            except Exception as e:
+                if get_verbose():
+                    warning(f"Hook generation attempt {attempt + 1} failed: {e}")
+                continue
+
+        if get_verbose():
+            warning("Hook generation failed after retries. Using template fallback.")
+        return self._hook_template_fallback()
+
+    def _hook_template_fallback(self) -> str:
+        """
+        Returns a predefined hook string based on the detected video category.
+
+        Returns:
+            hook (str): A template hook sentence.
+        """
+        category = self._detect_category()
+        return _HOOK_TEMPLATES.get(category, _HOOK_TEMPLATES["default"])
+
     def _detect_category(self) -> str:
         """
         Infers the video category from subject and niche using keyword matching.
@@ -818,6 +894,12 @@ class YouTube:
 
         # Generate the Script
         self.generate_script()
+
+        # Generate and prepend the Hook (HOOK-01, HOOK-02)
+        hook = self.generate_hook()
+        if hook and hook[-1] not in ".?!":
+            hook = hook + "."
+        self.script = hook + " " + self.script
 
         # Generate the Metadata
         self.generate_metadata()
