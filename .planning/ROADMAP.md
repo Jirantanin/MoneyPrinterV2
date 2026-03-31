@@ -39,7 +39,10 @@ Plans:
   1. A generated video begins with a spoken hook sentence (question, stat, or payoff-preview) audibly distinct from the body narration
   2. The hook sentence appears in the subtitle track from the first subtitle block, confirming it was prepended before TTS and Whisper ran
   3. When the LLM returns an unusable hook (empty, over 15 words, or malformed), the pipeline completes without crashing and falls back to a template hook
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Add generate_hook() with Ollama structured output, template fallback, and wire into generate_video()
 
 ### Phase 3: Visual Motion
 **Goal**: Every image in a generated clip drifts with Ken Burns motion and scenes are separated by zoom-push transitions instead of hard cuts
@@ -61,5 +64,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. TTS Prosody | 1/1 | Complete   | 2026-03-30 |
-| 2. Hook Generation | 0/TBD | Not started | - |
+| 2. Hook Generation | 0/1 | Not started | - |
 | 3. Visual Motion | 0/TBD | Not started | - |
