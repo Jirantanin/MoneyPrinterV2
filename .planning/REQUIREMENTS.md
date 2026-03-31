@@ -7,9 +7,9 @@
 
 ### Hook
 
-- [ ] **HOOK-01**: Pipeline generates a contextual opening hook sentence (question, stat, or payoff-preview archetype) via LLM, matched to topic and script content
-- [ ] **HOOK-02**: Hook sentence is prepended to the script before TTS rendering so it is both spoken and appears in subtitles
-- [ ] **HOOK-03**: If LLM hook generation fails or returns output longer than 15 words, pipeline falls back gracefully without crashing
+- [x] **HOOK-01**: Pipeline generates a contextual opening hook sentence (question, stat, or payoff-preview archetype) via LLM, matched to topic and script content
+- [x] **HOOK-02**: Hook sentence is prepended to the script before TTS rendering so it is both spoken and appears in subtitles
+- [x] **HOOK-03**: If LLM hook generation fails or returns output longer than 15 words, pipeline falls back gracefully without crashing
 
 ### Visual Motion
 
@@ -56,9 +56,9 @@
 |-------------|-------|--------|
 | TTS-01 | Phase 1 | Complete |
 | TTS-02 | Phase 1 | Complete |
-| HOOK-01 | Phase 2 | Pending |
-| HOOK-02 | Phase 2 | Pending |
-| HOOK-03 | Phase 2 | Pending |
+| HOOK-01 | Phase 2 | Complete |
+| HOOK-02 | Phase 2 | Complete |
+| HOOK-03 | Phase 2 | Complete |
 | VIS-01 | Phase 3 | Pending |
 | VIS-02 | Phase 3 | Pending |
 | VIS-03 | Phase 3 | Pending |

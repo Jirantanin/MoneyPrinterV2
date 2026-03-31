@@ -42,7 +42,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 02-01-PLAN.md — Add generate_hook() with Ollama structured output, template fallback, and wire into generate_video()
+- [x] 02-01-PLAN.md — Add generate_hook() with Ollama structured output, template fallback, and wire into generate_video()
 
 ### Phase 3: Visual Motion
 **Goal**: Every image in a generated clip drifts with Ken Burns motion and scenes are separated by zoom-push transitions instead of hard cuts
