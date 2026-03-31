@@ -27,8 +27,8 @@ Every generated clip must stop the scroll within the first 3 seconds — hook + 
 <!-- Engagement upgrade scope — all shipped together -->
 
 - [x] **Hook generation** — LLM selects and generates an engaging opening line (question / stat / bold/controversial) matched to each topic; hook is injected as the first sentence of the script — Validated in Phase 02: hook-generation
-- [ ] **Ken Burns effect** — each image gets zoom/pan motion (slow drift) during its screen time in Remotion
-- [ ] **Zoom/push scene transitions** — animated cut between scenes instead of hard cuts in Remotion
+- [x] **Ken Burns effect** — each image gets zoom/pan motion (slow drift) during its screen time in Remotion — Validated in Phase 03: visual-motion
+- [x] **Zoom/push scene transitions** — animated cut between scenes instead of hard cuts in Remotion — Validated in Phase 03: visual-motion
 - [x] **TTS prosody improvements** — increase speaking rate and add pitch variation in edge-tts to make narration feel energetic and less monotone — Validated in Phase 01: tts-prosody
 
 ### Out of Scope
