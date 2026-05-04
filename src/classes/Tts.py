@@ -1,18 +1,244 @@
 import os
-import soundfile as sf
-from kittentts import KittenTTS as KittenModel
+import asyncio
+import subprocess
+import wave
+import struct
 
-from config import ROOT_DIR, get_tts_voice
+import requests
 
-KITTEN_MODEL = "KittenML/kitten-tts-mini-0.8"
-KITTEN_SAMPLE_RATE = 24000
+from config import (
+    ROOT_DIR,
+    get_tts_provider,
+    get_tts_edge_voice,
+    get_tts_edge_rate,
+    get_tts_edge_thai_voice,
+    get_tts_edge_thai_rate,
+    get_tts_edge_thai_fallback_voice_id,
+    get_gemini_tts_api_key,
+    get_tts_gemini_thai_voice,
+)
+from runtime_trace import append_api_usage
+
+_THAI_ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128"
+
+
+async def _edge_tts_synthesize(text: str, output_mp3: str, voice: str, rate: str) -> None:
+    import edge_tts
+    # rate="+0%" is the edge-tts default; "+20%" for energetic Shorts pacing.
+    # NOTE: pitch= is NOT passed — silently ignored by Microsoft since edge-tts v6.0.3.
+    communicate = edge_tts.Communicate(text, voice, rate=rate)
+    await communicate.save(output_mp3)
+
 
 class TTS:
     def __init__(self) -> None:
-        self._model = KittenModel(KITTEN_MODEL)
-        self._voice = get_tts_voice()
+        self._provider = get_tts_provider()
+        self._voice = get_tts_edge_voice()  # e.g. "en-US-ChristopherNeural"
 
-    def synthesize(self, text, output_file=os.path.join(ROOT_DIR, ".mp", "audio.wav")):
-        audio = self._model.generate(text, voice=self._voice)
-        sf.write(output_file, audio, KITTEN_SAMPLE_RATE)
+    def _resolve_provider(self) -> str:
+        provider = (self._provider or "edge").lower()
+        if provider != "edge":
+            raise ValueError(
+                f"Unsupported TTS provider '{provider}'. Only 'edge' is implemented right now."
+            )
+        return provider
+
+    def synthesize(self, text, output_file=os.path.join(ROOT_DIR, ".mp", "audio.wav"), voice=None, rate=None):
+        provider = self._resolve_provider()
+        mp3_path = output_file.replace(".wav", ".mp3")
+        _voice = voice if voice is not None else self._voice
+        _rate = rate if rate is not None else get_tts_edge_rate()
+
+        if provider == "edge":
+            asyncio.run(_edge_tts_synthesize(text, mp3_path, _voice, _rate))
+            append_api_usage("edge_tts", "chars", float(len(text or "")), voice=_voice, rate=_rate)
+
+        # Convert mp3 -> wav using ffmpeg
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", mp3_path, output_file],
+            check=True,
+            capture_output=True,
+        )
+        os.remove(mp3_path)
+
+        return output_file
+
+    def synthesize_elevenlabs(self, text: str, output_file: str) -> str:
+        """Synthesize speech using ElevenLabs API and write to output_file as WAV.
+
+        Requests PCM audio (pcm_44100) from ElevenLabs and wraps it in a WAV
+        header using the stdlib wave module — no extra dependencies.
+
+        Args:
+            text (str): Text to synthesize.
+            output_file (str): Destination .wav path.
+
+        Returns:
+            output_file (str): Same path passed in.
+        """
+        from config import get_elevenlabs_api_key, get_elevenlabs_voice_id_th
+
+        api_key = get_elevenlabs_api_key()
+        voice_id = get_elevenlabs_voice_id_th()
+
+        if not api_key or not voice_id:
+            raise RuntimeError(
+                "elevenlabs_api_key and elevenlabs_voice_id_th must be set in config.json"
+            )
+
+        mp3_path = output_file.replace(".wav", ".mp3")
+        headers = {
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "text": text,
+            "model_id": "eleven_multilingual_v2",
+        }
+
+        last_error = None
+        fallback_voice_id = get_tts_edge_thai_fallback_voice_id()
+        for attempt_voice_id in [voice_id, fallback_voice_id]:
+            try:
+                response = requests.post(
+                    f"https://api.elevenlabs.io/v1/text-to-speech/{attempt_voice_id}",
+                    params={"output_format": _THAI_ELEVENLABS_OUTPUT_FORMAT},
+                    headers=headers,
+                    json=payload,
+                    timeout=60,
+                )
+                response.raise_for_status()
+                with open(mp3_path, "wb") as mp3_file:
+                    mp3_file.write(response.content)
+                append_api_usage(
+                    "elevenlabs_tts",
+                    "chars",
+                    float(len(text or "")),
+                    voice_id=attempt_voice_id,
+                    model_id="eleven_multilingual_v2",
+                )
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", mp3_path, output_file],
+                    check=True,
+                    capture_output=True,
+                )
+                os.remove(mp3_path)
+                return output_file
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt_voice_id != fallback_voice_id:
+                    print(
+                        "Warning: ElevenLabs Thai voice failed, retrying with accessible premade voice: "
+                        f"{exc}"
+                    )
+                    continue
+            except subprocess.CalledProcessError as exc:
+                last_error = exc
+                break
+            finally:
+                if os.path.exists(mp3_path):
+                    os.remove(mp3_path)
+
+        print(f"Warning: ElevenLabs failed for Thai TTS, falling back to Edge TTS: {last_error}")
+        return self.synthesize(
+            text,
+            output_file=output_file,
+            voice=get_tts_edge_thai_voice(),
+            rate=get_tts_edge_thai_rate(),
+        )
+
+    def synthesize_gemini(self, text: str, output_file: str, scene_index: int = -1, total_scenes: int = 20) -> str:
+        """Synthesize Thai speech via Google Gemini 3.1 Flash TTS Preview.
+
+        Receives base64 PCM at 24 kHz/16-bit mono and writes a WAV file directly
+        using the stdlib wave module — no ffmpeg conversion needed.
+
+        Args:
+            text (str): Text to synthesize.
+            output_file (str): Destination .wav path.
+            scene_index (int): 0-based scene index. -1 = default exposition style.
+            total_scenes (int): Total scene count for climax/outro detection.
+
+        Returns:
+            output_file (str): Same path passed in.
+        """
+        import base64
+
+        api_key = get_gemini_tts_api_key()
+        if not api_key:
+            raise RuntimeError("gemini_tts_api_key must be set in config.json")
+
+        if scene_index == 0:
+            directors_notes = (
+                "Director's Notes: Speak with urgency and intensity. This is the hook. "
+                "Every word must land hard. Drive forward with energy."
+            )
+        elif scene_index >= 0 and scene_index >= total_scenes - 1:
+            directors_notes = (
+                "Director's Notes: Slow down slightly. Reflective. Philosophical. "
+                "Leave the listener in quiet wonder — like the end of a great documentary."
+            )
+        elif scene_index >= 0 and scene_index >= total_scenes - 7:
+            directors_notes = (
+                "Director's Notes: Build intensity scene by scene. Each sentence carries more weight than the last. "
+                "The listener should feel something is coming."
+            )
+        else:
+            directors_notes = (
+                "Director's Notes: Speak with weight and intention — like a documentarian who knows something "
+                "the audience doesn't yet. Natural pace, never dragging. Pause only after major reveals, "
+                "0.3 seconds maximum. Build intensity as the scene progresses. Every sentence should feel deliberate."
+            )
+
+        voice = get_tts_gemini_thai_voice()
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-3.1-flash-tts-preview:generateContent?key={api_key}"
+        )
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": (
+                                "Audio Profile: A deep-voiced Thai male documentary narrator. "
+                                "Calm, measured, and slightly ominous — like a National Geographic narrator revealing a dark cosmic secret.\n\n"
+                                "Scene: A dimly lit recording booth. The narrator speaks as if revealing something the listener was never meant to know.\n\n"
+                                f"{directors_notes}\n\n"
+                                "Transcript:\n"
+                                f"{text}"
+                            )
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "voiceConfig": {
+                        "prebuiltVoiceConfig": {"voiceName": voice}
+                    }
+                },
+            },
+        }
+
+        response = requests.post(url, json=payload, timeout=120)
+        response.raise_for_status()
+        append_api_usage(
+            "gemini_tts",
+            "chars",
+            float(len(text or "")),
+            model="gemini-3.1-flash-tts-preview",
+            voice=voice,
+        )
+
+        audio_b64 = response.json()["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
+        pcm_data = base64.b64decode(audio_b64)
+
+        with wave.open(output_file, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)   # 16-bit
+            wf.setframerate(24000)
+            wf.writeframes(pcm_data)
+
         return output_file

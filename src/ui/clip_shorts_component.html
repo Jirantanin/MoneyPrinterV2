@@ -1,0 +1,69 @@
+<!-- Clip Shorts Tab -->
+<div id="tab-clip_shorts" class="hidden">
+
+  <!-- Main content -->
+  <main class="max-w-4xl mx-auto px-6 py-8 space-y-8">
+
+    <!-- Input panel -->
+    <div class="hero-panel bg-surface rounded-[1.9rem] p-6 flex flex-col gap-6">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-bold text-text tracking-tight">Clip Shorts from Episode</h2>
+        <span class="state-pill is-auto text-xs">Whisper + Remotion</span>
+      </div>
+
+      <!-- Episode selector -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[10px] uppercase tracking-[0.2em] text-subtext font-semibold">
+          Episode
+        </label>
+        <select
+          id="csEpisodeSelect"
+          class="glass-input w-full rounded-xl px-3 py-2.5 text-sm text-text bg-base border border-overlay focus:border-accent focus:outline-none"
+        >
+          <option value="">Loading episodes…</option>
+        </select>
+      </div>
+
+      <!-- Top N input -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[10px] uppercase tracking-[0.2em] text-subtext font-semibold">
+          Top N scenes to clip (1–5)
+        </label>
+        <input
+          id="csTopN"
+          type="number"
+          min="1"
+          max="5"
+          value="3"
+          class="glass-input w-28 rounded-xl px-3 py-2.5 text-sm text-text bg-base border border-overlay focus:border-accent focus:outline-none"
+        />
+      </div>
+
+      <!-- Action button -->
+      <div>
+        <button
+          id="csGenerateBtn"
+          onclick="cs_generate()"
+          class="glass-btn px-6 py-2.5 text-sm font-semibold rounded-xl bg-accent text-base hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ✂️ Generate Shorts
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress log (hidden until generation starts) -->
+    <div id="csProgressWrap" class="hidden hero-panel bg-surface rounded-[1.9rem] p-6 flex flex-col gap-3">
+      <h3 class="text-sm font-bold text-text">Progress</h3>
+      <pre
+        id="csLog"
+        class="text-xs text-subtext overflow-auto max-h-52 bg-base rounded-xl p-3 leading-relaxed"
+      ></pre>
+    </div>
+
+    <!-- Result cards (populated after done event) -->
+    <div id="csResults" class="space-y-4"></div>
+
+  </main>
+
+</div>
+<script src="/ui-assets/clip_shorts-main.js"></script>

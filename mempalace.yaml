@@ -1,0 +1,50 @@
+wing: moneyprinterv2
+rooms:
+- name: design
+  description: Files from assets/
+  keywords:
+  - design
+  - assets
+- name: documentation
+  description: Files from docs/
+  keywords:
+  - documentation
+  - docs
+- name: fonts
+  description: Files from fonts/
+  keywords:
+  - fonts
+  - fonts
+- name: remotion
+  description: Files from remotion/
+  keywords:
+  - remotion
+  - remotion
+- name: scripts
+  description: Files from scripts/
+  keywords:
+  - scripts
+  - scripts
+- name: songs
+  description: Files from Songs/
+  keywords:
+  - songs
+  - songs
+- name: src
+  description: Files from src/
+  keywords:
+  - src
+  - src
+- name: research
+  description: Files from research/
+  keywords:
+  - research
+  - research
+- name: frontend
+  description: Files from ui/
+  keywords:
+  - frontend
+  - ui
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []

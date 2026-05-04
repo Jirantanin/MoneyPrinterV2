@@ -1,0 +1,758 @@
+<!-- Podcast V2 Tab -->
+  <div id="tab-podcast_v2" class="hidden">
+  <div class="border-b border-overlay">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div class="min-w-0">
+        <p class="text-[10px] uppercase tracking-[0.24em] text-sky">Global Settings</p>
+        <p id="podcastV2SettingsSummary" class="text-xs text-subtext mt-1">System defaults will appear here.</p>
+      </div>
+      <div class="shrink-0">
+        <button
+          id="systemSettingsBtnV2"
+          onclick="openPodcastSettingsV2()"
+          class="glass-btn glass-btn-secondary px-4 py-2.5 bg-charcoal border border-sky/30 text-sky font-semibold rounded-xl hover:border-sky hover:text-sky transition-all"
+          title="Open podcast system settings"
+        >
+          System Settings
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- Main content -->
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+    <!-- Topic input row -->
+    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,0.9fr)] gap-8">
+      <div class="hero-panel bg-surface rounded-[1.9rem] p-6 flex flex-col gap-5">
+        <!-- Panel header -->
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-bold text-text tracking-tight">New Episode</h2>
+        </div>
+
+        <!-- Control strip: Input Mode + Run Mode -->
+        <div class="rounded-xl bg-charcoal border border-overlay divide-y divide-overlay overflow-hidden">
+          <!-- Input mode toggle -->
+          <div class="flex items-center gap-3 px-4 py-2.5">
+            <span class="text-[11px] font-semibold text-subtext uppercase tracking-widest w-20 shrink-0">Input</span>
+            <label class="flex items-center gap-2.5 cursor-pointer select-none">
+              <span id="inputModeTopicLabelV2" class="text-sm font-medium text-accent">Topic</span>
+              <div class="relative">
+                <input id="inputModeToggleV2" type="checkbox" class="sr-only" onchange="onInputModeChangeV2()" />
+                <div class="w-12 h-6 bg-overlay rounded-full transition-colors duration-200"></div>
+                <div id="inputModeThumbV2" class="absolute top-1 left-1 w-4 h-4 bg-subtext rounded-full transition-all duration-200"></div>
+              </div>
+              <span id="inputModeScriptLabelV2" class="text-sm font-medium text-subtext">Script</span>
+            </label>
+          </div>
+          <!-- Run mode toggle -->
+          <div class="flex items-center gap-3 px-4 py-2.5">
+            <span class="text-[11px] font-semibold text-subtext uppercase tracking-widest w-20 shrink-0">Run</span>
+            <label id="modeToggleLabelV2" class="flex items-center gap-2.5 cursor-pointer select-none">
+              <span id="modeAutoLabelV2" class="text-sm font-medium text-accent">Auto</span>
+              <div class="relative">
+                <input id="modeToggleV2" type="checkbox" class="sr-only" onchange="onModeChangeV2()" />
+                <div id="modeTrackV2" class="w-12 h-6 bg-overlay rounded-full transition-colors duration-200"></div>
+                <div id="modeThumbV2" class="absolute top-1 left-1 w-4 h-4 bg-subtext rounded-full transition-all duration-200"></div>
+              </div>
+              <span id="modeStepLabelV2" class="text-sm font-medium text-subtext">Step-by-step</span>
+            </label>
+            <span id="modeBadgeV2" class="state-pill is-auto ml-auto text-xs">Runs all steps automatically</span>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <label class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Visual Style Preset</label>
+          <select
+            id="visualStyleSelectV2"
+            class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
+          >
+            <option value="Kurzgesagt flat design style. Vivid saturated colors, bright bold background. Simple geometric shapes and cute bird or creature characters. Clean vector illustration, no photorealism, no dark cinematic mood.">🎨 Kurzgesagt (Default)</option>
+            <option value="Cinematic realism, photorealistic, 8k resolution, highly detailed, dramatic lighting, volumetric fog, Unreal Engine 5 render style.">🎬 Cinematic Realism</option>
+            <option value="Japanese Anime style, Studio Ghibli inspired, vibrant colors, beautifully detailed painted backgrounds, 2D animation look.">🌸 Japanese Anime</option>
+            <option value="Dark fantasy style, moody lighting, desaturated colors, gritty texture, highly detailed, atmospheric and mysterious, 8k resolution.">🦇 Dark Fantasy</option>
+            <option value="Minimalist vector illustration, clean lines, flat colors, plenty of negative space, elegant and modern, no clutter.">📐 Minimalist Vector</option>
+            <option value="Rough pencil sketch style, monochrome, cross-hatching, highly detailed graphite drawing, raw artistic texture.">✏️ Pencil Sketch</option>
+            <option value="Pixel art style, 16-bit retro aesthetic, vibrant colors, sharp pixel edges, nostalgic nostalgic video game look.">👾 Pixel Art</option>
+            <option value="Watercolor painting, organic brush strokes, soft blended edges, pastel color palette, artistic fluid texture.">🖌️ Watercolor</option>
+          </select>
+        </div>
+
+      <div id="topicModeFieldsV2">
+        <!-- Topic + buttons row -->
+        <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          <div class="flex-1 w-full">
+            <label class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Topic</label>
+            <input
+              id="topicInputV2"
+              type="text"
+              placeholder="e.g. The Rise and Fall of Nikola Tesla"
+              class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
+            />
+          </div>
+          <div class="flex flex-wrap gap-2 shrink-0">
+            <button
+              id="newEpisodeBtnV2"
+              onclick="newEpisodeV2()"
+              class="glass-btn glass-btn-secondary px-4 py-2.5 bg-charcoal border border-overlay text-subtext font-semibold rounded-xl hover:border-accent hover:text-accent transition-all"
+              title="Clear and start a new episode"
+            >
+              + New
+            </button>
+            <button
+              id="generateBtnV2"
+              onclick="startGenerationV2()"
+              class="glass-btn glass-btn-primary px-6 py-2.5 bg-accent text-charcoal font-bold rounded-xl hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
+            >
+              Generate
+            </button>
+            <button
+              id="cancelBtnV2"
+              onclick="cancelGenerationV2()"
+              class="glass-btn glass-btn-danger hidden px-4 py-2.5 bg-charcoal border border-rose text-rose font-semibold rounded-xl hover:bg-rose hover:text-charcoal transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              id="resumeBtnV2"
+              onclick="resumeGenerationV2()"
+              class="glass-btn hidden px-4 py-2.5 bg-charcoal border border-yellow-400/50 text-yellow-300 font-semibold rounded-xl hover:bg-yellow-400 hover:text-charcoal transition-all"
+              >
+              Resume
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Creative Direction</label>
+          <textarea
+            id="creativeDirectionInputV2"
+            rows="3"
+            placeholder="e.g. Documentary tone, grounded in real evidence, mysterious but not clickbait, emphasize wonder and discovery."
+            class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-3 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors resize-y"
+          ></textarea>
+        </div>
+      </div><!-- /#topicModeFieldsV2 -->
+
+      <!-- Script mode fields (hidden by default) -->
+      <div id="scriptModeFieldsV2" class="hidden flex-col gap-4">
+        <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          <div class="flex-1 w-full">
+            <label class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Episode Title</label>
+            <input
+              id="scriptTitleInputV2"
+              type="text"
+              placeholder="e.g. The Rise and Fall of Nikola Tesla"
+              class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
+            />
+          </div>
+          <div class="flex flex-wrap gap-2 shrink-0">
+            <button
+              id="scriptNewBtnV2"
+              onclick="newEpisodeV2()"
+              class="glass-btn glass-btn-secondary px-4 py-2.5 bg-charcoal border border-overlay text-subtext font-semibold rounded-xl hover:border-accent hover:text-accent transition-all"
+              title="Clear and start a new episode"
+            >
+              + New
+            </button>
+            <button
+              id="scriptGenerateBtnV2"
+              onclick="startGenerationV2()"
+              class="glass-btn glass-btn-primary px-6 py-2.5 bg-accent text-charcoal font-bold rounded-xl hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
+            >
+              Generate
+            </button>
+            <button
+              id="scriptCancelBtnV2"
+              onclick="cancelGenerationV2()"
+              class="glass-btn glass-btn-danger hidden px-4 py-2.5 bg-charcoal border border-rose text-rose font-semibold rounded-xl hover:bg-rose hover:text-charcoal transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Script</label>
+          <textarea
+            id="scriptInputV2"
+            rows="10"
+            placeholder="Paste your full narration script here. The system will split it into scenes automatically based on sentence count."
+            class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-3 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors resize-y"
+          ></textarea>
+        </div>
+      </div><!-- /#scriptModeFieldsV2 -->
+
+        <!-- Language selector -->
+        <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs font-medium text-subtext uppercase tracking-wide">LANGUAGE</label>
+            <div class="flex gap-2 mt-1.5">
+              <button
+                id="langBtnEnV2"
+                onclick="setLanguageV2('English')"
+                class="px-4 py-2 rounded-lg text-sm font-semibold border border-overlay bg-overlay text-highlight transition-all"
+              >
+                English
+              </button>
+              <button
+                id="langBtnThV2"
+                onclick="setLanguageV2('Thai')"
+                class="px-4 py-2 rounded-lg text-sm font-semibold border border-overlay bg-charcoal text-subtext transition-all"
+              >
+                Thai
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between gap-3">
+              <label class="text-xs font-medium text-subtext uppercase tracking-wide">Voice Engine</label>
+              <span id="ttsSourceHintV2" class="text-[11px] text-subtext">Edge is the safest default right now.</span>
+            </div>
+            <div class="flex gap-2 mt-1.5">
+              <button
+                id="ttsBtnEdgeV2"
+                onclick="setTtsSourceV2('edge')"
+                class="px-4 py-2 rounded-lg text-sm font-semibold border border-overlay bg-overlay text-highlight transition-all"
+              >
+                Edge
+              </button>
+              <button
+                id="ttsBtnElevenLabsV2"
+                onclick="setTtsSourceV2('elevenlabs')"
+                class="px-4 py-2 rounded-lg text-sm font-semibold border border-overlay bg-charcoal text-subtext transition-all"
+              >
+                ElevenLabs
+              </button>
+              <button
+                id="ttsBtnGeminiV2"
+                onclick="setTtsSourceV2('gemini')"
+                class="px-4 py-2 rounded-lg text-sm font-semibold border border-overlay bg-charcoal text-subtext transition-all"
+              >
+                Gemini
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-panel bg-surface rounded-[1.9rem] p-6">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <p class="text-xs font-medium text-subtext uppercase tracking-wide">Recent Episodes</p>
+          <button onclick="fetchEpisodeLibraryV2()" class="glass-link text-xs text-sky hover:underline">Refresh</button>
+        </div>
+        <div id="episodeLibraryV2" class="space-y-2 max-h-40 xl:max-h-48 overflow-y-auto pr-1">
+          <p class="text-sm text-subtext">Loading saved episodes...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step progress panel -->
+    <div class="hero-panel bg-surface rounded-[1.9rem] p-6">
+      <div class="grid grid-cols-1 xl:grid-cols-[minmax(18rem,0.75fr)_minmax(0,1.25fr)] gap-8 items-start">
+        <div>
+          <h2 class="text-sm font-semibold text-subtext uppercase tracking-wide mb-4">Pipeline Progress</h2>
+          <div id="stepsPanelV2" class="space-y-3">
+            <!-- Steps rendered by JS -->
+          </div>
+          <div id="approveBannerV2" class="hidden mt-4 p-4 bg-charcoal border border-yellow-500/40 rounded-xl flex items-center justify-between gap-4 fade-in">
+            <div>
+              <p class="text-sm font-semibold text-yellow-400">Waiting for approval</p>
+              <p id="approveNextLabelV2" class="text-xs text-subtext mt-0.5"></p>
+            </div>
+            <button
+              id="approveBtnV2"
+              onclick="approveStepV2()"
+              class="glass-btn glass-btn-warn shrink-0 px-5 py-2 bg-yellow-400 text-charcoal font-bold rounded-xl hover:brightness-110 transition-all text-sm"
+            >
+              Continue &#8594;
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <h2 class="text-sm font-semibold text-subtext uppercase tracking-wide">Video Preview</h2>
+            <span id="videoPreviewStatusV2" class="text-xs text-subtext">Waiting for render</span>
+          </div>
+          <div class="rounded-2xl border border-overlay bg-charcoal overflow-hidden aspect-video">
+            <video
+              id="videoPreviewPlayerV2"
+              class="hidden w-full h-full object-cover bg-black"
+              controls
+              preload="metadata"
+            ></video>
+            <div id="videoPreviewSkeletonV2" class="w-full h-full flex items-center justify-center">
+              <p class="text-subtext text-sm">Video will show here</p>
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <h2 class="text-sm font-semibold text-subtext uppercase tracking-wide">Pipeline Logs</h2>
+              <button onclick="clearPodcastLogsV2()" class="glass-link text-xs text-sky hover:underline">Clear</button>
+            </div>
+            <div id="podcastV2LogOutput" class="rounded-2xl border border-overlay bg-charcoal px-4 py-3 text-xs text-subtext font-mono whitespace-pre-wrap overflow-y-auto min-h-[12rem] max-h-[20rem]">Logs will appear here.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content grid: Images | Script + Metadata -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+      <!-- Image Gallery -->
+      <div class="bg-surface rounded-[1.9rem] p-6">
+        <h2 class="text-sm font-semibold text-subtext uppercase tracking-wide mb-4">Scene Images</h2>
+        <div id="imageGalleryV2" class="grid grid-cols-3 gap-2 min-h-[8rem]">
+          <div id="noImagesMsgV2" class="col-span-3 flex items-center justify-center text-subtext text-sm h-32">
+            No images yet
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column: Script + Metadata -->
+      <div class="space-y-8">
+
+        <!-- Script panel -->
+        <div class="bg-surface rounded-[1.9rem] p-6">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold text-subtext uppercase tracking-wide">Script</h2>
+            <div id="scriptQcPanelV2" class="hidden state-pill text-[10px] uppercase tracking-wide"></div>
+          </div>
+          <div id="scriptPanelV2" class="max-h-80 overflow-y-auto space-y-3 pr-1">
+            <p id="noScriptMsgV2" class="text-subtext text-sm">Script will appear after generation begins.</p>
+          </div>
+        </div>
+
+        <!-- Metadata panel -->
+        <div id="metadataPanelV2" class="bg-surface rounded-[1.9rem] p-6 hidden">
+          <h2 class="text-sm font-semibold text-subtext uppercase tracking-wide mb-4">Metadata</h2>
+          <div id="metadataActionsV2" class="hidden mb-4 flex flex-wrap gap-2">
+            <button onclick="copyMetadataFieldV2('title')" class="glass-link text-xs text-sky hover:underline">Copy Title</button>
+            <button onclick="copyMetadataFieldV2('description')" class="glass-link text-xs text-sky hover:underline">Copy Description</button>
+            <button onclick="copyMetadataFieldV2('tags')" class="glass-link text-xs text-sky hover:underline">Copy Tags</button>
+            <button onclick="copyMetadataFieldV2('all')" class="glass-link text-xs text-sky hover:underline">Copy All</button>
+          </div>
+          <div id="metadataContentV2" class="space-y-3"></div>
+        </div>
+
+        <div id="thumbnailStudioV2" class="bg-surface rounded-[1.9rem] p-6 hidden">
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <h2 class="text-sm font-semibold text-subtext uppercase tracking-wide">Thumbnail Studio</h2>
+            <span id="thumbnailStudioStatusV2" class="text-xs text-subtext"></span>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Image gen prompt -->
+            <div class="hero-panel rounded-[1.15rem] p-4">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <p class="text-xs font-medium text-subtext uppercase tracking-wide">Image Gen Prompt</p>
+                <button onclick="copyTextV2('thumbGenPromptV2')" class="glass-link text-xs text-sky hover:underline">Copy</button>
+              </div>
+              <p class="text-[11px] text-subtext mb-2">Paste into Midjourney / Ideogram / Flux to generate the thumbnail image.</p>
+              <pre id="thumbGenPromptV2" class="text-xs text-text whitespace-pre-wrap break-words font-sans bg-charcoal rounded-lg p-3 mt-1 min-h-[3rem]"></pre>
+            </div>
+
+            <!-- Custom upload preview -->
+            <div id="thumbnailPreviewWrapV2" class="hidden">
+              <p class="text-xs font-medium text-subtext uppercase tracking-wide mb-2">Uploaded Thumbnail</p>
+              <div class="rounded-xl overflow-hidden bg-charcoal border border-overlay aspect-video">
+                <img id="thumbnailPreviewV2" class="w-full h-full object-cover" alt="Uploaded thumbnail preview" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="hero-panel rounded-[1.15rem] p-4">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <p class="text-xs font-medium text-subtext uppercase tracking-wide">Headline</p>
+                  <button onclick="copyTextV2('thumbHeadlineV2')" class="glass-link text-xs text-sky hover:underline">Copy</button>
+                </div>
+                <p id="thumbHeadlineV2" class="text-sm font-bold text-text break-words"></p>
+              </div>
+              <div class="hero-panel rounded-[1.15rem] p-4">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <p class="text-xs font-medium text-subtext uppercase tracking-wide">Supporting Text</p>
+                  <button onclick="copyTextV2('thumbSupportV2')" class="glass-link text-xs text-sky hover:underline">Copy</button>
+                </div>
+                <p id="thumbSupportV2" class="text-sm text-text break-words"></p>
+              </div>
+            </div>
+
+            <div class="hero-panel rounded-[1.15rem] p-4">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <p class="text-xs font-medium text-subtext uppercase tracking-wide">Canva Prompt</p>
+                <button onclick="copyTextV2('thumbPromptV2')" class="glass-link text-xs text-sky hover:underline">Copy</button>
+              </div>
+              <pre id="thumbPromptV2" class="text-xs text-subtext whitespace-pre-wrap break-words font-sans"></pre>
+            </div>
+
+            <div class="hero-panel rounded-[1.15rem] p-4 space-y-3">
+              <div>
+                <p class="text-xs font-medium text-subtext uppercase tracking-wide">Replace Thumbnail</p>
+                <p class="text-xs text-subtext mt-1">Upload the Canva version here before clicking Upload to YouTube.</p>
+              </div>
+              <div class="flex flex-col sm:flex-row gap-3">
+                <input
+                  id="thumbnailFileInputV2"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  class="block w-full text-sm text-subtext file:mr-4 file:rounded-lg file:border-0 file:bg-sky file:px-4 file:py-2 file:text-sm file:font-semibold file:text-charcoal hover:file:brightness-110"
+                />
+                <button
+                  id="thumbnailUploadBtnV2"
+                  onclick="uploadReplacementThumbnailV2()"
+                  class="glass-btn glass-btn-primary px-4 py-2.5 bg-sky text-charcoal font-bold rounded-xl hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Upload New Thumbnail
+                </button>
+              </div>
+              <p id="thumbnailUploadStatusV2" class="text-xs text-subtext"></p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Bottom action bar -->
+    <div class="bg-surface rounded-[1.9rem] p-6 space-y-5">
+
+      <!-- Publish options -->
+      <div>
+        <p class="text-xs font-medium text-subtext uppercase tracking-wide mb-3">Publish Options</p>
+        <div class="flex flex-col sm:flex-row gap-3">
+
+          <!-- Public now -->
+          <label class="flex items-center gap-3 cursor-pointer flex-1 p-3 rounded-xl border border-overlay bg-charcoal has-[:checked]:border-accent has-[:checked]:bg-accent/5 transition-colors">
+            <input type="radio" name="publishModeV2" value="public" checked onchange="onPublishModeChangeV2()" class="accent-[#a6e3a1] w-4 h-4" />
+            <div>
+              <p class="text-sm font-semibold text-text">Public immediately</p>
+              <p class="text-xs text-subtext">Video goes live right after upload</p>
+            </div>
+          </label>
+
+          <!-- Schedule -->
+          <label class="flex items-center gap-3 cursor-pointer flex-1 p-3 rounded-xl border border-overlay bg-charcoal has-[:checked]:border-sky has-[:checked]:bg-sky/5 transition-colors">
+            <input type="radio" name="publishModeV2" value="schedule" onchange="onPublishModeChangeV2()" class="accent-[#89b4fa] w-4 h-4" />
+            <div>
+              <p class="text-sm font-semibold text-text">Schedule</p>
+              <p class="text-xs text-subtext">YouTube publishes at your chosen time</p>
+            </div>
+          </label>
+
+        </div>
+
+        <!-- Datetime picker (shown when schedule selected) -->
+        <div id="schedulePickerV2" class="hidden mt-3 flex items-center gap-3">
+          <input
+            id="scheduleDateTimeV2"
+            type="datetime-local"
+            class="bg-charcoal border border-sky/50 rounded-xl px-4 py-2 text-text text-sm focus:outline-none focus:border-sky focus:ring-1 focus:ring-sky transition-colors"
+          />
+          <span class="text-xs text-subtext">Your local time — sent to YouTube as UTC</span>
+        </div>
+      </div>
+
+      <!-- Manual upload row -->
+      <div id="manualUploadRowV2" class="hidden flex-col gap-3 pt-1">
+        <div class="hero-panel rounded-xl p-4 space-y-3">
+          <p class="text-xs font-medium text-subtext uppercase tracking-wide">Video Ready — Upload Manually</p>
+          <div class="flex items-center gap-2">
+            <span id="videoFilePathV2" class="text-xs font-mono text-highlight break-all flex-1"></span>
+            <button
+              onclick="copyVideoPathV2(this)"
+              class="glass-btn px-3 py-1.5 text-xs font-semibold rounded-lg border border-overlay hover:brightness-110 transition-all whitespace-nowrap"
+            >
+              Copy Path
+            </button>
+          </div>
+          <div class="flex items-center gap-3">
+            <button
+              id="markUploadedBtnV2"
+              onclick="markAsUploadedV2()"
+              class="glass-btn glass-btn-primary px-5 py-2 bg-emerald-600 text-white font-bold rounded-xl hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Mark as Uploaded ✓
+            </button>
+            <span id="markUploadedStatusV2" class="text-sm text-subtext"></span>
+          </div>
+        </div>
+      </div>
+      <div id="episodeDirInfoV2" class="text-xs text-subtext hidden">
+        <span class="text-overlay">Episode folder:</span>
+        <span id="episodeDirPathV2" class="ml-1 font-mono break-all"></span>
+      </div>
+
+    </div>
+
+  </main><!-- podcast v2 main -->
+
+  <div id="podcastV2DialogOverlay" class="hidden fixed inset-0 z-50 bg-black/55 backdrop-blur-sm px-4">
+    <div class="min-h-screen flex items-center justify-center py-8">
+      <div
+        id="podcastV2DialogCard"
+        class="glass-card hero-panel w-full max-w-lg rounded-[1.9rem] p-6 border border-overlay shadow-[0_30px_90px_rgba(0,0,0,0.45)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="podcastV2DialogTitle"
+        aria-describedby="podcastV2DialogMessage"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <p id="podcastV2DialogEyebrow" class="text-[10px] uppercase tracking-[0.22em] text-subtext">Confirm Action</p>
+            <h3 id="podcastV2DialogTitle" class="mt-2 text-xl font-bold text-text tracking-[-0.03em]">Are you sure?</h3>
+          </div>
+          <button
+            id="podcastV2DialogClose"
+            type="button"
+            class="glass-btn glass-btn-secondary w-10 h-10 rounded-2xl flex items-center justify-center text-subtext hover:text-text"
+            aria-label="Close dialog"
+          >
+            ✕
+          </button>
+        </div>
+        <p id="podcastV2DialogMessage" class="mt-4 text-sm text-subtext leading-relaxed whitespace-pre-wrap"></p>
+        <div class="mt-6 flex items-center justify-end gap-3">
+          <button
+            id="podcastV2DialogCancel"
+            type="button"
+            class="glass-btn glass-btn-secondary px-4 py-2.5 rounded-xl font-semibold"
+          >
+            Cancel
+          </button>
+          <button
+            id="podcastV2DialogConfirm"
+            type="button"
+            class="glass-btn glass-btn-warn px-4 py-2.5 rounded-xl font-bold"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="podcastV2SettingsOverlay" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm px-4 py-6 overflow-y-auto">
+    <div class="min-h-full flex items-start justify-center">
+      <div
+        id="podcastV2SettingsCard"
+        class="glass-card hero-panel w-full max-w-6xl rounded-[1.9rem] p-6 md:p-8 border border-overlay shadow-[0_34px_110px_rgba(0,0,0,0.48)] max-h-[calc(100vh-3rem)] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="podcastV2SettingsTitle"
+      >
+        <div class="flex items-start justify-between gap-4 mb-6">
+          <div class="min-w-0">
+            <p class="text-[10px] uppercase tracking-[0.24em] text-sky">System Settings</p>
+            <h3 id="podcastV2SettingsTitle" class="text-2xl font-bold text-text mt-2">Podcast V2 System Settings</h3>
+            <p class="text-sm text-subtext mt-2">Defaults that affect future generation and regenerated assets.</p>
+          </div>
+          <button
+            id="podcastV2SettingsClose"
+            type="button"
+            class="glass-btn glass-btn-secondary w-11 h-11 rounded-full text-lg leading-none flex items-center justify-center shrink-0"
+            aria-label="Close settings"
+          >
+            &times;
+          </button>
+        </div>
+
+        <form id="podcastV2SettingsForm" class="space-y-4">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <section class="hero-panel rounded-[1.35rem] p-4 space-y-4">
+              <div>
+                <h4 class="text-sm font-semibold text-text uppercase tracking-wide">Voices</h4>
+                <p class="text-xs text-subtext mt-1">Controls the default voices and pacing used by the TTS layer.</p>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">English Edge Voice</span>
+                  <input id="podcastV2EnglishEdgeVoice" data-setting-path="voices.english_edge_voice" list="podcastV2EnglishEdgeVoiceOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors" />
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">English Edge Speed</span>
+                  <select id="podcastV2EnglishEdgeRate" data-setting-path="voices.english_edge_rate" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"></select>
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Thai Edge Voice</span>
+                  <input id="podcastV2ThaiEdgeVoice" data-setting-path="voices.thai_edge_voice" list="podcastV2ThaiEdgeVoiceOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors" />
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Thai Edge Speed</span>
+                  <select id="podcastV2ThaiEdgeRate" data-setting-path="voices.thai_edge_rate" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"></select>
+                </label>
+                <label class="block sm:col-span-2">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Thai ElevenLabs Voice ID</span>
+                  <input id="podcastV2ThaiElevenlabsVoiceId" data-setting-path="voices.thai_elevenlabs_voice_id" list="podcastV2ThaiElevenlabsVoiceOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors font-mono text-sm" />
+                </label>
+                <label class="block sm:col-span-2">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Thai Gemini Voice</span>
+                  <input id="podcastV2ThaiGeminiVoice" data-setting-path="voices.thai_gemini_voice" list="podcastV2ThaiGeminiVoiceOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors" />
+                </label>
+              </div>
+            </section>
+
+            <section class="hero-panel rounded-[1.35rem] p-4 space-y-4">
+              <div>
+                <h4 class="text-sm font-semibold text-text uppercase tracking-wide">Models</h4>
+                <p class="text-xs text-subtext mt-1">These defaults affect text generation and image generation fallback behavior.</p>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label class="block sm:col-span-2">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Script Model</span>
+                  <input id="podcastV2ScriptModel" data-setting-path="models.script_model" list="podcastV2ScriptModelOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors font-mono text-sm" />
+                </label>
+                <label class="block sm:col-span-2">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Ollama Default Model</span>
+                  <input id="podcastV2OllamaModel" data-setting-path="models.ollama_model" list="podcastV2OllamaModelOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors font-mono text-sm" />
+                </label>
+                <label class="block sm:col-span-2">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">MiniMax Model</span>
+                  <input id="podcastV2MinimaxModel" data-setting-path="models.minimax_model" list="podcastV2MinimaxModelOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors font-mono text-sm" />
+                </label>
+                <label class="block sm:col-span-2">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Anthropic Model</span>
+                  <input id="podcastV2AnthropicModel" data-setting-path="models.anthropic_model" list="podcastV2AnthropicModelOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors font-mono text-sm" />
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Image Model</span>
+                  <input id="podcastV2ImageModel" data-setting-path="models.image_model" list="podcastV2ImageModelOptions" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors font-mono text-sm" />
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Image Aspect Ratio</span>
+                  <select id="podcastV2ImageAspectRatio" data-setting-path="models.image_aspect_ratio" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"></select>
+                </label>
+              </div>
+            </section>
+
+            <section class="hero-panel rounded-[1.35rem] p-4 space-y-4 lg:col-span-2">
+              <div>
+                <h4 class="text-sm font-semibold text-text uppercase tracking-wide">Podcast Prompting</h4>
+                <p class="text-xs text-subtext mt-1">Prompt defaults used for script generation, metadata, and thumbnail generation.</p>
+              </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Podcast Narrator Persona</span>
+                  <textarea id="podcastV2NarratorPersona" data-setting-path="prompting.narrator_persona" rows="3" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-3 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors resize-y"></textarea>
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Podcast Visual Style Prompt</span>
+                  <textarea id="podcastV2VisualStylePrompt" data-setting-path="prompting.podcast_style_prompt" rows="3" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-3 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors resize-y"></textarea>
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Script System Prompt</span>
+                  <textarea id="podcastV2ScriptSystemPrompt" data-setting-path="prompting.script_system_prompt" rows="4" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-3 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors resize-y"></textarea>
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Metadata System Prompt</span>
+                  <textarea id="podcastV2MetadataSystemPrompt" data-setting-path="prompting.metadata_system_prompt" rows="4" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-3 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors resize-y"></textarea>
+                </label>
+                <label class="block lg:col-span-2">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Thumbnail System Prompt</span>
+                  <textarea id="podcastV2ThumbnailSystemPrompt" data-setting-path="prompting.thumbnail_system_prompt" rows="4" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-3 text-text placeholder-subtext focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors resize-y"></textarea>
+                </label>
+              </div>
+            </section>
+
+            <section class="hero-panel rounded-[1.35rem] p-4 space-y-4 lg:col-span-2">
+              <div>
+                <h4 class="text-sm font-semibold text-text uppercase tracking-wide">Advanced</h4>
+                <p class="text-xs text-subtext mt-1">Fine-tuning for retries and output pacing.</p>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Image Retry Count</span>
+                  <select id="podcastV2ImageRetryCount" data-setting-path="advanced.image_retry_count" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"></select>
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Audio Retry Count</span>
+                  <select id="podcastV2AudioRetryCount" data-setting-path="advanced.audio_retry_count" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"></select>
+                </label>
+                <label class="block">
+                  <span class="block text-xs font-medium text-subtext mb-1 uppercase tracking-wide">Script Sentence Length</span>
+                  <select id="podcastV2ScriptSentenceLength" data-setting-path="advanced.script_sentence_length" class="w-full bg-charcoal border border-overlay rounded-xl px-4 py-2.5 text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"></select>
+                </label>
+              </div>
+            </section>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+            <p id="podcastV2SettingsStatus" class="text-sm text-subtext">System settings are not saved yet.</p>
+            <div class="flex items-center gap-2 flex-wrap">
+              <button type="button" id="podcastV2SettingsReset" class="glass-btn glass-btn-secondary px-4 py-2.5 bg-charcoal border border-overlay text-subtext font-semibold rounded-xl hover:border-accent hover:text-accent transition-all">
+                Reset Defaults
+              </button>
+              <button type="button" id="podcastV2SettingsCancel" class="glass-btn glass-btn-secondary px-4 py-2.5 bg-charcoal border border-overlay text-subtext font-semibold rounded-xl hover:border-accent hover:text-accent transition-all">
+                Cancel
+              </button>
+              <button type="button" id="podcastV2SettingsSave" class="glass-btn glass-btn-primary px-5 py-2.5 bg-accent text-charcoal font-bold rounded-xl hover:brightness-110 transition-all">
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <datalist id="podcastV2EnglishEdgeVoiceOptions">
+    <option value="en-US-ChristopherNeural"></option>
+    <option value="en-US-JennyNeural"></option>
+    <option value="en-US-AriaNeural"></option>
+    <option value="en-GB-RyanNeural"></option>
+  </datalist>
+  <datalist id="podcastV2ThaiEdgeVoiceOptions">
+    <option value="th-TH-PremwadeeNeural"></option>
+    <option value="th-TH-NiwatNeural"></option>
+  </datalist>
+  <datalist id="podcastV2ThaiElevenlabsVoiceOptions">
+    <option value="NNl6r8mD7vthiJatiJt1"></option>
+    <option value="JBFqnCBsd6RMkjVDRZzb"></option>
+  </datalist>
+  <datalist id="podcastV2ThaiGeminiVoiceOptions">
+    <option value="Aoede"></option>
+    <option value="Puck"></option>
+    <option value="Charon"></option>
+    <option value="Kore"></option>
+    <option value="Fenrir"></option>
+    <option value="Zephyr"></option>
+    <option value="Leda"></option>
+    <option value="Orus"></option>
+    <option value="Zubenelgenubi"></option>
+  </datalist>
+  <datalist id="podcastV2ScriptModelOptions">
+    <option value="claude-sonnet-4-6"></option>
+    <option value="anthropic/claude-sonnet-4-6"></option>
+    <option value="minimax/minimax-m2.5"></option>
+    <option value="minimax/minimax-m2.5:free"></option>
+    <option value="qwen3:8b"></option>
+    <option value="gemma3:4b"></option>
+    <option value="llama3.1:8b"></option>
+  </datalist>
+  <datalist id="podcastV2OllamaModelOptions">
+    <option value="qwen3:8b"></option>
+    <option value="gemma3:4b"></option>
+    <option value="llama3.1:8b"></option>
+  </datalist>
+  <datalist id="podcastV2MinimaxModelOptions">
+    <option value="minimax/minimax-m2.5"></option>
+    <option value="minimax/minimax-m2.5:free"></option>
+  </datalist>
+  <datalist id="podcastV2AnthropicModelOptions">
+    <option value="claude-sonnet-4-6"></option>
+    <option value="anthropic/claude-sonnet-4-6"></option>
+  </datalist>
+  <datalist id="podcastV2ImageModelOptions">
+    <option value="gemini-2.5-flash-image"></option>
+    <option value="gemini-3.1-flash-image-preview"></option>
+  </datalist>
+
+  <script src="/ui-assets/podcast-v2-main.js"></script>
+  <script src="/ui-assets/podcast-v2-dialog.js"></script>
+  <script src="/ui-assets/podcast-v2-settings.js"></script>
+  <script src="/ui-assets/podcast-v2-render.js"></script>
+  <script src="/ui-assets/podcast-v2-api.js"></script>
+  </div><!-- end tab-podcast_v2 -->

@@ -1,43 +1,32 @@
-"""
-This file contains all the constants used in the program.
-"""
-
-TWITTER_TEXTAREA_CLASS = "public-DraftStyleDefault-block public-DraftStyleDefault-ltr"
-TWITTER_POST_BUTTON_XPATH = "/html/body/div[1]/div/div/div[2]/main/div/div/div/div[1]/div/div[3]/div/div[2]/div[1]/div/div/div/div[2]/div[2]/div[2]/div/div/div/div[3]"
+"""Constants shared by the current runtime paths."""
 
 OPTIONS = [
+    "Open Studio (Primary)",
     "YouTube Shorts Automation",
-    "Twitter Bot",
-    "Affiliate Marketing",
-    "Outreach",
-    "Quit"
-]
-
-TWITTER_OPTIONS = [
-    "Post something",
-    "Show all Posts",
-    "Setup CRON Job",
-    "Quit"
-]
-
-TWITTER_CRON_OPTIONS = [
-    "Once a day",
-    "Twice a day",
-    "Thrice a day",
     "Quit"
 ]
 
 YOUTUBE_OPTIONS = [
     "Upload Short",
     "Show all Shorts",
-    "Setup CRON Job",
+    "Setup Upload CRON",
+    "Setup Discovery CRON",
+    "Discover Trending Topics",
     "Quit"
 ]
 
-YOUTUBE_CRON_OPTIONS = [
+YOUTUBE_UPLOAD_CRON_OPTIONS = [
     "Once a day",
     "Twice a day",
     "Thrice a day",
+    "Quit"
+]
+
+YOUTUBE_DISCOVERY_CRON_OPTIONS = [
+    "06:00",
+    "07:00",
+    "08:00",
+    "Custom time",
     "Quit"
 ]
 
@@ -48,7 +37,3 @@ YOUTUBE_NOT_MADE_FOR_KIDS_NAME = "VIDEO_MADE_FOR_KIDS_NOT_MFK"
 YOUTUBE_NEXT_BUTTON_ID = "next-button"
 YOUTUBE_RADIO_BUTTON_XPATH = "//*[@id=\"radioLabel\"]"
 YOUTUBE_DONE_BUTTON_ID = "done-button"
-
-# Amazon Section (AFM)$
-AMAZON_PRODUCT_TITLE_ID = "productTitle"
-AMAZON_FEATURE_BULLETS_ID = "feature-bullets"

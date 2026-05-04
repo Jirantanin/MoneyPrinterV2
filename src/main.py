@@ -1,5 +1,6 @@
 import schedule
 import subprocess
+import sys
 
 from art import *
 from cache import *
@@ -10,35 +11,22 @@ from uuid import uuid4
 from constants import *
 from classes.Tts import TTS
 from termcolor import colored
-from classes.Twitter import Twitter
 from classes.YouTube import YouTube
 from prettytable import PrettyTable
-from classes.Outreach import Outreach
-from classes.AFM import AffiliateMarketing
 from llm_provider import list_models, select_model, get_active_model
 
+LEGACY_CLI_NOTICE = (
+    "Legacy CLI launcher: the Studio Web UI is the primary runtime now. "
+    "Only Studio and YouTube Shorts paths are kept here. Use option 1 to open Studio."
+)
+
+
 def main():
-    """Main entry point for the application, providing a menu-driven interface
-    to manage YouTube, Twitter bots, Affiliate Marketing, and Outreach tasks.
+    """Legacy menu launcher for non-Studio workflows.
 
-    This function allows users to:
-    1. Start the YouTube Shorts Automater to manage YouTube accounts, 
-       generate and upload videos, and set up CRON jobs.
-    2. Start a Twitter Bot to manage Twitter accounts, post tweets, and 
-       schedule posts using CRON jobs.
-    3. Manage Affiliate Marketing by creating pitches and sharing them via 
-       Twitter accounts.
-    4. Initiate an Outreach process for engagement and promotion tasks.
-    5. Exit the application.
-
-    The function continuously prompts users for input, validates it, and 
-    executes the selected option until the user chooses to quit.
-
-    Args:
-        None
-
-    Returns:
-        None"""
+    The Studio Web UI is the primary runtime path for this repository.
+    This CLI remains available for older manual workflows and debugging.
+    """
 
     # Get user input
     # user_input = int(question("Select an option: "))
@@ -65,6 +53,10 @@ def main():
 
     # Start the selected option
     if user_input == 1:
+        info("Opening Studio (primary runtime)...")
+        from podcast_server import launch_podcast_server
+        launch_podcast_server()
+    elif user_input == 2:
         info("Starting YT Shorts Automater...")
 
         cached_accounts = get_accounts("youtube")
@@ -138,12 +130,15 @@ def main():
                 error("Invalid account selected. Please try again.", "red")
                 main()
             else:
+                from datetime import datetime
+                _run_dir = os.path.join(ROOT_DIR, ".mp", datetime.now().strftime("%Y%m%d_%H%M%S"))
+                os.makedirs(_run_dir, exist_ok=True)
                 youtube = YouTube(
                     selected_account["id"],
                     selected_account["nickname"],
-                    selected_account["firefox_profile"],
                     selected_account["niche"],
-                    selected_account["language"]
+                    selected_account["language"],
+                    run_dir=_run_dir,
                 )
 
                 while True:
@@ -182,242 +177,78 @@ def main():
                         else:
                             warning(" No videos found.")
                     elif user_input == 3:
+                        # Setup Upload CRON
                         info("How often do you want to upload?")
 
                         info("\n============ OPTIONS ============", False)
-                        for idx, cron_option in enumerate(YOUTUBE_CRON_OPTIONS):
+                        for idx, cron_option in enumerate(YOUTUBE_UPLOAD_CRON_OPTIONS):
                             print(colored(f" {idx + 1}. {cron_option}", "cyan"))
-
                         info("=================================\n", False)
 
                         user_input = int(question("Select an Option: "))
 
                         cron_script_path = os.path.join(ROOT_DIR, "src", "cron.py")
-                        command = ["python", cron_script_path, "youtube", selected_account['id'], get_active_model()]
+                        upload_cmd = ["python", cron_script_path, "youtube", selected_account['id'], get_active_model()]
 
-                        def job():
-                            subprocess.run(command)
+                        def upload_job():
+                            subprocess.run(upload_cmd)
 
                         if user_input == 1:
-                            # Upload Once
-                            schedule.every(1).day.do(job)
-                            success("Set up CRON Job.")
+                            schedule.every(1).day.do(upload_job)
+                            success("Set up Upload CRON (once a day).")
                         elif user_input == 2:
-                            # Upload Twice a day
-                            schedule.every().day.at("10:00").do(job)
-                            schedule.every().day.at("16:00").do(job)
-                            success("Set up CRON Job.")
+                            schedule.every().day.at("10:00").do(upload_job)
+                            schedule.every().day.at("16:00").do(upload_job)
+                            success("Set up Upload CRON (twice a day).")
                         else:
                             break
+
                     elif user_input == 4:
-                        if get_verbose():
-                            info(" => Climbing Options Ladder...", False)
-                        break
-    elif user_input == 2:
-        info("Starting Twitter Bot...")
-
-        cached_accounts = get_accounts("twitter")
-
-        if len(cached_accounts) == 0:
-            warning("No accounts found in cache. Create one now?")
-            user_input = question("Yes/No: ")
-
-            if user_input.lower() == "yes":
-                generated_uuid = str(uuid4())
-
-                success(f" => Generated ID: {generated_uuid}")
-                nickname = question(" => Enter a nickname for this account: ")
-                fp_profile = question(" => Enter the path to the Firefox profile: ")
-                topic = question(" => Enter the account topic: ")
-
-                add_account("twitter", {
-                    "id": generated_uuid,
-                    "nickname": nickname,
-                    "firefox_profile": fp_profile,
-                    "topic": topic,
-                    "posts": []
-                })
-        else:
-            table = PrettyTable()
-            table.field_names = ["ID", "UUID", "Nickname", "Account Topic"]
-
-            for account in cached_accounts:
-                table.add_row([cached_accounts.index(account) + 1, colored(account["id"], "cyan"), colored(account["nickname"], "blue"), colored(account["topic"], "green")])
-
-            print(table)
-            info("Type 'd' to delete an account.", False)
-
-            user_input = question("Select an account to start (or 'd' to delete): ").strip()
-
-            if user_input.lower() == "d":
-                delete_input = question("Enter account number to delete: ").strip()
-                account_to_delete = None
-
-                for account in cached_accounts:
-                    if str(cached_accounts.index(account) + 1) == delete_input:
-                        account_to_delete = account
-                        break
-
-                if account_to_delete is None:
-                    error("Invalid account selected. Please try again.", "red")
-                else:
-                    confirm = question(f"Are you sure you want to delete '{account_to_delete['nickname']}'? (Yes/No): ").strip().lower()
-
-                    if confirm == "yes":
-                        remove_account("twitter", account_to_delete["id"])
-                        success("Account removed successfully!")
-                    else:
-                        warning("Account deletion canceled.", False)
-
-                return
-
-            selected_account = None
-
-            for account in cached_accounts:
-                if str(cached_accounts.index(account) + 1) == user_input:
-                    selected_account = account
-
-            if selected_account is None:
-                error("Invalid account selected. Please try again.", "red")
-                main()
-            else:
-                twitter = Twitter(selected_account["id"], selected_account["nickname"], selected_account["firefox_profile"], selected_account["topic"])
-
-                while True:
-                    
-                    info("\n============ OPTIONS ============", False)
-
-                    for idx, twitter_option in enumerate(TWITTER_OPTIONS):
-                        print(colored(f" {idx + 1}. {twitter_option}", "cyan"))
-
-                    info("=================================\n", False)
-
-                    # Get user input
-                    user_input = int(question("Select an option: "))
-
-                    if user_input == 1:
-                        twitter.post()
-                    elif user_input == 2:
-                        posts = twitter.get_posts()
-
-                        posts_table = PrettyTable()
-
-                        posts_table.field_names = ["ID", "Date", "Content"]
-
-                        for post in posts:
-                            posts_table.add_row([
-                                posts.index(post) + 1,
-                                colored(post["date"], "blue"),
-                                colored(post["content"][:60] + "...", "green")
-                            ])
-
-                        print(posts_table)
-                    elif user_input == 3:
-                        info("How often do you want to post?")
+                        # Setup Discovery CRON
+                        info("What time should discovery run daily?")
 
                         info("\n============ OPTIONS ============", False)
-                        for idx, cron_option in enumerate(TWITTER_CRON_OPTIONS):
+                        for idx, cron_option in enumerate(YOUTUBE_DISCOVERY_CRON_OPTIONS):
                             print(colored(f" {idx + 1}. {cron_option}", "cyan"))
-
                         info("=================================\n", False)
 
                         user_input = int(question("Select an Option: "))
 
                         cron_script_path = os.path.join(ROOT_DIR, "src", "cron.py")
-                        command = ["python", cron_script_path, "twitter", selected_account['id'], get_active_model()]
+                        discover_cmd = ["python", cron_script_path, "discover", selected_account['id'], get_active_model()]
 
-                        def job():
-                            subprocess.run(command)
+                        def discover_job():
+                            subprocess.run(discover_cmd)
 
-                        if user_input == 1:
-                            # Post Once a day
-                            schedule.every(1).day.do(job)
-                            success("Set up CRON Job.")
-                        elif user_input == 2:
-                            # Post twice a day
-                            schedule.every().day.at("10:00").do(job)
-                            schedule.every().day.at("16:00").do(job)
-                            success("Set up CRON Job.")
-                        elif user_input == 3:
-                            # Post thrice a day
-                            schedule.every().day.at("08:00").do(job)
-                            schedule.every().day.at("12:00").do(job)
-                            schedule.every().day.at("18:00").do(job)
-                            success("Set up CRON Job.")
+                        time_map = {1: "06:00", 2: "07:00", 3: "08:00"}
+                        if user_input in time_map:
+                            run_time = time_map[user_input]
+                        elif user_input == 4:
+                            run_time = question("Enter time (HH:MM): ").strip()
                         else:
                             break
-                    elif user_input == 4:
+
+                        schedule.every().day.at(run_time).do(discover_job)
+                        success(f"Set up Discovery CRON (daily at {run_time}).")
+
+                    elif user_input == 5:
+                        # Discover Trending Topics (run now)
+                        from topic_discovery import run_discovery
+                        info("Running topic discovery...")
+                        result = run_discovery(selected_account.get("language", "English"))
+                        if result and "winner" in result:
+                            success(f"Best topic: {result['winner']['topic']}")
+                            info(f"Angle: {result['winner']['angle']}")
+                            info(f"Reasoning: {result.get('reasoning', '')}")
+                            for r in result.get("runners_up", []):
+                                info(f"  Runner-up: {r['topic']} (score: {r['score']})")
+                        else:
+                            warning("Topic discovery failed or returned no results.")
+                    elif user_input == 6:
                         if get_verbose():
                             info(" => Climbing Options Ladder...", False)
                         break
     elif user_input == 3:
-        info("Starting Affiliate Marketing...")
-
-        cached_products = get_products()
-
-        if len(cached_products) == 0:
-            warning("No products found in cache. Create one now?")
-            user_input = question("Yes/No: ")
-
-            if user_input.lower() == "yes":
-                affiliate_link = question(" => Enter the affiliate link: ")
-                twitter_uuid = question(" => Enter the Twitter Account UUID: ")
-
-                # Find the account
-                account = None
-                for acc in get_accounts("twitter"):
-                    if acc["id"] == twitter_uuid:
-                        account = acc
-
-                add_product({
-                    "id": str(uuid4()),
-                    "affiliate_link": affiliate_link,
-                    "twitter_uuid": twitter_uuid
-                })
-
-                afm = AffiliateMarketing(affiliate_link, account["firefox_profile"], account["id"], account["nickname"], account["topic"])
-
-                afm.generate_pitch()
-                afm.share_pitch("twitter")
-        else:
-            table = PrettyTable()
-            table.field_names = ["ID", "Affiliate Link", "Twitter Account UUID"]
-
-            for product in cached_products:
-                table.add_row([cached_products.index(product) + 1, colored(product["affiliate_link"], "cyan"), colored(product["twitter_uuid"], "blue")])
-
-            print(table)
-
-            user_input = question("Select a product to start: ")
-
-            selected_product = None
-
-            for product in cached_products:
-                if str(cached_products.index(product) + 1) == user_input:
-                    selected_product = product
-
-            if selected_product is None:
-                error("Invalid product selected. Please try again.", "red")
-                main()
-            else:
-                # Find the account
-                account = None
-                for acc in get_accounts("twitter"):
-                    if acc["id"] == selected_product["twitter_uuid"]:
-                        account = acc
-
-                afm = AffiliateMarketing(selected_product["affiliate_link"], account["firefox_profile"], account["id"], account["nickname"], account["topic"])
-
-                afm.generate_pitch()
-                afm.share_pitch("twitter")
-
-    elif user_input == 4:
-        info("Starting Outreach...")
-
-        outreach = Outreach()
-
-        outreach.start()
-    elif user_input == 5:
         if get_verbose():
             print(colored(" => Quitting...", "blue"))
         sys.exit(0)
@@ -429,11 +260,13 @@ def main():
 if __name__ == "__main__":
     # Print ASCII Banner
     print_banner()
+    warning(LEGACY_CLI_NOTICE, False)
 
     first_time = get_first_time_running()
 
     if first_time:
         print(colored("Hey! It looks like you're running MoneyPrinter V2 for the first time. Let's get you setup first!", "yellow"))
+        print(colored("Tip: the Studio Web UI is the main way to use this repo now.", "yellow"))
 
     # Setup file tree
     assert_folder_structure()

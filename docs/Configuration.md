@@ -1,90 +1,78 @@
 # Configuration
 
-All your configurations will be in a file in the root directory, called `config.json`, which is a copy of `config.example.json`. You can change the values in `config.json` to your liking.
+The active runtime in this repo is the Web UI Studio served by
+`src/podcast_server.py`. Configuration lives in `config.json` at the repo root
+and should be created from `config.example.json`.
 
-## Values
+## Core Runtime Settings
 
-- `verbose`: `boolean` - If `true`, the application will print out more information.
-- `firefox_profile`: `string` - The path to your Firefox profile. This is used to use your Social Media Accounts without having to log in every time you run the application.
-- `headless`: `boolean` - If `true`, the application will run in headless mode. This means that the browser will not be visible.
-- `ollama_base_url`: `string` - Base URL of your local Ollama server (default: `http://127.0.0.1:11434`).
-- `ollama_model`: `string` - Ollama model to use for text generation (e.g. `llama3.2:3b`). If empty, the app queries Ollama at startup and lets you pick from the available models interactively.
-- `twitter_language`: `string` - The language that will be used to generate & post tweets.
-- `nanobanana2_api_base_url`: `string` - Nano Banana 2 API base URL (default: `https://generativelanguage.googleapis.com/v1beta`).
-- `nanobanana2_api_key`: `string` - API key for Nano Banana 2 (Gemini image API). If empty, MPV2 falls back to environment variable `GEMINI_API_KEY`.
-- `nanobanana2_model`: `string` - Nano Banana 2 model name (default: `gemini-3.1-flash-image-preview`).
-- `nanobanana2_aspect_ratio`: `string` - Aspect ratio for generated images (default: `9:16`).
-- `threads`: `number` - The amount of threads that will be used to execute operations, e.g. writing to a file using MoviePy.
-- `is_for_kids`: `boolean` - If `true`, the application will upload the video to YouTube Shorts as a video for kids.
-- `google_maps_scraper`: `string` - The URL to the Google Maps scraper. This will be used to scrape Google Maps for local businesses. It is recommended to use the default value.
-- `zip_url`: `string` - The URL to the ZIP file that contains the to be used Songs for the YouTube Shorts Automater.
-- `email`: `object`:
-    - `smtp_server`: `string` - Your SMTP server.
-    - `smtp_port`: `number` - The port of your SMTP server.
-    - `username`: `string` - Your email address.
-    - `password`: `string` - Your email password.
-- `google_maps_scraper_niche`: `string` - The niche you want to scrape Google Maps for.
-- `scraper_timeout`: `number` - The timeout for the Google Maps scraper.
-- `outreach_message_subject`: `string` - The subject of your outreach message. `{{COMPANY_NAME}}` will be replaced with the company name.
-- `outreach_message_body_file`: `string` - The file that contains the body of your outreach message, should be HTML. `{{COMPANY_NAME}}` will be replaced with the company name.
-- `stt_provider`: `string` - Provider for subtitle transcription. Default is `local_whisper`. Options:
-    * `local_whisper`
-    * `third_party_assemblyai`
-- `whisper_model`: `string` - Whisper model for local transcription (for example `base`, `small`, `medium`, `large-v3`).
-- `whisper_device`: `string` - Device for local Whisper (`auto`, `cpu`, `cuda`).
-- `whisper_compute_type`: `string` - Compute type for local Whisper (`int8`, `float16`, etc.).
-- `assembly_ai_api_key`: `string` - Your Assembly AI API key. Get yours from [here](https://www.assemblyai.com/app/).
-- `tts_voice`: `string` - Voice for KittenTTS text-to-speech. Default is `Jasper`. Options: `Bella`, `Jasper`, `Luna`, `Bruno`, `Rosie`, `Hugo`, `Kiki`, `Leo`.
-- `font`: `string` - The font that will be used to generate images. This should be a `.ttf` file in the `fonts/` directory.
-- `imagemagick_path`: `string` - The path to the ImageMagick binary. This is used by MoviePy to manipulate images. Install ImageMagick from [here](https://imagemagick.org/script/download.php) and set the path to the `magick.exe` on Windows, or on Linux/MacOS the path to `convert` (usually /usr/bin/convert).
-- `script_sentence_length`: `number` - The number of sentences in the generated video script (default: `4`).
+- `ollama_base_url`: local Ollama base URL
+- `ollama_model`: default Ollama model for text generation fallback
+- `minimax_api_key`: OpenRouter API key for MiniMax
+- `minimax_api_base_url`: OpenRouter base URL
+- `minimax_model`: MiniMax model name
+- `nanobanana2_api_base_url`: image API base URL
+- `nanobanana2_api_key`: image API key, falls back to `GEMINI_API_KEY`
+- `nanobanana2_model`: image generation model
+- `nanobanana2_aspect_ratio`: image aspect ratio for generated visuals
+- `threads`: worker count for local media processing
+- `imagemagick_path`: path to `magick.exe` on Windows or `convert` on Unix
 
-## Example
+## TTS and Subtitle Settings
 
-```json
-{
-  "verbose": true,
-  "firefox_profile": "",
-  "headless": false,
-  "ollama_base_url": "http://127.0.0.1:11434",
-  "ollama_model": "",
-  "twitter_language": "English",
-  "nanobanana2_api_base_url": "https://generativelanguage.googleapis.com/v1beta",
-  "nanobanana2_api_key": "",
-  "nanobanana2_model": "gemini-3.1-flash-image-preview",
-  "nanobanana2_aspect_ratio": "9:16",
-  "threads": 2,
-  "zip_url": "",
-  "is_for_kids": false,
-  "google_maps_scraper": "https://github.com/gosom/google-maps-scraper/archive/refs/tags/v0.9.7.zip",
-  "email": {
-    "smtp_server": "smtp.gmail.com",
-    "smtp_port": 587,
-    "username": "",
-    "password": ""
-  },
-  "google_maps_scraper_niche": "",
-  "scraper_timeout": 300,
-  "outreach_message_subject": "I have a question...",
-  "outreach_message_body_file": "outreach_message.html",
-  "stt_provider": "local_whisper",
-  "whisper_model": "base",
-  "whisper_device": "auto",
-  "whisper_compute_type": "int8",
-  "assembly_ai_api_key": "",
-  "tts_voice": "Jasper",
-  "font": "bold_font.ttf",
-  "imagemagick_path": "Path to magick.exe or on linux/macOS just /usr/bin/convert",
-  "script_sentence_length": 4
-}
-```
+- `tts_provider`: current TTS engine, default `edge`
+- `tts.edge.voice`: Edge voice name for default narration
+- `tts.edge.rate`: Edge speed adjustment
+- `stt_provider`: subtitle transcription provider
+- `whisper_model`: local Whisper model
+- `whisper_device`: `auto`, `cpu`, or `cuda`
+- `whisper_compute_type`: local Whisper compute type
+- `assembly_ai_api_key`: AssemblyAI key if using third-party transcription
+- `tts_voice`: legacy value kept for backward compatibility
+
+## Podcast Settings
+
+The Studio reads podcast system settings through `src/config.py` and supports
+both nested settings and older flat keys.
+
+- `podcast_narrator.name`: narrator name used in prompting
+- `podcast_narrator.persona`: narrator persona used in prompting
+- `podcast_narrator.tts_voice`: narrator voice
+- `podcast_narrator.tts_rate`: narrator speech rate
+- `podcast_style_prompt`: style suffix appended to generated podcast image prompts
+- `elevenlabs_voice_id_th`: Thai ElevenLabs voice id when that path is enabled
+
+## Shorts and Upload Settings
+
+- `is_for_kids`: YouTube audience flag for uploads
+- `font`: subtitle or graphics font file in `fonts/`
+- `client_secrets.json`: local OAuth client config for YouTube upload
+- `token.json`: generated local OAuth token for YouTube upload
+
+## Topic Discovery Settings
+
+- `topic_discovery.enabled`: enable scheduled topic discovery
+- `topic_discovery.youtube_api_key`: YouTube Data API key
+- `topic_discovery.news_api_key`: NewsAPI key
+- `topic_discovery.anthropic_api_key`: Anthropic key for scoring if used
+- `topic_discovery.scoring_provider`: `ollama` or `anthropic`
+- `topic_discovery.geo`: region code such as `TH` or `US`
+- `topic_discovery.max_topic_age_hours`: freshness window for candidates
+
+## Legacy Local Values
+
+`firefox_profile` remains in the example config only for older browser-driven
+helpers. It is not part of the main Studio runtime.
+Modules under `src/legacy/` may still reference older config concepts, but that
+folder is reference-only and not part of the supported runtime path.
 
 ## Environment Variable Fallbacks
 
-- `GEMINI_API_KEY`: used when `nanobanana2_api_key` is empty.
+- `GEMINI_API_KEY`: used when `nanobanana2_api_key` is empty
 
-Example:
+## Recommended Workflow
 
-```bash
-export GEMINI_API_KEY="your_api_key_here"
-```
+1. Copy `config.example.json` to `config.json`
+2. Fill in only the providers you actually use
+3. Keep `config.json`, `client_secrets.json`, and `token.json` local only
+4. Launch the Studio from `src/podcast_server.py`

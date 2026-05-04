@@ -1,5 +1,7 @@
 __pycache__
 config.json
+client_secrets.json
+token.json
 .mp/
 venv/
 Songs/
@@ -8,3 +10,13 @@ niche.txt
 *.exe
 auto.sh
 .DS_Store
+.claude/
+run_youtube_out.txt
+run_youtube_err.txt
+*TEMP_MPY*
+*.tmp.mp4
+*.temp.mp4
+fonts/thai_font.ttf
+remotion/public/assets/
+remotion/.render-props*.json
+remotion/node_modules/

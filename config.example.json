@@ -4,7 +4,6 @@
   "headless": false,
   "ollama_base_url": "http://127.0.0.1:11434",
   "ollama_model": "",
-  "twitter_language": "English",
   "nanobanana2_api_base_url": "https://generativelanguage.googleapis.com/v1beta",
   "nanobanana2_api_key": "",
   "nanobanana2_model": "gemini-3.1-flash-image-preview",
@@ -12,24 +11,86 @@
   "threads": 2,
   "zip_url": "",
   "is_for_kids": false,
-  "google_maps_scraper": "https://github.com/gosom/google-maps-scraper/archive/refs/tags/v0.9.7.zip",
-  "email": {
-    "smtp_server": "smtp.gmail.com",
-    "smtp_port": 587,
-    "username": "",
-    "password": ""
-  },
-  "google_maps_scraper_niche": "",
-  "scraper_timeout": 300,
-  "outreach_message_subject": "I have a question...",
-  "outreach_message_body_file": "outreach_message.html",
   "stt_provider": "local_whisper",
   "whisper_model": "base",
   "whisper_device": "auto",
   "whisper_compute_type": "int8",
   "assembly_ai_api_key": "",
+  "elevenlabs_api_key": "",
+  "elevenlabs_voice_id_th": "",
+  "gemini_tts_api_key": "",
+  "tts_provider": "edge",
+  "tts": {
+    "edge": {
+      "voice": "en-US-ChristopherNeural",
+      "rate": "+20%"
+    },
+    "edge_thai": {
+      "voice": "th-TH-PremwadeeNeural",
+      "rate": "-12%"
+    }
+  },
   "tts_voice": "Jasper",
+  "tts_rate": "+20%",
   "font": "bold_font.ttf",
   "imagemagick_path": "Path to magick.exe or on linux/macOS just /usr/bin/convert",
-  "script_sentence_length": 4
+  "script_sentence_length": 4,
+  "topic_discovery": {
+    "enabled": false,
+    "youtube_api_key": "",
+    "news_api_key": "",
+    "anthropic_api_key": "",
+    "scoring_provider": "ollama",
+    "geo": "US",
+    "max_topic_age_hours": 24
+  },
+  "anthropic_api_key": "",
+  "anthropic_model": "claude-sonnet-4-6",
+  "podcast_script_model": "claude-sonnet-4-6",
+  "podcast_narrator": {
+    "name": "Alex",
+    "persona": "A curious and engaging narrator who explains complex topics clearly",
+    "tts_voice": "en-GB-RyanNeural",
+    "tts_rate": "-20%"
+  },
+  "podcast_style_prompt": "cinematic documentary illustration, single coherent scene, no comic panels, no superhero styling, no exaggerated heroic poses, no named characters unless explicitly requested, restrained realistic composition, moody lighting, subtle texture, thoughtful atmosphere --",
+  "podcast_script_system_prompt": "You are {narrator_name}, {narrator_persona}. /no_think Narrate in {language} language. Narrate in a compelling storytelling voice. Output ONLY valid JSON matching the provided schema. No markdown, no asterisks, no extra commentary.",
+  "podcast_metadata_system_prompt": "You are a YouTube metadata writer for long-form podcast videos.\n\nWrite ALL metadata in {language}.\nIf {language} is Thai, the title, description, hashtags, and tags must be in Thai except unavoidable proper nouns.\nDo not switch to English unless the source topic itself is a proper noun, branded term, or official mission name.\n\nTopic: {topic}\nOpening narration: {opening_narration}\n\n{creative_direction_block}Generate YouTube metadata for this podcast episode. Return ONLY valid JSON with these keys:\n- \"title\": Engaging podcast title, max 90 characters, NO emoji, NO hashtags\n- \"description\": 2-3 paragraph description (max 4000 chars) summarizing what the episode covers. End with 3-5 relevant hashtags on a new line.\n- \"tags\": Array of 8-15 relevant tags as strings\n\nReturn ONLY the JSON object, no markdown fencing.",
+  "podcast_thumbnail_system_prompt": "YouTube thumbnail for a podcast episode about: {topic}. {creative_direction_block}Single dramatic scene, no comic panels, no borders, no gutters. Dark cinematic mood, bold colors, high contrast. One striking central subject that fills the frame. Photorealistic or painterly illustration style. No text, no logos.",
+  "podcast_image_retry_count": 3,
+  "podcast_audio_retry_count": 3,
+  "podcast_settings": {
+    "voices": {
+      "english_edge_voice": "en-US-ChristopherNeural",
+      "english_edge_rate": "+20%",
+      "thai_edge_voice": "th-TH-PremwadeeNeural",
+      "thai_edge_rate": "-12%",
+      "thai_elevenlabs_voice_id": "",
+      "thai_elevenlabs_fallback_voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "thai_gemini_voice": "Aoede"
+    },
+    "models": {
+      "script_model": "claude-sonnet-4-6",
+      "ollama_model": "",
+      "minimax_model": "minimax/minimax-m2.5:free",
+      "anthropic_model": "claude-sonnet-4-6",
+      "image_model": "gemini-3.1-flash-image-preview",
+      "image_aspect_ratio": "16:9"
+    },
+    "prompting": {
+      "narrator_name": "Alex",
+      "narrator_persona": "A curious narrator who questions assumptions, builds from simple facts to mind-blowing cosmic scale, uses vivid analogies, and leaves you wondering about your place in the universe",
+      "narrator_voice": "en-GB-RyanNeural",
+      "narrator_rate": "-20%",
+      "podcast_style_prompt": "flat design illustration, Kurzgesagt style, vivid saturated colors, bright solid-color background, cute simple bird and creature characters, bold geometric shapes, clean vector art, no photorealism, no dark cinematic mood, no comic panels --",
+      "script_system_prompt": "You are {narrator_name}, {narrator_persona}. /no_think Narrate in {language} language. Write in the style of Kurzgesagt – In a Nutshell: open with a big thought-provoking question, use \"we\" to include the listener in the journey, build from simple everyday concepts to mind-blowing scale, mix short punchy sentences with longer explanatory ones, use vivid surprising analogies, and close with a philosophical reflection that leaves the listener in quiet wonder. Output ONLY valid JSON matching the provided schema. No markdown, no asterisks, no extra commentary.",
+      "metadata_system_prompt": "You are a YouTube metadata writer for long-form podcast videos.\n\nWrite ALL metadata in {language}.\nIf {language} is Thai, the title, description, hashtags, and tags must be in Thai except unavoidable proper nouns.\nDo not switch to English unless the source topic itself is a proper noun, branded term, or official mission name.\n\nTopic: {topic}\nOpening narration: {opening_narration}\n\n{creative_direction_block}Generate YouTube metadata for this podcast episode. Return ONLY valid JSON with these keys:\n- \"title\": Engaging podcast title, max 90 characters, NO emoji, NO hashtags\n- \"description\": 2-3 paragraph description (max 4000 chars) summarizing what the episode covers. End with 3-5 relevant hashtags on a new line.\n- \"tags\": Array of 8-15 relevant tags as strings\n\nReturn ONLY the JSON object, no markdown fencing.",
+      "thumbnail_system_prompt": "YouTube thumbnail for a podcast episode about: {topic}. {creative_direction_block}Kurzgesagt flat design style. Vivid saturated colors, bright bold background. Simple geometric shapes and cute bird or creature characters. One clear striking central image that fills the frame. Clean vector illustration, no photorealism, no dark cinematic mood. No text, no logos."
+    },
+    "advanced": {
+      "image_retry_count": 3,
+      "audio_retry_count": 3,
+      "script_sentence_length": 4
+    }
+  }
 }

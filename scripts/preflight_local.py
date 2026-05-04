@@ -61,7 +61,7 @@ def main() -> int:
         else:
             warn(f"firefox_profile does not exist: {firefox_profile}")
     else:
-        warn("firefox_profile is empty. Twitter/YouTube automation requires this.")
+        warn("firefox_profile is empty. Only legacy browser automation paths use this.")
 
     # Ollama (LLM)
     base = str(cfg.get("ollama_base_url", "http://127.0.0.1:11434")).rstrip("/")

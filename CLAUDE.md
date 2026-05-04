@@ -1,83 +1,97 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-MoneyPrinterV2 (MPV2) is a Python 3.12 CLI tool that automates four online workflows:
-1. **YouTube Shorts** — generate video (LLM script → TTS → images → MoviePy composite) and upload via Selenium
-2. **Twitter/X Bot** — generate and post tweets via Selenium
-3. **Affiliate Marketing** — scrape Amazon product info, generate pitch, share on Twitter
-4. **Local Business Outreach** — scrape Google Maps (Go binary), extract emails, send cold outreach via SMTP
+MoneyPrinterV2 in this repo is primarily a Python 3.12 Web UI Studio backed by FastAPI.
+The main active workflows are:
+1. YouTube Shorts generation and upload
+2. YouTube Podcast generation and upload
+3. Retired Twitter, Affiliate Marketing, and Outreach modules kept only under `src/legacy/classes/` for reference
 
-There is no web UI, no REST API, no test suite, no CI, and no linting config.
+There is no enforced test suite, CI pipeline, or linting config.
 
 ## Running the Application
 
 ```bash
 # First-time setup
-cp config.example.json config.json   # then fill in values
+cp config.example.json config.json
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# macOS quick setup (auto-configures Ollama, ImageMagick, Firefox profile)
+# Optional quick setup helper
 bash scripts/setup_local.sh
 
-# Preflight check (validates services are reachable)
+# Preflight check
 python scripts/preflight_local.py
 
-# Run
-python src/main.py
+# Run Studio
+python -c "from src.podcast_server import launch_podcast_server; launch_podcast_server()"
 ```
 
-The app **must** be run from the project root. `python src/main.py` adds `src/` to `sys.path`, so all imports use bare module names (e.g., `from config import *`, not `from src.config import *`).
+Run the project from the repo root. `src/main.py` still exists as a legacy launcher and uses bare module imports.
 
 ## Architecture
 
 ### Entry Points
-- `src/main.py` — interactive menu loop (primary)
-- `src/cron.py` — headless runner invoked by the scheduler as a subprocess: `python src/cron.py <platform> <account_uuid>`
-
-### Provider Pattern
-Two service categories use a string-based dispatch pattern configured in `config.json`:
-
-| Category | Config key | Options |
-|---|---|---|
-| LLM | `ollama_model` | Ollama (via `ollama` Python SDK). If empty, user picks from available models at startup. |
-| Image gen | — | `nanobanana2` (Gemini image API) |
-| STT | `stt_provider` | `local_whisper`, `third_party_assemblyai` |
-
-LLM always uses the local Ollama server. Image generation always uses Nano Banana 2.
+- `src/podcast_server.py` - primary FastAPI Studio backend
+- `src/main.py` - legacy interactive CLI launcher
+- `src/cron.py` - scheduled headless runner for older automation paths
 
 ### Key Modules
-- **`src/llm_provider.py`** — unified `generate_text(prompt)` function using the Ollama Python SDK
-- **`src/config.py`** — 30+ getter functions, each re-reads `config.json` on every call (no caching). `ROOT_DIR` = project root, computed as `os.path.dirname(sys.path[0])`
-- **`src/cache.py`** — JSON file persistence in `.mp/` directory (accounts, videos, posts, products)
-- **`src/constants.py`** — menu strings, Selenium selectors (YouTube Studio, X.com, Amazon)
-- **`src/classes/YouTube.py`** — most complex class; full pipeline: topic → script → metadata → image prompts → images → TTS → subtitles → MoviePy combine → Selenium upload
-- **`src/classes/Twitter.py`** — Selenium automation against x.com
-- **`src/classes/AFM.py`** — Amazon scraping + LLM pitch generation
-- **`src/classes/Outreach.py`** — Google Maps scraper (requires Go) + email sending via yagmail
-- **`src/classes/Tts.py`** — KittenTTS wrapper
+- `src/podcast_server.py` - Studio backend, SSE progress streaming, upload endpoints, settings endpoints
+- `src/podcast_ui.html` - shell template (CSS, layout, tab nav); injects `{{PODCAST_COMPONENT}}` and `{{SHORTS_COMPONENT}}` placeholders server-side
+- `src/ui/` - component partials and JS modules assembled into the shell:
+  - `podcast_component.html` / `shorts_component.html` — tab markup (HTML only)
+  - `shared.js` — tab switching logic, loaded in shell `<head>`
+  - `podcast-main.js`, `podcast-dialog.js`, `podcast-settings.js`, `podcast-render.js`, `podcast-api.js` — podcast JS by concern
+  - `shorts-main.js`, `shorts-render.js`, `shorts-api.js` — shorts JS by concern
+  - Static assets served at `/ui-assets/{filename}` via a route in `podcast_server.py`
+- `src/classes/Podcast.py` - long-form podcast pipeline
+- `src/classes/YouTube.py` - Shorts pipeline and YouTube upload helpers
+- `src/classes/Tts.py` - TTS dispatch by config
+- `src/legacy/classes/` - retired non-Studio modules kept as reference only
+- `src/llm_provider.py` - MiniMax/OpenRouter primary text generation with Ollama fallback
+- `src/config.py` - config loading and settings helpers
+- `src/cache.py` - JSON persistence in `.mp/`
+- `remotion/` - rendering layer for Shorts and related video work
+
+### Provider Pattern
+- LLM: MiniMax via OpenRouter when configured, otherwise Ollama fallback
+- Image generation: Nano Banana 2 / Gemini image API
+- TTS: `tts_provider`, default `edge`
+- STT: `local_whisper` or `third_party_assemblyai`
 
 ### Data Storage
-All persistent state lives in `.mp/` at the project root as JSON files (`youtube.json`, `twitter.json`, `afm.json`). This directory also serves as scratch space for temporary WAV, PNG, SRT, and MP4 files — non-JSON files are cleaned on each run by `rem_temp_files()`.
-
-### Browser Automation
-Selenium uses pre-authenticated Firefox profiles (never handles login). The profile path is stored per-account in the cache JSON and also in `config.json` as a default.
-
-### CRON Scheduling
-Uses Python's `schedule` library (in-process, not OS cron). The scheduled job spawns `subprocess.run(["python", "src/cron.py", platform, account_id])`.
+Persistent state lives in `.mp/` at the project root. This directory also acts as scratch space for generated assets.
 
 ## Configuration
 
-All config lives in `config.json` at the project root. See `config.example.json` for the full template and `docs/Configuration.md` for reference. Key external dependencies to configure:
-- **ImageMagick** — required for MoviePy subtitle rendering (`imagemagick_path`)
-- **Firefox profile** — must be pre-logged-in to target platforms (`firefox_profile`)
-- **Ollama** — for LLM text generation (via `ollama` Python SDK)
-- **Nano Banana 2** — for image generation (Gemini image API)
-- **Go** — only needed for Outreach (Google Maps scraper)
+All config lives in `config.json` at the repo root. Start from `config.example.json`.
+See `docs/Configuration.md` for the active runtime settings used by the Studio.
+
+Key external dependencies:
+- ImageMagick for parts of local media processing
+- Ollama for local LLM fallback
+- Nano Banana 2 / Gemini image API for image generation
+- YouTube OAuth client files for upload
+- Optional Go toolchain only for the legacy Outreach module
+
+## Web UI Notes
+
+Default local URL: `http://127.0.0.1:8899`
+
+Windows launch shortcut:
+
+```bash
+py -c "import sys; sys.path.insert(0, 'src'); from podcast_server import launch_podcast_server; launch_podcast_server()"
+```
+
+## Windows Environment Notes
+- Prefer `py` if the Microsoft Store alias interferes with `python`
+- `npx` on Windows may require `shell: true` when called from Python subprocesses
 
 ## Contributing
 
-PRs go against `main`. One feature/fix per PR. Open an issue first. Use `WIP` label for in-progress PRs.
+PRs go against `main`. Keep one feature or fix per PR and use clear titles and descriptions.

@@ -1,5 +1,6 @@
 import re
 import base64
+import math
 import json
 import time
 import os
@@ -9,27 +10,70 @@ import assemblyai as aai
 from utils import *
 from cache import *
 from .Tts import TTS
-from llm_provider import generate_text
+from llm_provider import generate_text, generate_text_structured
 from config import *
 from status import *
 from uuid import uuid4
+from image_provider import generate_image as _ip_generate_image
 from constants import *
 from typing import List
+from pydantic import BaseModel
 from moviepy.editor import *
 from termcolor import colored
-from selenium_firefox import *
-from selenium import webdriver
 from moviepy.video.fx.all import crop
 from moviepy.config import change_settings
-from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.firefox.options import Options
 from moviepy.video.tools.subtitles import SubtitlesClip
-from webdriver_manager.firefox import GeckoDriverManager
 from datetime import datetime
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+import numpy as np
+from PIL import Image as PILImage
 
 # Set ImageMagick Path
 change_settings({"IMAGEMAGICK_BINARY": get_imagemagick_path()})
+
+
+class HookOutput(BaseModel):
+    hook_type: str   # "question" | "stat" | "bold"
+    hook_text: str   # opening sentence, target 10-15 words
+
+
+SHORT_METADATA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["title", "description", "tags"],
+}
+
+
+SHORT_IMAGE_PROMPTS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "image_prompts": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["image_prompts"],
+}
+
+
+_HOOK_TEMPLATES = {
+    "breaking_news":   "This just happened and you need to know about it.",
+    "science_facts":   "This scientific fact will completely change how you see the world.",
+    "weird_viral":     "You will not believe what happened next.",
+    "default":         "What you are about to learn will surprise you.",
+}
+
+_HOOK_TEMPLATES_THAI = {
+    "breaking_news": "เรื่องนี้เพิ่งเกิดขึ้น และคุณควรรู้ให้ทันที",
+    "science_facts": "ข้อเท็จจริงนี้อาจเปลี่ยนมุมมองของคุณไปเลย",
+    "weird_viral": "สิ่งที่จะเกิดขึ้นต่อไป คุณอาจไม่เชื่อแน่",
+    "default": "สิ่งที่คุณกำลังจะรู้ อาจทำให้คุณแปลกใจ",
+}
 
 
 class YouTube:
@@ -47,13 +91,20 @@ class YouTube:
     7. Combine Concatenated Images with the Text-to-Speech [DONE]
     """
 
+    SCOPES = [
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube.readonly",
+    ]
+    TOKEN_PATH = os.path.join(ROOT_DIR, "token.json")
+    CLIENT_SECRETS_PATH = os.path.join(ROOT_DIR, "client_secrets.json")
+
     def __init__(
         self,
         account_uuid: str,
         account_nickname: str,
-        fp_profile_path: str,
         niche: str,
         language: str,
+        run_dir: str = None,
     ) -> None:
         """
         Constructor for YouTube Class.
@@ -61,43 +112,25 @@ class YouTube:
         Args:
             account_uuid (str): The unique identifier for the YouTube account.
             account_nickname (str): The nickname for the YouTube account.
-            fp_profile_path (str): Path to the firefox profile that is logged into the specificed YouTube Account.
             niche (str): The niche of the provided YouTube Channel.
             language (str): The language of the Automation.
+            run_dir (str): Directory for all output files. Defaults to ROOT_DIR/.mp.
 
         Returns:
             None
         """
         self._account_uuid: str = account_uuid
         self._account_nickname: str = account_nickname
-        self._fp_profile_path: str = fp_profile_path
         self._niche: str = niche
         self._language: str = language
+        self.run_dir: str = run_dir if run_dir is not None else os.path.join(ROOT_DIR, ".mp")
 
         self.images = []
 
-        # Initialize the Firefox profile
-        self.options: Options = Options()
-
-        # Set headless state of browser
-        if get_headless():
-            self.options.add_argument("--headless")
-
-        if not os.path.isdir(self._fp_profile_path):
-            raise ValueError(
-                f"Firefox profile path does not exist or is not a directory: {self._fp_profile_path}"
-            )
-
-        self.options.add_argument("-profile")
-        self.options.add_argument(self._fp_profile_path)
-
-        # Set the service
-        self.service: Service = Service(GeckoDriverManager().install())
-
-        # Initialize the browser
-        self.browser: webdriver.Firefox = webdriver.Firefox(
-            service=self.service, options=self.options
-        )
+        # Lazily build the YouTube API client only when upload is requested.
+        # This keeps the generation pipeline usable even when local YouTube auth
+        # is missing and the user plans to upload manually.
+        self._youtube = None
 
     @property
     def niche(self) -> str:
@@ -119,6 +152,27 @@ class YouTube:
         """
         return self._language
 
+    def _build_youtube_client(self):
+        """Builds an authenticated YouTube API client using token.json."""
+        creds = None
+        if os.path.exists(self.TOKEN_PATH):
+            creds = Credentials.from_authorized_user_file(self.TOKEN_PATH, self.SCOPES)
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                with open(self.TOKEN_PATH, "w") as f:
+                    f.write(creds.to_json())
+            else:
+                raise RuntimeError(
+                    "token.json not found or invalid. Run: python src/youtube_auth.py"
+                )
+        return build("youtube", "v3", credentials=creds)
+
+    def _ensure_youtube_client(self):
+        if self._youtube is None:
+            self._youtube = self._build_youtube_client()
+        return self._youtube
+
     def generate_response(self, prompt: str, model_name: str = None) -> str:
         """
         Generates an LLM Response based on a prompt and the user-provided model.
@@ -131,15 +185,125 @@ class YouTube:
         """
         return generate_text(prompt, model_name=model_name)
 
+    def _normalized_language(self) -> str:
+        language = str(self.language or "English").strip()
+        lower = language.lower()
+        if lower.startswith("th"):
+            return "Thai"
+        if lower.startswith("en"):
+            return "English"
+        return language or "English"
+
+    def _language_lock_block(self) -> str:
+        language = self._normalized_language()
+        if language == "Thai":
+            return (
+                "Language lock:\n"
+                "- Write all narration in natural Thai.\n"
+                "- Keep it spoken, concise, and easy to say aloud.\n"
+                "- Do not mix in English except for unavoidable proper nouns or brand names.\n"
+            )
+        return (
+            "Language lock:\n"
+            "- Write all narration in natural English.\n"
+            "- Keep it spoken, concise, and easy to say aloud.\n"
+            "- Do not switch languages mid-script.\n"
+        )
+
+    def _short_topic_guardrail_block(self) -> str:
+        subject = str(self.subject or "").strip()
+        return (
+            "Topic guardrails:\n"
+            f"- The exact topic is: {subject}\n"
+            "- Stay anchored to that exact topic from beginning to end.\n"
+            "- Do not drift into unrelated stories, generic filler, or extra subplots.\n"
+            "- Every sentence must move the same central idea forward.\n"
+            "- If the topic is abstract, explain it directly and concretely instead of inventing lore.\n"
+        )
+
+    def _short_metadata_guardrail_block(self) -> str:
+        language = self._normalized_language()
+        if language == "Thai":
+            return (
+                "Metadata guardrails:\n"
+                "- Write ALL metadata in Thai except unavoidable proper nouns.\n"
+                "- Title should be concise, clickable, and topic-faithful.\n"
+                "- Description should summarize the exact episode, not generic channel copy.\n"
+                "- Tags should be in Thai when possible, with proper nouns kept as-is.\n"
+            )
+        return (
+            "Metadata guardrails:\n"
+            "- Write ALL metadata in English.\n"
+            "- Title should be concise, clickable, and topic-faithful.\n"
+            "- Description should summarize the exact episode, not generic channel copy.\n"
+            "- Tags should be search-friendly and directly tied to the topic.\n"
+        )
+
+    def _short_image_guardrail_block(self) -> str:
+        subject = str(self.subject or "").strip()
+        return (
+            "Image prompt guardrails:\n"
+            f"- Every image prompt must stay tied to this topic: {subject}\n"
+            "- Use one coherent visual language across prompts.\n"
+            "- No comic-book styling, no superhero vibe, no character-design language.\n"
+            "- If people appear, keep them anonymous, ordinary, and directly relevant.\n"
+            "- Each prompt should cover a different beat: hook, setup, example, tension, payoff, ending.\n"
+            "- Write the prompts in English for image generation clarity.\n"
+        )
+
+    def _clean_list(self, values, limit: int) -> list[str]:
+        seen = set()
+        cleaned = []
+        if isinstance(values, str):
+            values = [part.strip() for part in re.split(r"[,|]\s*", values) if part.strip()]
+        for value in values or []:
+            text = str(value).strip()
+            if not text:
+                continue
+            key = text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(text)
+            if len(cleaned) >= limit:
+                break
+        return cleaned
+
+    def _fallback_metadata(self) -> dict:
+        language = self._normalized_language()
+        subject = str(self.subject or "").strip() or "Untitled topic"
+        if language == "Thai":
+            return {
+                "title": f"{subject} คืออะไร และทำไมเราถึงต้องสนใจ",
+                "description": f"ตอนนี้ชวนมาคุยเรื่อง {subject} แบบตรงประเด็น กระชับ และฟังง่าย พร้อมมุมที่ช่วยให้เห็นภาพชัดขึ้น",
+                "tags": [subject, "พอดแคสต์", "เรื่องเล่า", "สารคดี"],
+            }
+        return {
+            "title": f"{subject}: what you need to know",
+            "description": f"This episode breaks down {subject} in a clear, short-form friendly way, with a focus on the core idea and why it matters.",
+            "tags": [subject, "podcast", "shorts", "storytelling"],
+        }
+
     def generate_topic(self) -> str:
         """
         Generates a topic based on the YouTube Channel niche.
+        Uses discovered trending topic if available, otherwise falls back to LLM.
 
         Returns:
             topic (str): The generated topic.
         """
+        from config import get_topic_discovery_enabled
+        if get_topic_discovery_enabled():
+            from topic_discovery import get_best_topic
+            discovered = get_best_topic()
+            if discovered:
+                info(f" => Using discovered trending topic: {discovered}")
+                self.subject = discovered
+                return discovered
+
         completion = self.generate_response(
-            f"Please generate a specific video idea that takes about the following topic: {self.niche}. Make it exactly one sentence. Only return the topic, nothing else."
+            f"Please generate a specific video idea in {self.language} about something currently trending or viral right now. "
+            "Make it exactly one sentence. Only return the topic, nothing else."
         )
 
         if not completion:
@@ -157,27 +321,25 @@ class YouTube:
             script (str): The script of the video.
         """
         sentence_length = get_script_sentence_length()
+        language = self._normalized_language()
         prompt = f"""
-        Generate a script for a video in {sentence_length} sentences, depending on the subject of the video.
+        Write a YouTube Shorts script about: {self.subject}
 
-        The script is to be returned as a string with the specified number of paragraphs.
+        Requirements:
+        - Use exactly {sentence_length} short sentences.
+        - The first sentence must hook immediately.
+        - Every sentence must add a new piece of value and stay on the exact same topic.
+        - No generic filler, no welcome, no self-introduction, no recap fluff.
+        - If the topic is abstract, explain it directly and concretely.
+        - Keep the pacing fast, compact, and spoken aloud naturally.
+        - Do not use markdown, bullets, titles, labels, or stage directions.
+        - Do not mention the prompt or anything about the writing process.
 
-        Here is an example of a string:
-        "This is an example string."
+        {self._language_lock_block()}
+        {self._short_topic_guardrail_block()}
 
-        Do not under any circumstance reference this prompt in your response.
-
-        Get straight to the point, don't start with unnecessary things like, "welcome to this video".
-
-        Obviously, the script should be related to the subject of the video.
-        
-        YOU MUST NOT EXCEED THE {sentence_length} SENTENCES LIMIT. MAKE SURE THE {sentence_length} SENTENCES ARE SHORT.
-        YOU MUST NOT INCLUDE ANY TYPE OF MARKDOWN OR FORMATTING IN THE SCRIPT, NEVER USE A TITLE.
-        YOU MUST WRITE THE SCRIPT IN THE LANGUAGE SPECIFIED IN [LANGUAGE].
-        ONLY RETURN THE RAW CONTENT OF THE SCRIPT. DO NOT INCLUDE "VOICEOVER", "NARRATOR" OR SIMILAR INDICATORS OF WHAT SHOULD BE SPOKEN AT THE BEGINNING OF EACH PARAGRAPH OR LINE. YOU MUST NOT MENTION THE PROMPT, OR ANYTHING ABOUT THE SCRIPT ITSELF. ALSO, NEVER TALK ABOUT THE AMOUNT OF PARAGRAPHS OR LINES. JUST WRITE THE SCRIPT
-        
         Subject: {self.subject}
-        Language: {self.language}
+        Language: {language}
         """
         completion = self.generate_response(prompt)
 
@@ -204,20 +366,68 @@ class YouTube:
         Returns:
             metadata (dict): The generated metadata.
         """
-        title = self.generate_response(
-            f"Please generate a YouTube Video Title for the following subject, including hashtags: {self.subject}. Only return the title, nothing else. Limit the title under 100 characters."
+        language = self._normalized_language()
+        prompt = f"""
+        Create YouTube Shorts metadata for this episode.
+
+        Topic: {self.subject}
+        Script:
+        {self.script}
+
+        Requirements:
+        - Write the metadata in {language}.
+        - Keep the title concise, clickable, and faithful to the topic.
+        - Keep the description short, clear, and directly related to the script.
+        - Include useful tags that people would actually search for.
+        - Do not add unrelated marketing copy.
+        - Do not invent a different topic.
+
+        {self._short_metadata_guardrail_block()}
+        """
+
+        raw = generate_text_structured(
+            prompt=prompt,
+            system_prompt=(
+                "You write short-form YouTube metadata. "
+                "Return only valid JSON matching the schema. "
+                "No markdown, no extra commentary."
+            ),
+            schema=SHORT_METADATA_SCHEMA,
         )
 
-        if len(title) > 100:
+        metadata = None
+        try:
+            metadata = json.loads(raw)
+        except json.JSONDecodeError:
+            stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+            try:
+                metadata = json.loads(stripped)
+            except json.JSONDecodeError:
+                metadata = None
+
+        if not isinstance(metadata, dict):
             if get_verbose():
-                warning("Generated Title is too long. Retrying...")
-            return self.generate_metadata()
+                warning("Metadata parse failed. Using fallback metadata.")
+            metadata = self._fallback_metadata()
 
-        description = self.generate_response(
-            f"Please generate a YouTube Video Description for the following script: {self.script}. Only return the description, nothing else."
-        )
+        title = str(metadata.get("title", "")).strip()
+        description = str(metadata.get("description", "")).strip()
+        tags = self._clean_list(metadata.get("tags", []), 12)
 
-        self.metadata = {"title": title, "description": description}
+        if not title:
+            title = self._fallback_metadata()["title"]
+        if len(title) > 90:
+            title = title[:87].rstrip() + "..."
+        if not description:
+            description = self._fallback_metadata()["description"]
+        if not tags:
+            tags = self._fallback_metadata()["tags"]
+
+        self.metadata = {
+            "title": title,
+            "description": description,
+            "tags": tags,
+        }
 
         return self.metadata
 
@@ -228,65 +438,80 @@ class YouTube:
         Returns:
             image_prompts (List[str]): Generated List of image prompts.
         """
-        n_prompts = len(self.script) / 3
+        word_count = max(1, len(re.findall(r"\S+", self.script or "")))
+        n_prompts = max(5, min(math.ceil(word_count / 12), 8))
 
-        prompt = f"""
-        Generate {n_prompts} Image Prompts for AI Image Generation,
-        depending on the subject of a video.
-        Subject: {self.subject}
+        prompt_base = f"""
+        Create exactly {n_prompts} image prompts for a YouTube Shorts video.
 
-        The image prompts are to be returned as
-        a JSON-Array of strings.
-
-        Each search term should consist of a full sentence,
-        always add the main subject of the video.
-
-        Be emotional and use interesting adjectives to make the
-        Image Prompt as detailed as possible.
-
-        YOU MUST ONLY RETURN THE JSON-ARRAY OF STRINGS.
-        YOU MUST NOT RETURN ANYTHING ELSE.
-        YOU MUST NOT RETURN THE SCRIPT.
-
-        The search terms must be related to the subject of the video.
-        Here is an example of a JSON-Array of strings:
-        ["image prompt 1", "image prompt 2", "image prompt 3"]
-
-        For context, here is the full text:
+        Topic: {self.subject}
+        Script:
         {self.script}
+
+        Requirements:
+        - Return only valid JSON with an image_prompts array.
+        - Each prompt should be one coherent image, not a collage.
+        - Each prompt should cover a distinct beat of the short: hook, setup, example, tension, payoff, ending.
+        - Keep the visual language consistent across prompts.
+        - No comic-book styling, no superhero vibe, no character-design language.
+        - If people appear, keep them anonymous, ordinary, and directly relevant.
+        - Write the prompts in English for image generation clarity.
+        - Make the prompts vivid, cinematic, and specific about composition, lighting, depth, and focal subject.
+        - Do not drift into another topic.
+
+        {self._short_image_guardrail_block()}
         """
 
-        completion = (
-            str(self.generate_response(prompt))
-            .replace("```json", "")
-            .replace("```", "")
-        )
-
         image_prompts = []
+        for attempt in range(2):
+            prompt = prompt_base
+            if attempt > 0:
+                prompt = (
+                    f"You MUST return EXACTLY {n_prompts} prompts.\n"
+                    "Do not return fewer or more items.\n\n"
+                    + prompt_base
+                )
 
-        if "image_prompts" in completion:
-            image_prompts = json.loads(completion)["image_prompts"]
-        else:
+            raw = generate_text_structured(
+                prompt=prompt,
+                system_prompt=(
+                    "You write image prompts for short-form video generation. "
+                    "Return only valid JSON matching the schema. "
+                    "No markdown, no extra commentary."
+                ),
+                schema=SHORT_IMAGE_PROMPTS_SCHEMA,
+            )
+
             try:
-                image_prompts = json.loads(completion)
-                if get_verbose():
-                    info(f" => Generated Image Prompts: {image_prompts}")
-            except Exception:
-                if get_verbose():
-                    warning(
-                        "LLM returned an unformatted response. Attempting to clean..."
-                    )
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    image_prompts = parsed.get("image_prompts", [])
+                elif isinstance(parsed, list):
+                    image_prompts = parsed
+            except json.JSONDecodeError:
+                stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+                try:
+                    parsed = json.loads(stripped)
+                    if isinstance(parsed, dict):
+                        image_prompts = parsed.get("image_prompts", [])
+                    elif isinstance(parsed, list):
+                        image_prompts = parsed
+                except json.JSONDecodeError:
+                    image_prompts = []
 
-                # Get everything between [ and ], and turn it into a list
-                r = re.compile(r"\[.*\]")
-                image_prompts = r.findall(completion)
-                if len(image_prompts) == 0:
-                    if get_verbose():
-                        warning("Failed to generate Image Prompts. Retrying...")
-                    return self.generate_prompts()
+            image_prompts = self._clean_list(image_prompts, n_prompts)
+            if len(image_prompts) == n_prompts:
+                break
 
-        if len(image_prompts) > n_prompts:
-            image_prompts = image_prompts[: int(n_prompts)]
+            if get_verbose():
+                warning(
+                    f"Image prompt count mismatch: expected {n_prompts}, got {len(image_prompts)}. Retrying..."
+                )
+
+        if not image_prompts:
+            if get_verbose():
+                warning("No image prompts returned. Using empty prompt list fallback.")
+            image_prompts = []
 
         self.image_prompts = image_prompts
 
@@ -295,98 +520,25 @@ class YouTube:
         return image_prompts
 
     def _persist_image(self, image_bytes: bytes, provider_label: str) -> str:
-        """
-        Writes generated image bytes to a PNG file in .mp.
-
-        Args:
-            image_bytes (bytes): Image payload
-            provider_label (str): Label for logging
-
-        Returns:
-            path (str): Absolute image path
-        """
-        image_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".png")
-
-        with open(image_path, "wb") as image_file:
-            image_file.write(image_bytes)
-
-        if get_verbose():
-            info(f' => Wrote image from {provider_label} to "{image_path}"')
-
+        """Write image bytes to a UUID-named PNG in run_dir. Delegates write to image_provider."""
+        from image_provider import _persist_image as _ip_persist
+        image_path = os.path.join(self.run_dir, str(uuid4()) + ".png")
+        _ip_persist(image_bytes, image_path, provider_label)
         self.images.append(image_path)
         return image_path
 
     def generate_image_nanobanana2(self, prompt: str) -> str:
-        """
-        Generates an AI Image using Nano Banana 2 API (Gemini image API).
-
-        Args:
-            prompt (str): Prompt for image generation
-
-        Returns:
-            path (str): The path to the generated image.
-        """
-        print(f"Generating Image using Nano Banana 2 API: {prompt}")
-
-        api_key = get_nanobanana2_api_key()
-        if not api_key:
-            error("nanobanana2_api_key is not configured.")
-            return None
-
-        base_url = get_nanobanana2_api_base_url().rstrip("/")
-        model = get_nanobanana2_model()
-        aspect_ratio = get_nanobanana2_aspect_ratio()
-
-        endpoint = f"{base_url}/models/{model}:generateContent"
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseModalities": ["IMAGE"],
-                "imageConfig": {"aspectRatio": aspect_ratio},
-            },
-        }
-
-        try:
-            response = requests.post(
-                endpoint,
-                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-                json=payload,
-                timeout=300,
-            )
-            response.raise_for_status()
-            body = response.json()
-
-            candidates = body.get("candidates", [])
-            for candidate in candidates:
-                content = candidate.get("content", {})
-                for part in content.get("parts", []):
-                    inline_data = part.get("inlineData") or part.get("inline_data")
-                    if not inline_data:
-                        continue
-                    data = inline_data.get("data")
-                    mime_type = inline_data.get("mimeType") or inline_data.get("mime_type", "")
-                    if data and str(mime_type).startswith("image/"):
-                        image_bytes = base64.b64decode(data)
-                        return self._persist_image(image_bytes, "Nano Banana 2 API")
-
-            if get_verbose():
-                warning(f"Nano Banana 2 did not return an image payload. Response: {body}")
-            return None
-        except Exception as e:
-            if get_verbose():
-                warning(f"Failed to generate image with Nano Banana 2 API: {str(e)}")
-            return None
+        """Generates an AI Image using Nano Banana 2 API. Delegates to image_provider."""
+        from uuid import uuid4
+        image_path = os.path.join(self.run_dir, str(uuid4()) + ".png")
+        result = _ip_generate_image(prompt, image_path)
+        if result:
+            self.images.append(image_path)
+        return result
 
     def generate_image(self, prompt: str) -> str:
-        """
-        Generates an AI Image based on the given prompt using Nano Banana 2.
-
-        Args:
-            prompt (str): Reference for image generation
-
-        Returns:
-            path (str): The path to the generated image.
-        """
+        """Generates an AI Image based on the given prompt using Nano Banana 2.
+        Rate limiting (7s) is enforced inside image_provider.generate_image()."""
         return self.generate_image_nanobanana2(prompt)
 
     def generate_script_to_speech(self, tts_instance: TTS) -> str:
@@ -399,7 +551,7 @@ class YouTube:
         Returns:
             path_to_wav (str): Path to generated audio (WAV Format).
         """
-        path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".wav")
+        path = os.path.join(self.run_dir, str(uuid4()) + ".wav")
 
         # Clean script, remove every character that is not a word character, a space, a period, a question mark, or an exclamation mark.
         self.script = re.sub(r"[^\w\s.?!]", "", self.script)
@@ -478,7 +630,7 @@ class YouTube:
         transcript = transcriber.transcribe(audio_path)
         subtitles = transcript.export_subtitles_srt()
 
-        srt_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".srt")
+        srt_path = os.path.join(self.run_dir, str(uuid4()) + ".srt")
 
         with open(srt_path, "w") as file:
             file.write(subtitles)
@@ -543,36 +695,92 @@ class YouTube:
             lines.append("")
 
         subtitles = "\n".join(lines)
-        srt_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".srt")
+        srt_path = os.path.join(self.run_dir, str(uuid4()) + ".srt")
         with open(srt_path, "w", encoding="utf-8") as file:
             file.write(subtitles)
 
         return srt_path
 
-    def combine(self) -> str:
+    def _add_srt_via_ffmpeg(self, video_path: str, srt_path: str) -> str:
+        """
+        Add SRT subtitles to video using FFmpeg (bypasses MoviePy TextClip segfault).
+
+        Args:
+            video_path: Path to input MP4
+            srt_path: Path to SRT file
+
+        Returns:
+            Path to output MP4 with subtitles
+        """
+        import subprocess
+
+        if not os.path.exists(srt_path):
+            if get_verbose():
+                info(f" => SRT file not found: {srt_path}, skipping subtitles")
+            return video_path
+
+        output_path = os.path.join(self.run_dir, str(uuid4()) + "_with_subs.mp4")
+
+        # FFmpeg command to add subtitles
+        cmd = [
+            "ffmpeg",
+            "-i", video_path,
+            "-vf", f"subtitles={os.path.relpath(srt_path).replace(chr(92), '/')}",
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-preset", "ultrafast",
+            "-y",
+            output_path
+        ]
+
+        if get_verbose():
+            info(f" => Adding subtitles via FFmpeg...")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if result.returncode != 0:
+                error(f" => FFmpeg error: {result.stderr}")
+                return video_path
+
+            if get_verbose():
+                success(f" => Subtitles added successfully")
+            return output_path
+        except Exception as e:
+            error(f" => Failed to add subtitles: {str(e)}")
+            return video_path
+
+    def _add_ken_burns(self, clip, zoom_in: bool = True, zoom_ratio: float = 0.04):
+        """Apply slow zoom-in or zoom-out (Ken Burns effect) to a 1080x1920 clip."""
+        W, H = 1080, 1920
+        duration = clip.duration
+
+        def effect(get_frame, t):
+            frame = get_frame(t)
+            progress = t / duration if duration > 0 else 0
+            scale = 1 + zoom_ratio * (progress if zoom_in else (1 - progress))
+            crop_w = int(W / scale)
+            crop_h = int(H / scale)
+            x1 = (W - crop_w) // 2
+            y1 = (H - crop_h) // 2
+            img = PILImage.fromarray(frame)
+            img = img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+            img = img.resize((W, H), PILImage.LANCZOS)
+            return np.array(img)
+
+        return clip.fl(effect)
+
+    def combine_moviepy(self) -> str:
         """
         Combines everything into the final video.
 
         Returns:
             path (str): The path to the generated MP4 File.
         """
-        combined_image_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".mp4")
+        combined_image_path = os.path.join(self.run_dir, str(uuid4()) + ".mp4")
         threads = get_threads()
         tts_clip = AudioFileClip(self.tts_path)
         max_duration = tts_clip.duration
         req_dur = max_duration / len(self.images)
-
-        # Make a generator that returns a TextClip when called with consecutive
-        generator = lambda txt: TextClip(
-            txt,
-            font=os.path.join(get_fonts_dir(), get_font()),
-            fontsize=100,
-            color="#FFFF00",
-            stroke_color="black",
-            stroke_width=5,
-            size=(1080, 1920),
-            method="caption",
-        )
 
         print(colored("[+] Combining images...", "blue"))
 
@@ -609,42 +817,178 @@ class YouTube:
                     )
                 clip = clip.resize((1080, 1920))
 
-                # FX (Fade In)
-                # clip = clip.fadein(2)
+                # Ken Burns effect: alternate zoom-in / zoom-out per image
+                clip = self._add_ken_burns(clip, zoom_in=(len(clips) % 2 == 0))
 
                 clips.append(clip)
                 tot_dur += clip.duration
 
         final_clip = concatenate_videoclips(clips)
         final_clip = final_clip.set_fps(30)
-        random_song = choose_random_song()
-
-        subtitles = None
+        # Background music (optional — skip gracefully if no songs found)
         try:
-            subtitles_path = self.generate_subtitles(self.tts_path)
-            equalize_subtitles(subtitles_path, 10)
-            subtitles = SubtitlesClip(subtitles_path, generator)
-            subtitles.set_pos(("center", "center"))
+            random_song = choose_random_song()
+            random_song_clip = AudioFileClip(random_song).set_fps(44100)
+            random_song_clip = random_song_clip.fx(afx.volumex, 0.1)
+            comp_audio = CompositeAudioClip([tts_clip.set_fps(44100), random_song_clip])
+            final_clip = final_clip.set_audio(comp_audio)
         except Exception as e:
-            warning(f"Failed to generate subtitles, continuing without subtitles: {e}")
+            warning(f"Background music skipped: {e}")
+            final_clip = final_clip.set_audio(tts_clip.set_fps(44100))
 
-        random_song_clip = AudioFileClip(random_song).set_fps(44100)
-
-        # Turn down volume
-        random_song_clip = random_song_clip.fx(afx.volumex, 0.1)
-        comp_audio = CompositeAudioClip([tts_clip.set_fps(44100), random_song_clip])
-
-        final_clip = final_clip.set_audio(comp_audio)
         final_clip = final_clip.set_duration(tts_clip.duration)
 
-        if subtitles is not None:
-            final_clip = CompositeVideoClip([final_clip, subtitles])
-
-        final_clip.write_videofile(combined_image_path, threads=threads)
+        final_clip.write_videofile(
+            combined_image_path,
+            threads=threads,
+            codec="libx264",
+            audio_codec="aac",
+            preset="ultrafast",
+            fps=24,
+            logger="bar",
+        )
 
         success(f'Wrote Video to "{combined_image_path}"')
 
+        # Add subtitles via FFmpeg if SRT file exists
+        if self.srt_path and os.path.exists(self.srt_path):
+            combined_image_path = self._add_srt_via_ffmpeg(combined_image_path, self.srt_path)
+
         return combined_image_path
+
+    def generate_hook(self) -> str:
+        """
+        Generates a contextual opening hook sentence via Ollama structured output.
+        Falls back to a template hook if the LLM returns unusable output.
+
+        Uses self.subject (topic) and self.script (body) to generate a hook
+        that teases the actual script content, avoiding semantic disconnect.
+
+        Returns:
+            hook (str): A single hook sentence under 15 words.
+        """
+        language = self._normalized_language()
+        system_prompt = (
+            "You write opening hooks for YouTube Shorts. "
+            "Output ONLY valid JSON matching the provided schema. "
+            "hook_text must be under 15 words. No markdown, no asterisks, no quotes. "
+            "The hook must match the language of the script."
+        )
+
+        user_prompt = (
+            f"Topic: {self.subject}\n\n"
+            f"Language: {language}\n\n"
+            f"Script body:\n{self.script}\n\n"
+            "Write a single opening hook sentence (10-15 words) that teases the content above.\n"
+            "The hook must be in the same language as the script and must clearly relate to the topic.\n"
+            "Choose the archetype that best fits:\n"
+            "  question — rhetorical question (e.g. 'Did you know...' / 'What if...')\n"
+            "  stat     — leads with a concrete number or surprising fact\n"
+            "  bold     — makes a provocative or counterintuitive claim\n"
+        )
+
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                raw_json = generate_text_structured(
+                    prompt=user_prompt,
+                    system_prompt=system_prompt,
+                    schema=HookOutput.model_json_schema(),
+                )
+                result = HookOutput.model_validate_json(raw_json)
+                hook_text = re.sub(r"[*#\"]", "", result.hook_text).strip()
+                word_count = len(hook_text.split())
+                if not hook_text or word_count > 15:
+                    raise ValueError(f"Hook failed validation: {word_count} words, text='{hook_text}'")
+                if get_verbose():
+                    info(f" => Hook ({result.hook_type}): {hook_text}")
+                return hook_text
+            except Exception as e:
+                if get_verbose():
+                    warning(f"Hook generation attempt {attempt + 1} failed: {e}")
+                continue
+
+        if get_verbose():
+            warning("Hook generation failed after retries. Using template fallback.")
+        return self._hook_template_fallback()
+
+    def _hook_template_fallback(self) -> str:
+        """
+        Returns a predefined hook string based on the detected video category.
+
+        Returns:
+            hook (str): A template hook sentence.
+        """
+        category = self._detect_category()
+        templates = _HOOK_TEMPLATES_THAI if self._normalized_language() == "Thai" else _HOOK_TEMPLATES
+        return templates.get(category, templates["default"])
+
+    def _detect_category(self) -> str:
+        """
+        Infers the video category from subject and niche using keyword matching.
+
+        Returns:
+            category (str): One of 'breaking_news', 'science_facts', 'weird_viral', 'default'
+        """
+        text = (self.subject + " " + self._niche).lower()
+        if any(kw in text for kw in ["breaking", "news", "alert", "disaster", "war", "election"]):
+            return "breaking_news"
+        if any(kw in text for kw in ["science", "fact", "physics", "biology", "space", "research"]):
+            return "science_facts"
+        if any(kw in text for kw in ["weird", "viral", "bizarre", "strange", "shocking", "unbelievable"]):
+            return "weird_viral"
+        return "default"
+
+    def combine_remotion(self) -> str:
+        """
+        Combines everything into the final video using the Remotion renderer.
+
+        Returns:
+            path (str): The path to the generated MP4 file.
+        """
+        import subprocess
+        import json
+        from pathlib import Path
+        from moviepy.editor import AudioFileClip
+
+        duration = AudioFileClip(self.tts_path).duration
+
+        bgm_path = str(Path(ROOT_DIR) / "Songs" / "background.wav")
+        if not os.path.exists(bgm_path):
+            bgm_path = None  # gracefully skip BGM if file is missing
+
+        props = {
+            "topic": self.subject,
+            "script": self.script,
+            "category": self._detect_category(),
+            "imagePaths": [os.path.abspath(path) for path in (self.images or [])],  # absolute Windows paths; render.mjs stages them
+            "audioPath": os.path.abspath(self.tts_path),        # absolute path
+            "srtPath": os.path.abspath(self.srt_path) if self.srt_path else None,   # absolute path; render.mjs reads content
+            "bgmPath": os.path.abspath(bgm_path) if bgm_path else None,
+            "durationInSeconds": duration,
+            "outputPath": os.path.abspath(str(Path(self.run_dir) / (str(uuid4()) + ".mp4"))),
+        }
+
+        remotion_dir = Path(ROOT_DIR) / "remotion"
+        props_file = remotion_dir / ".render-props.json"
+        props_file.write_text(
+            json.dumps(props, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        props_file_path = str(props_file.resolve())
+
+        print(colored("[+] Running Remotion renderer...", "blue"))
+
+        subprocess.run(
+            ["node", "scripts/render.mjs", props_file_path],
+            cwd=str(remotion_dir),
+            check=True,
+            timeout=900,
+        )
+
+        output = props["outputPath"]
+        success(f'Wrote Video to "{output}"')
+        return output
 
     def generate_video(self, tts_instance: TTS) -> str:
         """
@@ -662,6 +1006,12 @@ class YouTube:
         # Generate the Script
         self.generate_script()
 
+        # Generate and prepend the Hook (HOOK-01, HOOK-02)
+        hook = self.generate_hook()
+        if hook and hook[-1] not in ".?!":
+            hook = hook + "."
+        self.script = hook + " " + self.script
+
         # Generate the Metadata
         self.generate_metadata()
 
@@ -675,8 +1025,11 @@ class YouTube:
         # Generate the TTS
         self.generate_script_to_speech(tts_instance)
 
+        # Generate SRT subtitles
+        self.srt_path = self.generate_subtitles(self.tts_path)
+
         # Combine everything
-        path = self.combine()
+        path = self.combine_remotion()
 
         if get_verbose():
             info(f" => Generated Video: {path}")
@@ -687,154 +1040,69 @@ class YouTube:
 
     def get_channel_id(self) -> str:
         """
-        Gets the Channel ID of the YouTube Account.
+        Gets the Channel ID of the authenticated YouTube account via API.
 
         Returns:
             channel_id (str): The Channel ID.
         """
-        driver = self.browser
-        driver.get("https://studio.youtube.com")
-        time.sleep(2)
-        channel_id = driver.current_url.split("/")[-1]
+        yt = self._ensure_youtube_client()
+        response = yt.channels().list(part="id", mine=True).execute()
+        channel_id = response["items"][0]["id"]
         self.channel_id = channel_id
-
         return channel_id
 
     def upload_video(self) -> bool:
         """
-        Uploads the video to YouTube.
+        Uploads the video to YouTube using the Data API v3.
 
         Returns:
             success (bool): Whether the upload was successful or not.
         """
         try:
-            self.get_channel_id()
-
-            driver = self.browser
             verbose = get_verbose()
 
-            # Go to youtube.com/upload
-            driver.get("https://www.youtube.com/upload")
+            self.get_channel_id()
 
-            # Set video file
-            FILE_PICKER_TAG = "ytcp-uploads-file-picker"
-            file_picker = driver.find_element(By.TAG_NAME, FILE_PICKER_TAG)
-            INPUT_TAG = "input"
-            file_input = file_picker.find_element(By.TAG_NAME, INPUT_TAG)
-            file_input.send_keys(self.video_path)
+            is_for_kids = get_is_for_kids()
 
-            # Wait for upload to finish
-            time.sleep(5)
-
-            # Set title
-            textboxes = driver.find_elements(By.ID, YOUTUBE_TEXTBOX_ID)
-
-            title_el = textboxes[0]
-            description_el = textboxes[-1]
+            body = {
+                "snippet": {
+                    "title": self.metadata["title"],
+                    "description": self.metadata["description"],
+                    "tags": self.metadata.get("tags", []),
+                    "categoryId": "22",
+                },
+                "status": {
+                    "privacyStatus": "public",
+                    "selfDeclaredMadeForKids": is_for_kids,
+                },
+            }
 
             if verbose:
-                info("\t=> Setting title...")
+                info("\t=> Uploading video via YouTube API...")
 
-            title_el.click()
-            time.sleep(1)
-            title_el.clear()
-            title_el.send_keys(self.metadata["title"])
+            import socket as _socket
+            _socket.setdefaulttimeout(300)
 
-            if verbose:
-                info("\t=> Setting description...")
-
-            # Set description
-            time.sleep(10)
-            description_el.click()
-            time.sleep(0.5)
-            description_el.clear()
-            description_el.send_keys(self.metadata["description"])
-
-            time.sleep(0.5)
-
-            # Set `made for kids` option
-            if verbose:
-                info("\t=> Setting `made for kids` option...")
-
-            is_for_kids_checkbox = driver.find_element(
-                By.NAME, YOUTUBE_MADE_FOR_KIDS_NAME
-            )
-            is_not_for_kids_checkbox = driver.find_element(
-                By.NAME, YOUTUBE_NOT_MADE_FOR_KIDS_NAME
+            media = MediaFileUpload(self.video_path, mimetype="video/mp4", resumable=True, chunksize=1024*1024)
+            yt = self._ensure_youtube_client()
+            request = yt.videos().insert(
+                part="snippet,status", body=body, media_body=media
             )
 
-            if not get_is_for_kids():
-                is_not_for_kids_checkbox.click()
-            else:
-                is_for_kids_checkbox.click()
+            response = None
+            while response is None:
+                status, response = request.next_chunk()
+                if status:
+                    info(f"\t=> Upload progress: {int(status.progress() * 100)}%")
 
-            time.sleep(0.5)
-
-            # Click next
-            if verbose:
-                info("\t=> Clicking next...")
-
-            next_button = driver.find_element(By.ID, YOUTUBE_NEXT_BUTTON_ID)
-            next_button.click()
-
-            # Click next again
-            if verbose:
-                info("\t=> Clicking next again...")
-            next_button = driver.find_element(By.ID, YOUTUBE_NEXT_BUTTON_ID)
-            next_button.click()
-
-            # Wait for 2 seconds
-            time.sleep(2)
-
-            # Click next again
-            if verbose:
-                info("\t=> Clicking next again...")
-            next_button = driver.find_element(By.ID, YOUTUBE_NEXT_BUTTON_ID)
-            next_button.click()
-
-            # Set as unlisted
-            if verbose:
-                info("\t=> Setting as unlisted...")
-
-            radio_button = driver.find_elements(By.XPATH, YOUTUBE_RADIO_BUTTON_XPATH)
-            radio_button[2].click()
-
-            if verbose:
-                info("\t=> Clicking done button...")
-
-            # Click done button
-            done_button = driver.find_element(By.ID, YOUTUBE_DONE_BUTTON_ID)
-            done_button.click()
-
-            # Wait for 2 seconds
-            time.sleep(2)
-
-            # Get latest video
-            if verbose:
-                info("\t=> Getting video URL...")
-
-            # Get the latest uploaded video URL
-            driver.get(
-                f"https://studio.youtube.com/channel/{self.channel_id}/videos/short"
-            )
-            time.sleep(2)
-            videos = driver.find_elements(By.TAG_NAME, "ytcp-video-row")
-            first_video = videos[0]
-            anchor_tag = first_video.find_element(By.TAG_NAME, "a")
-            href = anchor_tag.get_attribute("href")
-            if verbose:
-                info(f"\t=> Extracting video ID from URL: {href}")
-            video_id = href.split("/")[-2]
-
-            # Build URL
+            video_id = response["id"]
             url = build_url(video_id)
-
             self.uploaded_video_url = url
 
             if verbose:
                 success(f" => Uploaded Video: {url}")
 
-            # Add video to cache
             self.add_video(
                 {
                     "title": self.metadata["title"],
@@ -844,12 +1112,9 @@ class YouTube:
                 }
             )
 
-            # Close the browser
-            driver.quit()
-
             return True
-        except:
-            self.browser.quit()
+        except Exception as e:
+            error(f" => Upload failed: {e}")
             return False
 
     def get_videos(self) -> List[dict]:

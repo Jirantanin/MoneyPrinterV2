@@ -1,71 +1,39 @@
+import sys
+
 from termcolor import colored
 
+def _safe_print(text):
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        safe_text = text.encode(encoding, errors="backslashreplace").decode(encoding, errors="replace")
+        buffer = getattr(sys.stdout, "buffer", None)
+        if buffer is not None:
+            buffer.write((safe_text + "\n").encode(encoding, errors="backslashreplace"))
+            buffer.flush()
+        else:
+            print(safe_text)
+
 def error(message: str, show_emoji: bool = True) -> None:
-    """
-    Prints an error message.
-
-    Args:
-        message (str): The error message
-        show_emoji (bool): Whether to show the emoji
-
-    Returns:
-        None
-    """
     emoji = "❌" if show_emoji else ""
-    print(colored(f"{emoji} {message}", "red"))
+    _safe_print(colored(f"{emoji} {message}", "red"))
 
 def success(message: str, show_emoji: bool = True) -> None:
-    """
-    Prints a success message.
-
-    Args:
-        message (str): The success message
-        show_emoji (bool): Whether to show the emoji
-
-    Returns:
-        None
-    """
     emoji = "✅" if show_emoji else ""
-    print(colored(f"{emoji} {message}", "green"))
+    _safe_print(colored(f"{emoji} {message}", "green"))
 
 def info(message: str, show_emoji: bool = True) -> None:
-    """
-    Prints an info message.
-
-    Args:
-        message (str): The info message
-        show_emoji (bool): Whether to show the emoji
-
-    Returns:
-        None
-    """
     emoji = "ℹ️" if show_emoji else ""
-    print(colored(f"{emoji} {message}", "magenta"))
+    _safe_print(colored(f"{emoji} {message}", "magenta"))
 
 def warning(message: str, show_emoji: bool = True) -> None:
-    """
-    Prints a warning message.
-
-    Args:
-        message (str): The warning message
-        show_emoji (bool): Whether to show the emoji
-
-    Returns:
-        None
-    """
     emoji = "⚠️" if show_emoji else ""
-    print(colored(f"{emoji} {message}", "yellow"))
+    _safe_print(colored(f"{emoji} {message}", "yellow"))
 
 def question(message: str, show_emoji: bool = True) -> str:
-    """
-    Prints a question message and returns the user's input.
-
-    Args:
-        message (str): The question message
-        show_emoji (bool): Whether to show the emoji
-
-    Returns:
-        user_input (str): The user's input
-    """
     emoji = "❓" if show_emoji else ""
-    return input(colored(f"{emoji} {message}", "magenta"))
+    try:
+        return input(colored(f"{emoji} {message}", "magenta"))
+    except UnicodeEncodeError:
+        return input(colored(f"{message}", "magenta"))
