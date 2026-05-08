@@ -3,7 +3,7 @@ import { AbsoluteFill, Audio, OffthreadVideo, staticFile, useVideoConfig, useCur
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { slide } from "@remotion/transitions/slide";
 import { fade } from "@remotion/transitions/fade";
-import { AssetType, PodcastProps } from "./types";
+import { AssetType, GlossaryEntry, PodcastProps } from "./types";
 import { KenBurnsFrame, KB_CYCLE, SLIDE_DIRS, TRANSITION_FRAMES } from "./KenBurns";
 
 // ─── Chapter Title Overlay ──────────────────────────────────────────────────
@@ -84,6 +84,81 @@ const ChapterTitle: React.FC<{ title: string; durationInFrames: number }> = ({ t
         >
           {cleanTitle}
         </h2>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+const GlossaryOverlay: React.FC<{ entries?: GlossaryEntry[] }> = ({ entries = [] }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const currentSecond = frame / fps;
+  const entry = entries.find((item) => {
+    const start = Number(item.start || 0);
+    const duration = Number(item.duration || 5);
+    return currentSecond >= start && currentSecond < start + duration;
+  });
+
+  if (!entry?.term || !entry?.meaning) return null;
+
+  const localFrame = Math.max(0, frame - Math.floor(Number(entry.start || 0) * fps));
+  const durationFrames = Math.max(24, Math.floor(Number(entry.duration || 5) * fps));
+  const opacity = interpolate(
+    localFrame,
+    [0, 10, Math.max(12, durationFrames - 12), durationFrames],
+    [0, 1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const lift = interpolate(localFrame, [0, 14], [24, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  return (
+    <AbsoluteFill
+      style={{
+        justifyContent: "flex-end",
+        alignItems: "flex-end",
+        padding: "0 72px 68px 72px",
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        style={{
+          width: 620,
+          maxWidth: 620,
+          opacity,
+          transform: `translateY(${lift}px)`,
+          background: "rgba(5, 12, 24, 0.72)",
+          border: "1px solid rgba(188, 225, 255, 0.32)",
+          borderRadius: 12,
+          padding: "18px 22px 20px",
+          boxShadow: "0 14px 34px rgba(0,0,0,0.42)",
+          backdropFilter: "blur(6px)",
+          fontFamily: "Inter, Segoe UI, sans-serif",
+        }}
+      >
+        <div
+          style={{
+            color: "#9fd7ff",
+            fontSize: 26,
+            fontWeight: 800,
+            lineHeight: 1.1,
+            marginBottom: 8,
+          }}
+        >
+          {entry.term}
+        </div>
+        <div
+          style={{
+            color: "#f3f8ff",
+            fontSize: 31,
+            fontWeight: 650,
+            lineHeight: 1.22,
+          }}
+        >
+          {entry.meaning}
+        </div>
       </div>
     </AbsoluteFill>
   );
@@ -315,6 +390,7 @@ export const VideoPodcast: React.FC<PodcastProps> = (props) => {
         sceneAssetTypes={props.sceneAssetTypes}
         sceneAssetDurations={props.sceneAssetDurations}
       />
+      <GlossaryOverlay entries={props.glossaryEntries} />
       {props.audioPath && <Audio src={staticFile(props.audioPath)} />}
     </AbsoluteFill>
   );

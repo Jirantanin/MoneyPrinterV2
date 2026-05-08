@@ -189,10 +189,15 @@ TOPIC_BRIEF_SCHEMA = {
     "type": "object",
     "properties": {
         "topic_anchor": {"type": "string"},
+        "main_question": {"type": "string"},
+        "audience_level": {"type": "string"},
         "core_thesis": {"type": "string"},
+        "allowed_concepts": {"type": "array", "items": {"type": "string"}},
+        "teaser_only_concepts": {"type": "array", "items": {"type": "string"}},
         "required_concepts": {"type": "array", "items": {"type": "string"}},
         "forbidden_drifts": {"type": "array", "items": {"type": "string"}},
         "recurring_motifs": {"type": "array", "items": {"type": "string"}},
+        "comprehension_contract": {"type": "array", "items": {"type": "string"}},
         "act_1_focus": {"type": "string"},
         "act_2_focus": {"type": "string"},
         "act_3_focus": {"type": "string"},
@@ -200,9 +205,11 @@ TOPIC_BRIEF_SCHEMA = {
         "visual_world": {"type": "string"},
     },
     "required": [
-        "topic_anchor", "core_thesis", "required_concepts", "forbidden_drifts",
-        "recurring_motifs", "act_1_focus", "act_2_focus", "act_3_focus",
-        "outro_focus", "visual_world",
+        "topic_anchor", "main_question", "audience_level", "core_thesis",
+        "allowed_concepts", "teaser_only_concepts", "required_concepts",
+        "forbidden_drifts", "recurring_motifs", "comprehension_contract",
+        "act_1_focus", "act_2_focus", "act_3_focus", "outro_focus",
+        "visual_world",
     ],
 }
 
@@ -267,6 +274,7 @@ BEAT_QC_SCHEMA = {
         "rewrite_targets": {"type": "array", "items": {"type": "integer"}},
         "missing_beats": {"type": "array", "items": {"type": "string"}},
         "retention_notes": {"type": "array", "items": {"type": "string"}},
+        "comprehension_notes": {"type": "array", "items": {"type": "string"}},
     },
     "required": [
         "overall_score",
@@ -276,6 +284,7 @@ BEAT_QC_SCHEMA = {
         "rewrite_targets",
         "missing_beats",
         "retention_notes",
+        "comprehension_notes",
     ],
 }
 
@@ -327,6 +336,7 @@ SCRIPT_QC_SCHEMA = {
         },
         "rewrite_targets": {"type": "array", "items": {"type": "integer"}},
         "retention_notes": {"type": "array", "items": {"type": "string"}},
+        "comprehension_notes": {"type": "array", "items": {"type": "string"}},
         "visual_notes": {"type": "array", "items": {"type": "string"}},
     },
     "required": [
@@ -337,6 +347,7 @@ SCRIPT_QC_SCHEMA = {
         "issues",
         "rewrite_targets",
         "retention_notes",
+        "comprehension_notes",
         "visual_notes",
     ],
 }
@@ -436,6 +447,62 @@ def _compact_text(value, limit: int) -> str:
     return text[: max(0, limit - 1)].rstrip() + "..."
 
 
+def _build_comprehension_contract_block(topic_brief: dict) -> str:
+    """Return the listener-understanding constraints shared by beat and script prompts."""
+    main_question = str(topic_brief.get("main_question") or topic_brief.get("topic_anchor") or "").strip()
+    audience_level = str(topic_brief.get("audience_level") or "curious non-expert listener").strip()
+    allowed = [
+        str(item).strip()
+        for item in (topic_brief.get("allowed_concepts") or topic_brief.get("required_concepts") or [])
+        if str(item).strip()
+    ][:5]
+    teaser_only = [
+        str(item).strip()
+        for item in (topic_brief.get("teaser_only_concepts") or [])
+        if str(item).strip()
+    ][:4]
+    contract = [
+        str(item).strip()
+        for item in (topic_brief.get("comprehension_contract") or [])
+        if str(item).strip()
+    ][:6]
+    lines = [
+        "Listener comprehension contract:",
+        f"- Main question: {main_question}",
+        f"- Target listener: {audience_level}",
+        "- One scene may introduce at most one new hard concept.",
+        "- Explain every hard term in plain language immediately before or after naming it.",
+        "- Add a short recap or checkpoint every 3-4 scenes.",
+        "- Do not list multiple theories or mechanisms back-to-back.",
+    ]
+    if allowed:
+        lines.append("- Allowed core concepts to explain deeply: " + "; ".join(allowed))
+    if teaser_only:
+        lines.append("- Teaser-only concepts, max one sentence each: " + "; ".join(teaser_only))
+    for item in contract:
+        lines.append(f"- {item}")
+    return "\n".join(lines) + "\n"
+
+
+GLOSSARY_TERMS = [
+    ("event horizon", ["event horizon", "ขอบ event horizon"], "ขอบที่แสงหนีไม่พ้น"),
+    ("Hawking radiation", ["hawking radiation", "รังสีฮอว์คิง"], "รังสีที่ทำให้หลุมดำค่อยๆ สูญเสียพลังงาน"),
+    ("unitarity", ["unitarity"], "กฎว่าข้อมูลของระบบไม่ควรหายไปจริงๆ"),
+    ("entropy", ["entropy"], "มาตรวัดจำนวนสถานะที่เป็นไปได้ หรือความไม่รู้ของระบบ"),
+    ("information paradox", ["information paradox", "black hole information paradox"], "ปัญหาว่าข้อมูลในหลุมดำหายไปได้ไหม"),
+    ("virtual particles", ["virtual particle", "virtual particles", "อนุภาคเสมือน"], "คู่อนุภาคชั่วคราวตามภาพของควอนตัม"),
+    ("Page curve", ["page curve"], "กราฟที่บอกว่าข้อมูลควรค่อยๆ กลับออกมา"),
+    ("firewall", ["firewall"], "แนวคิดว่าขอบหลุมดำอาจเป็นกำแพงพลังงานรุนแรง"),
+    ("soft hair", ["soft hair"], "แนวคิดว่าขอบหลุมดำอาจเก็บร่องรอยข้อมูลบางอย่าง"),
+    ("holographic principle", ["holographic principle", "holography"], "แนวคิดว่าข้อมูลในปริมาตรอาจถูกเข้ารหัสบนขอบ"),
+    ("quantum gravity", ["quantum gravity"], "ทฤษฎีที่ต้องรวมแรงโน้มถ่วงกับควอนตัมเข้าด้วยกัน"),
+    ("island formula", ["island formula"], "สูตรที่นับบางส่วนในหลุมดำร่วมกับรังสีเพื่อคำนวณข้อมูล"),
+    ("replica wormhole", ["replica wormhole"], "โครงสร้างคณิตศาสตร์ที่ช่วยให้สูตร island ทำงาน"),
+    ("path integral", ["path integral"], "วิธีคำนวณควอนตัมโดยรวมเส้นทางที่เป็นไปได้จำนวนมาก"),
+    ("Bose-Einstein condensate", ["bose-einstein condensate"], "สสารเย็นจัดที่อะตอมจำนวนมากทำตัวเหมือนระบบเดียว"),
+]
+
+
 # ---------------------------------------------------------------------------
 # PodcastV2 class
 # ---------------------------------------------------------------------------
@@ -498,11 +565,17 @@ class PodcastV2:
             "For abstract topics, explain the real idea directly.\n"
             "Required output rules:\n"
             "- topic_anchor must restate the exact topic in one line.\n"
+            "- main_question must be the ONE question this episode answers; do not make it broad.\n"
+            "- audience_level must describe the assumed listener knowledge in plain terms.\n"
             "- core_thesis must explain the actual idea the episode should explore.\n"
+            "- allowed_concepts must contain at most 5 concepts that may be explained deeply.\n"
+            "- teaser_only_concepts must contain advanced related concepts that should be mentioned briefly only, not taught.\n"
             "- required_concepts must be concrete concepts, phrases, or angles that should appear across the episode.\n"
             "- forbidden_drifts must list topic substitutions or wrong directions the writer must avoid.\n"
             "- recurring_motifs should include any user-provided metaphor or recurring image.\n"
+            "- comprehension_contract must list 4-6 concrete rules that keep the episode easy to follow when heard aloud.\n"
             "- act_1_focus, act_2_focus, act_3_focus, and outro_focus must describe what each section should do.\n"
+            "- Act 3 should mostly pay off the main question; advanced frontier ideas belong in teaser_only_concepts unless required by the topic.\n"
             "- visual_world should describe the visual feeling while staying consistent with the real topic.\n"
         )
         raw = generate_text_structured(
@@ -517,6 +590,10 @@ class PodcastV2:
         )
         brief = self._parse_llm_json(raw, "topic_brief")
         brief["topic_anchor"] = topic
+        brief["main_question"] = str(brief.get("main_question") or topic).strip()
+        brief["audience_level"] = str(
+            brief.get("audience_level") or "Curious non-expert listener; no specialist background assumed."
+        ).strip()
         if self.creative_direction:
             direction = self.creative_direction.strip()
             if direction not in brief["required_concepts"]:
@@ -524,12 +601,32 @@ class PodcastV2:
         if topic not in brief["required_concepts"]:
             brief["required_concepts"].insert(0, topic)
         brief["required_concepts"] = [str(x).strip() for x in brief["required_concepts"] if str(x).strip()][:8]
+        if not brief.get("allowed_concepts"):
+            brief["allowed_concepts"] = brief["required_concepts"][:5]
+        brief["allowed_concepts"] = [str(x).strip() for x in brief["allowed_concepts"] if str(x).strip()][:5]
+        allowed_lower = {x.lower() for x in brief["allowed_concepts"]}
+        brief["teaser_only_concepts"] = [
+            str(x).strip()
+            for x in brief.get("teaser_only_concepts", [])
+            if str(x).strip() and str(x).strip().lower() not in allowed_lower
+        ][:4]
         brief["forbidden_drifts"] = [str(x).strip() for x in brief["forbidden_drifts"] if str(x).strip()][:8]
         brief["recurring_motifs"] = [str(x).strip() for x in brief["recurring_motifs"] if str(x).strip()][:6]
+        if not brief.get("comprehension_contract"):
+            brief["comprehension_contract"] = [
+                "Keep the episode on one question instead of surveying the whole field.",
+                "Use plain-language explanations before technical labels.",
+                "Place recap sentences before major turns.",
+                "Save advanced solution names for brief teasers unless they are essential.",
+            ]
+        brief["comprehension_contract"] = [
+            str(x).strip() for x in brief["comprehension_contract"] if str(x).strip()
+        ][:6]
         return brief
 
     def _compile_beat_sheet(self, topic: str, topic_brief: dict, script_model: str) -> dict:
         """Create a 20-scene structural outline before narration is drafted."""
+        comprehension_contract = _build_comprehension_contract_block(topic_brief)
         beat_sheet = {
             "episode_thesis": str(topic_brief.get("core_thesis") or topic).strip(),
             "opening_hook": str(topic_brief.get("act_1_focus") or topic).strip(),
@@ -545,11 +642,15 @@ class PodcastV2:
                 f"{_build_direction_block(self.creative_direction)}"
                 f"Language: {self.language}\n"
                 f"Locked topic brief:\n{json.dumps(topic_brief, ensure_ascii=False, indent=2)}\n\n"
+                f"{comprehension_contract}\n"
                 f"{prior_context}\n\n"
                 "The beat sheet is a structural plan, not final narration.\n"
                 f"Return EXACTLY {count} scenes.\n"
                 f"{act_rules}\n"
                 "Each scene must move the same central topic forward.\n"
+                "Each scene must have one distinct job and at most one new hard concept.\n"
+                "Use recap/checkpoint scenes deliberately instead of adding more concepts.\n"
+                "Do not turn teaser-only concepts into full explanatory scenes.\n"
                 "Hard length limits: purpose max 24 words, key_point max 32 words, "
                 "emotional_turn max 18 words, visual_idea max 18 words.\n"
                 "must_include and avoid must be short arrays, max 2 items each, max 10 words per item.\n"
@@ -677,6 +778,7 @@ class PodcastV2:
 
     def _reconcile_beat_sheet(self, beat_sheet: dict, topic_brief: dict, script_model: str) -> dict:
         current_scenes = beat_sheet.get("scenes") or []
+        comprehension_contract = _build_comprehension_contract_block(topic_brief)
         scene_map = [
             {
                 "scene": scene.get("scene"),
@@ -694,10 +796,13 @@ class PodcastV2:
             f"Creative direction: {self.creative_direction}\n\n"
             "You are seeing all 20 scenes after they were generated in separate chunks. "
             "Your job is to fix global structure problems caused by chunking.\n\n"
+            f"{comprehension_contract}\n"
             "Global goals:\n"
             "- Every scene must have one distinct narrative job.\n"
             "- Remove repeated roles such as multiple bridge scenes, repeated paradox summaries, repeated quantum-gravity conclusions, or multiple outros.\n"
             "- Preserve a clear escalation: hook -> setup -> mechanism -> paradox -> attempted solutions -> frontier -> payoff -> outro.\n"
+            "- Preserve a listener-friendly explanation path: one question -> one mechanism -> one conflict -> one payoff.\n"
+            "- Move advanced side paths into teaser-only mentions when they are not needed for the main question.\n"
             "- Scene 20 must be the only true outro. Scene 19 must be final payoff, not another outro.\n"
             "- If two scenes repeat, differentiate their jobs instead of adding more exposition.\n"
             "- Keep all 20 scene numbers; do not delete scenes or change their order.\n\n"
@@ -807,6 +912,18 @@ class PodcastV2:
     ) -> dict:
         targets = self._beat_rewrite_targets(qc_report)
         current_scenes = beat_sheet.get("scenes") or []
+        full_scene_context = json.dumps(
+            [
+                {
+                    "scene": scene.get("scene"),
+                    "act": scene.get("act"),
+                    "purpose": scene.get("purpose"),
+                    "key_point": scene.get("key_point"),
+                }
+                for scene in current_scenes
+            ],
+            ensure_ascii=False,
+        )
         if not targets:
             targets = [int(scene.get("scene", 0)) for scene in current_scenes[:2] if scene.get("scene")]
 
@@ -816,6 +933,7 @@ class PodcastV2:
             except (TypeError, ValueError):
                 return 0
 
+        comprehension_contract = _build_comprehension_contract_block(topic_brief)
         by_scene = {}
         for batch_start in range(0, len(targets), 2):
             batch_targets = targets[batch_start:batch_start + 2]
@@ -835,14 +953,20 @@ class PodcastV2:
                 f"Creative direction: {self.creative_direction}\n"
                 f"Rewrite attempt: {attempt}\n"
                 f"Primary rewrite targets: {target_text}\n\n"
+                f"{comprehension_contract}\n"
                 "Rules:\n"
                 "- Return ONLY the rewritten target scenes, not the full 20-scene beat sheet.\n"
                 "- Keep each returned scene number identical to its original scene number.\n"
+                "- The production contract requires exactly 20 scenes, so do not solve QC notes by deleting, merging, or renumbering scenes.\n"
+                "- If QC asks to merge or cut scenes, reinterpret that as: make the duplicate scene do a distinct transition, landing, bridge, or payoff job.\n"
                 "- Fix the listed QC issue directly, but keep the rewrite compact.\n"
                 "- Do not drift away from the exact topic.\n"
+                "- Fix listener comprehension by narrowing scene jobs before adding detail.\n"
+                "- Keep teaser-only concepts brief; do not make them full scene lessons.\n"
                 "- purpose max 30 words, key_point max 34 words, emotional_turn max 22 words, visual_idea max 20 words.\n"
                 "- must_include and avoid max 3 items each; every item max 12 words.\n\n"
                 f"TOPIC BRIEF JSON:\n{json.dumps(topic_brief, ensure_ascii=False)}\n\n"
+                f"FULL 20-SCENE CONTEXT JSON:\n{full_scene_context}\n\n"
                 f"TARGET SCENES JSON:\n{json.dumps(focused_scenes, ensure_ascii=False)}\n\n"
                 f"TARGET QC ISSUES JSON:\n{json.dumps(focused_issues, ensure_ascii=False)}\n\n"
                 f"MISSING BEATS JSON:\n{json.dumps(qc_report.get('missing_beats') or [], ensure_ascii=False)}"
@@ -876,6 +1000,48 @@ class PodcastV2:
         ]
         return self._normalize_beat_sheet(merged)
 
+    def _repair_beat_sheet_structure(
+        self,
+        beat_sheet: dict,
+        qc_report: dict,
+        topic_brief: dict,
+        script_model: str,
+    ) -> dict:
+        """Rewrite the whole 20-scene outline when local patches cannot fix global duplication."""
+        comprehension_contract = _build_comprehension_contract_block(topic_brief)
+        prompt = (
+            f"Repair the full beat-sheet structure for a long-form video podcast about: {self.topic}\n\n"
+            f"Language: {self.language}\n"
+            f"Creative direction: {self.creative_direction}\n\n"
+            f"{comprehension_contract}\n"
+            "This is a structural repair pass after targeted rewrites failed.\n"
+            "Return one complete beat sheet with exactly 20 scenes numbered 1 through 20.\n\n"
+            "Hard rules:\n"
+            "- Keep exactly 20 scenes; do not delete, merge, skip, duplicate, or renumber scenes.\n"
+            "- Every scene must have a distinct narrative job.\n"
+            "- If the QC report asks to merge or cut duplicated scenes, solve it by repurposing one scene into a bridge, landing pause, checkpoint, teaser, final payoff, or outro.\n"
+            "- Scene 19 must be the single final payoff.\n"
+            "- Scene 20 must be the only outro and must not repeat the final payoff.\n"
+            "- Teaser-only concepts must stay brief and must not become full lessons.\n"
+            "- Preserve the exact topic and the topic brief; do not invent a new episode.\n"
+            "- Keep fields concise: purpose max 30 words, key_point max 34 words, emotional_turn max 22 words, visual_idea max 20 words.\n"
+            "- must_include and avoid max 3 items each; every item max 12 words.\n\n"
+            f"TOPIC BRIEF JSON:\n{json.dumps(topic_brief, ensure_ascii=False)}\n\n"
+            f"CURRENT BEAT SHEET JSON:\n{json.dumps(beat_sheet, ensure_ascii=False)}\n\n"
+            f"QC REPORT JSON:\n{json.dumps(qc_report, ensure_ascii=False)}"
+        )
+        raw = generate_text_structured(
+            prompt=prompt,
+            system_prompt=(
+                "You are a senior documentary showrunner doing a full outline repair. "
+                "Fix global duplication and pacing, keep exactly 20 scenes, and return only valid JSON."
+            ),
+            schema=BEAT_SHEET_SCHEMA,
+            model_name=script_model,
+        )
+        repaired = self._parse_llm_json(raw, "beat_structural_repair")
+        return self._normalize_beat_sheet(repaired)
+
     def _prepare_beat_sheet(self, topic: str, topic_brief: dict, script_model: str) -> tuple[dict, dict]:
         beat_sheet = self._compile_beat_sheet(topic, topic_brief, script_model)
         with open(os.path.join(self.episode_dir, "beat_sheet_initial.json"), "w", encoding="utf-8") as f:
@@ -901,6 +1067,22 @@ class PodcastV2:
                 json.dump(beat_sheet, f, ensure_ascii=False, indent=2)
             beat_qc_report = self._write_beat_quality_report(beat_sheet)
             beat_qc_report["rewrite_attempts"] = attempt
+            with open(os.path.join(self.episode_dir, "beat_qc.json"), "w", encoding="utf-8") as f:
+                json.dump(beat_qc_report, f, ensure_ascii=False, indent=2)
+
+        if self._beat_qc_needs_rewrite(beat_qc_report):
+            print("Beat QC structural repair pass...")
+            beat_sheet = self._repair_beat_sheet_structure(
+                beat_sheet=beat_sheet,
+                qc_report=beat_qc_report,
+                topic_brief=topic_brief,
+                script_model=script_model,
+            )
+            with open(os.path.join(self.episode_dir, "beat_sheet_structural_repair.json"), "w", encoding="utf-8") as f:
+                json.dump(beat_sheet, f, ensure_ascii=False, indent=2)
+            beat_qc_report = self._write_beat_quality_report(beat_sheet)
+            beat_qc_report["rewrite_attempts"] = 2
+            beat_qc_report["structural_repair_attempted"] = True
             with open(os.path.join(self.episode_dir, "beat_qc.json"), "w", encoding="utf-8") as f:
                 json.dump(beat_qc_report, f, ensure_ascii=False, indent=2)
 
@@ -945,6 +1127,7 @@ class PodcastV2:
             "rewrite_targets": [],
             "missing_beats": [],
             "retention_notes": [],
+            "comprehension_notes": [],
             "scene_count": scene_count,
         }
         if scene_count != 20:
@@ -963,9 +1146,19 @@ class PodcastV2:
                 f"Creative direction: {self.creative_direction}\n\n"
                 "Review this beat sheet before narration is drafted. "
                 "Check topic focus, act progression, hook strength, repetition, missing payoff, "
-                "scene-to-scene escalation, and visual usefulness. "
+                "scene-to-scene escalation, listener comprehension, concept overload, recap placement, "
+                "hard-term pacing, and visual usefulness. "
+                "Important production contract: this pipeline intentionally uses exactly 20 scenes. "
+                "Do not recommend deleting, merging, reducing below 20 scenes, or changing scene numbers. "
+                "When two scenes overlap, judge whether one can be converted into a distinct bridge, landing pause, "
+                "transition, teaser, or payoff job within the fixed 20-scene structure. "
                 "Score 0-100. Use status 'pass' only if this is ready for narration drafting; "
                 "otherwise use 'review'. Use scene numbers as 1-based indexes.\n\n"
+                "Comprehension rules:\n"
+                "- Flag any scene that introduces more than one hard concept.\n"
+                "- Flag advanced concepts that should be teaser-only but are treated as full lessons.\n"
+                "- Flag missing recap/checkpoint moments after dense sections.\n"
+                "- Put listener-understanding notes in comprehension_notes.\n\n"
                 f"BEAT SHEET JSON:\n{json.dumps(beat_sheet, ensure_ascii=False)}"
             )
             raw = generate_text_structured(
@@ -1056,6 +1249,74 @@ class PodcastV2:
             elapsed += self._scene_duration_seconds(index)
         return "\n".join(lines)
 
+    def _build_glossary_entries(self, scenes: list[dict], scene_durations: list[float]) -> list[dict]:
+        """Create one-time glossary overlays for hard terms found in narration."""
+        entries: list[dict] = []
+        used_terms: set[str] = set()
+        elapsed = 0.0
+
+        for index, scene in enumerate(scenes):
+            duration = scene_durations[index] if index < len(scene_durations) else 0.0
+            narration = str(scene.get("narration", "") or "")
+            lower_narration = narration.lower()
+
+            if duration < 8:
+                elapsed += duration
+                continue
+
+            for term, aliases, meaning in GLOSSARY_TERMS:
+                term_key = term.lower()
+                if term_key in used_terms:
+                    continue
+                if any(alias.lower() in lower_narration for alias in aliases):
+                    used_terms.add(term_key)
+                    # Start after the chapter title has mostly faded, without waiting too long.
+                    start_offset = min(max(4.2, duration * 0.18), max(0.0, duration - 5.5))
+                    entries.append({
+                        "term": term,
+                        "meaning": meaning,
+                        "start": round(elapsed + start_offset, 2),
+                        "duration": 5.0,
+                        "scene": index + 1,
+                    })
+                    break
+
+            elapsed += duration
+
+        return entries
+
+    def _normalize_rendered_audio(self, input_path: str, output_path: str) -> None:
+        """Normalize podcast render loudness without re-encoding video."""
+        temp_output = output_path + ".tmp.mp4"
+        if os.path.exists(temp_output):
+            os.remove(temp_output)
+        print("Normalizing final audio loudness to -16 LUFS...")
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                input_path,
+                "-c:v",
+                "copy",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-af",
+                "loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-movflags",
+                "+faststart",
+                temp_output,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if not os.path.exists(temp_output) or os.path.getsize(temp_output) <= 1_000_000:
+            raise RuntimeError("Audio normalization did not create a valid final video.")
+        os.replace(temp_output, output_path)
+
     def _write_script_quality_report(self, scenes: list[dict], source: str = "generated") -> dict:
         """Create a non-blocking script QC report for review before asset generation."""
         if not self.episode_dir:
@@ -1078,6 +1339,7 @@ class PodcastV2:
             "rewrite_targets": [],
             "retention_notes": [],
             "visual_notes": [],
+            "comprehension_notes": [],
             "source": source,
             "scene_count": scene_count,
             "missing_fields": missing_fields,
@@ -1112,14 +1374,16 @@ class PodcastV2:
             system_prompt = (
                 "You are a senior podcast script editor and retention analyst. "
                 "Review the script for topic focus, hook strength, scene flow, repetition, payoff, "
-                "spoken-language quality, and visual prompt usefulness. "
+                "spoken-language quality, listener comprehension, concept density, term explanation, "
+                "recap cadence, and visual prompt usefulness. "
                 "Return ONLY valid JSON matching the provided schema. "
                 "Use status 'pass' when the script is ready for asset generation. "
                 "Use status 'review' for editorial improvements that should guide rewrites. "
                 "Reserve severity 'high' for true asset-blocking problems: missing core beats, incoherent "
                 "story flow, unusable visual prompts, severe repetition that would feel like duplicate scenes, "
-                "or narration that cannot be spoken cleanly. Mark polish, pacing, density, or wording issues "
-                "as medium or low unless they make the episode unusable."
+                "concept density that would make the target listener unable to follow, or narration that cannot "
+                "be spoken cleanly. Mark polish, light pacing, or wording issues as medium or low unless they "
+                "make the episode unusable."
             )
             prompt = (
                 f"Topic: {self.topic}\n"
@@ -1130,7 +1394,10 @@ class PodcastV2:
                 "Call out only actionable issues, with scene numbers using 1-based indexing. "
                 "Use severity low, medium, or high. "
                 "A script with complete structure and score 80+ should not be blocked for polish-only issues; "
-                "use review plus warnings instead.\n\n"
+                "use review plus warnings instead.\n"
+                "Put notes about whether a non-specialist listener can follow the episode in comprehension_notes. "
+                "Check that hard terms are explained in plain language and that recap/checkpoint sentences appear "
+                "after dense runs of scenes.\n\n"
                 f"SCENES JSON:\n{json.dumps(compact_scenes, ensure_ascii=False)}"
             )
             raw = generate_text_structured(
@@ -1206,6 +1473,7 @@ class PodcastV2:
         scenes: list[dict],
         qc_report: dict,
         beat_sheet: dict,
+        topic_brief: dict,
         script_model: str,
         attempt: int,
     ) -> list[dict]:
@@ -1230,18 +1498,22 @@ class PodcastV2:
             issue for issue in (qc_report.get("issues") or [])
             if not target_set or int(issue.get("scene", 0) or 0) in target_set
         ]
+        comprehension_contract = _build_comprehension_contract_block(topic_brief)
         prompt = (
             f"Rewrite selected scenes in a 20-scene video podcast script about: {self.topic}\n\n"
             f"Language: {self.language}\n"
             f"Creative direction: {self.creative_direction}\n"
             f"Rewrite attempt: {attempt}\n"
             f"Primary rewrite targets: {target_text}\n\n"
+            f"{comprehension_contract}\n"
             "Rules:\n"
             "- Return ONLY the rewritten target scenes, not the full 20-scene script.\n"
             "- Keep each returned scene number identical to its original scene number.\n"
             "- Keep the same language as the original script.\n"
             "- Keep each narration natural for spoken TTS.\n"
             "- Fix every QC issue directly.\n"
+            "- Reduce concept overload before polishing wording.\n"
+            "- Add or preserve listener checkpoint sentences when a scene follows dense material.\n"
             "- Keep image_prompt in English only and concrete for visual generation.\n"
             "- Follow the target beat sheet.\n\n"
             f"TARGET BEATS JSON:\n{json.dumps(focused_beats, ensure_ascii=False)}\n\n"
@@ -1284,6 +1556,7 @@ class PodcastV2:
         self,
         scenes: list[dict],
         beat_sheet: dict,
+        topic_brief: dict,
         script_model: str,
     ) -> tuple[list[dict], dict]:
         with open(os.path.join(self.episode_dir, "script_initial.json"), "w", encoding="utf-8") as f:
@@ -1298,6 +1571,7 @@ class PodcastV2:
                 scenes=scenes,
                 qc_report=qc_report,
                 beat_sheet=beat_sheet,
+                topic_brief=topic_brief,
                 script_model=script_model,
                 attempt=attempt,
             )
@@ -1420,6 +1694,55 @@ class PodcastV2:
     def _get_pexels_api_key(self) -> str:
         return str(_get_config_value("pexels_api_key", "") or "")
 
+    def _fallback_image_prompt_for_asset(
+        self,
+        scene: dict,
+        narration_chunk: str,
+        asset_idx: int,
+    ) -> tuple[str, str]:
+        roles = [
+            (
+                "detail",
+                "Create a macro or close-up detail of one concrete object, particle interaction, "
+                "instrument, texture, or physical clue from this moment. Avoid a wide scene."
+            ),
+            (
+                "metaphor",
+                "Create a symbolic visual metaphor for the idea in this moment. Use a new visual motif, "
+                "not the same literal subject as the anchor image."
+            ),
+            (
+                "environment",
+                "Create a wide environmental or mood shot that supports this moment through place, "
+                "lighting, scale, or atmosphere. Focus on setting, not the anchor subject."
+            ),
+            (
+                "human_scale",
+                "Create a human-scale visual anchor such as a lab, observatory, instrument, notebook, "
+                "screen, or silhouette reacting to the concept. Do not show a celebrity likeness."
+            ),
+            (
+                "texture",
+                "Create an abstract field, data, material, equation-free pattern, or particle texture "
+                "that can work as connective visual tissue."
+            ),
+        ]
+        role_name, role_direction = roles[(asset_idx - 1) % len(roles)]
+        title = _compact_text(scene.get("scene_title", ""), 80)
+        anchor_prompt = _compact_text(scene.get("image_prompt", ""), 420)
+        moment = _compact_text(narration_chunk or scene.get("narration", ""), 300)
+        prompt = (
+            f"{anchor_prompt}\n\n"
+            f"Fallback asset role: {role_name}.\n"
+            f"{role_direction}\n"
+            f"Scene title: {title}\n"
+            f"Narration moment to visualize: {moment}\n\n"
+            "Make this image visibly different from the scene anchor: change subject emphasis, "
+            "camera distance, composition, and visual motif. Do not recreate the same framing. "
+            "No text overlays, no logos, cinematic 16:9."
+        )
+        return role_name, prompt
+
     def generate_scene_assets(
         self,
         scene_index: int,
@@ -1512,12 +1835,13 @@ class PodcastV2:
                         print(f"  Pexels B-roll: scene {scene_number} asset {asset_idx}")
 
                 if not broll_found:
-                    # Fall back to AI gen with varied prompt
-                    varied_prompt = scene["image_prompt"]
-                    if asset_idx == 1:
-                        varied_prompt += ", close-up detail shot"
-                    else:
-                        varied_prompt += ", atmospheric mood shot"
+                    # Fall back to AI gen with a distinct visual role per asset.
+                    role_name, varied_prompt = self._fallback_image_prompt_for_asset(
+                        scene,
+                        chunks[asset_idx],
+                        asset_idx,
+                    )
+                    print(f"  AI fallback image: scene {scene_number} asset {asset_idx} role={role_name}")
                     self._generate_scene_image_with_retry(varied_prompt, png_path, scene_number)
 
     def _generate_scene0_video(self, image_path: str, scene: dict, video_path: str) -> None:
@@ -1598,10 +1922,13 @@ class PodcastV2:
         scenes = self._load_script_scenes()
         total = len(scenes)
         final_path = os.path.join(self.episode_dir, "final.mp4")
+        raw_final_path = os.path.join(self.episode_dir, "final_unnormalized.mp4")
 
         if os.path.exists(final_path) and os.path.getsize(final_path) > 1_000_000:
             print(f"Skipping render (final.mp4 already exists at {final_path}).")
             return
+        if os.path.exists(raw_final_path):
+            os.remove(raw_final_path)
 
         wav_paths = []
         scene_durations = []
@@ -1685,6 +2012,7 @@ class PodcastV2:
         from pathlib import Path
         remotion_dir = Path(ROOT_DIR) / "remotion"
         scene_titles = [s.get("scene_title", "") for s in scenes][:total]
+        glossary_entries = self._build_glossary_entries(scenes, scene_durations)
 
         props = {
             "composition": "VideoPodcast",
@@ -1693,10 +2021,11 @@ class PodcastV2:
             "sceneDurations": scene_durations,
             "sceneTitles": scene_titles,
             "durationInSeconds": total_duration,
-            "outputPath": os.path.abspath(final_path),
+            "outputPath": os.path.abspath(raw_final_path),
             "sceneImageCounts": scene_image_counts,
             "sceneAssetTypes": scene_asset_types,
             "sceneAssetDurations": scene_asset_durations,
+            "glossaryEntries": glossary_entries,
         }
 
         video_path_0 = os.path.join(self.episode_dir, "scene_00.mp4")
@@ -1717,11 +2046,19 @@ class PodcastV2:
             timeout=1800,
         )
 
+        assert os.path.exists(raw_final_path), f"final_unnormalized.mp4 not found at {raw_final_path}"
+        assert os.path.getsize(raw_final_path) > 1_000_000, (
+            f"final_unnormalized.mp4 is suspiciously small ({os.path.getsize(raw_final_path)} bytes)"
+        )
+        self._normalize_rendered_audio(raw_final_path, final_path)
+        if os.path.exists(raw_final_path):
+            os.remove(raw_final_path)
+
         assert os.path.exists(final_path), f"final.mp4 not found at {final_path}"
         assert os.path.getsize(final_path) > 1_000_000, (
             f"final.mp4 is suspiciously small ({os.path.getsize(final_path)} bytes)"
         )
-        print(f"Final video: {final_path}")
+        print(f"Final video: {final_path} (audio normalized, glossary entries={len(glossary_entries)})")
 
     # ------------------------------------------------------------------
     # Script generation โ€” identical to Podcast.py
@@ -1770,6 +2107,7 @@ class PodcastV2:
 
             topic_brief = self._compile_topic_brief(topic, script_model)
             topic_brief_json = json.dumps(topic_brief, ensure_ascii=False, indent=2)
+            comprehension_contract = _build_comprehension_contract_block(topic_brief)
             with open(os.path.join(episode_dir, "topic_brief.json"), "w", encoding="utf-8") as f:
                 json.dump(topic_brief, f, ensure_ascii=False, indent=2)
 
@@ -1842,6 +2180,11 @@ class PodcastV2:
                 f"a 'narration' (about {sentence_length} sentences of engaging spoken text), "
                 "and an 'image_prompt' (vivid visual description for an illustration, MUST be in English only).\n"
                 f"{style_constraint}\n"
+                f"{comprehension_contract}"
+                "Narration must sound like guided explanation, not an essay being read aloud.\n"
+                "Use listener checkpoint sentences such as 'At this point, remember only this...' after dense ideas.\n"
+                "Do not introduce a new technical label unless the surrounding sentence explains it in plain language.\n"
+                "Do not teach teaser-only concepts; mention them only as a next-door mystery or future frontier.\n"
                 "Do NOT invent superhero-like characters, comic-book heroes, or recurring protagonists unless explicitly asked.\n"
             )
 
@@ -1926,6 +2269,7 @@ class PodcastV2:
             all_scenes, qc_report = self._prepare_script_scenes(
                 all_scenes,
                 beat_sheet=beat_sheet,
+                topic_brief=topic_brief,
                 script_model=script_model,
             )
             script_path = os.path.join(episode_dir, "script.json")

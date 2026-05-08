@@ -87,6 +87,7 @@ if (isPodcast) {
     ...(rawProps.sceneImageCounts && { sceneImageCounts: rawProps.sceneImageCounts }),
     ...(rawProps.sceneAssetTypes && { sceneAssetTypes: rawProps.sceneAssetTypes }),
     ...(rawProps.sceneAssetDurations && { sceneAssetDurations: rawProps.sceneAssetDurations }),
+    ...(rawProps.glossaryEntries && { glossaryEntries: rawProps.glossaryEntries }),
   };
 } else {
   resolvedProps = {

@@ -20,6 +20,7 @@ const DEFAULT_PODCAST_PROPS: PodcastProps = {
   audioPath: "",
   sceneDurations: [30],
   durationInSeconds: 30,
+  glossaryEntries: [],
 };
 
 const RemotionRoot: React.FC = () => {

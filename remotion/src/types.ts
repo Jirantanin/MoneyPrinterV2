@@ -20,6 +20,13 @@ export interface SrtEntry {
 
 export type AssetType = "image" | "video";
 
+export interface GlossaryEntry {
+  term: string;
+  meaning: string;
+  start: number;
+  duration?: number;
+}
+
 export interface PodcastProps {
   imagePaths: string[];
   audioPath: string;
@@ -30,4 +37,5 @@ export interface PodcastProps {
   sceneImageCounts?: number[];
   sceneAssetTypes?: AssetType[];
   sceneAssetDurations?: number[];
+  glossaryEntries?: GlossaryEntry[];
 }
