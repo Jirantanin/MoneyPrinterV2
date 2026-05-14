@@ -503,6 +503,303 @@ GLOSSARY_TERMS = [
 ]
 
 
+SCRIPT_MODE_MIN_CHARS_NO_SPACE = 8_000
+SCRIPT_MODE_IDEAL_MIN_CHARS_NO_SPACE = 8_800
+SCRIPT_MODE_IDEAL_MAX_CHARS_NO_SPACE = 9_500
+SCRIPT_MODE_SOFT_MAX_CHARS_NO_SPACE = 10_000
+SCRIPT_MODE_MIN_SECTIONS = 2
+SCRIPT_MODE_RECOMMENDED_MIN_SECTIONS = 5
+SCRIPT_MODE_RECOMMENDED_MAX_SECTIONS = 10
+SCRIPT_MODE_TARGET_BEAT_CHARS = 260
+SCRIPT_MODE_MAX_BEAT_CHARS = 360
+
+
+def _count_chars_no_space(text: str) -> int:
+    return len(re.sub(r"\s+", "", str(text or "")))
+
+
+def _script_length_qc(text: str, source: str = "manual_script") -> dict:
+    chars_no_space = _count_chars_no_space(text)
+    chars_with_space = len(str(text or ""))
+    status = "pass"
+    blocking = False
+    notes = []
+    if chars_no_space < SCRIPT_MODE_MIN_CHARS_NO_SPACE:
+        status = "blocked"
+        blocking = True
+        notes.append(
+            f"Script is below the minimum long-form target "
+            f"({chars_no_space} < {SCRIPT_MODE_MIN_CHARS_NO_SPACE} chars without whitespace)."
+        )
+    elif chars_no_space > SCRIPT_MODE_SOFT_MAX_CHARS_NO_SPACE:
+        status = "review"
+        notes.append(
+            f"Script is above the soft cap "
+            f"({chars_no_space} > {SCRIPT_MODE_SOFT_MAX_CHARS_NO_SPACE} chars without whitespace); "
+            "runtime may exceed the intended 18-minute range."
+        )
+    elif chars_no_space < SCRIPT_MODE_IDEAL_MIN_CHARS_NO_SPACE:
+        status = "review"
+        notes.append("Script is usable but a little below the preferred 8,800-9,500 char band.")
+    elif chars_no_space > SCRIPT_MODE_IDEAL_MAX_CHARS_NO_SPACE:
+        status = "review"
+        notes.append("Script is usable but a little above the preferred 8,800-9,500 char band.")
+    else:
+        notes.append("Script length is in the preferred 8,800-9,500 char band.")
+    return {
+        "source": source,
+        "status": status,
+        "blocking": blocking,
+        "chars_no_space": chars_no_space,
+        "chars_with_space": chars_with_space,
+        "minimum_chars_no_space": SCRIPT_MODE_MIN_CHARS_NO_SPACE,
+        "ideal_min_chars_no_space": SCRIPT_MODE_IDEAL_MIN_CHARS_NO_SPACE,
+        "ideal_max_chars_no_space": SCRIPT_MODE_IDEAL_MAX_CHARS_NO_SPACE,
+        "soft_max_chars_no_space": SCRIPT_MODE_SOFT_MAX_CHARS_NO_SPACE,
+        "notes": notes,
+    }
+
+
+def _script_format_qc(sections: list[dict], source: str = "manual_script") -> dict:
+    section_count = len(sections or [])
+    titles = [str(section.get("section_title") or "").strip() for section in (sections or [])]
+    generic_single_section = (
+        section_count == 1
+        and (titles[0].lower() if titles else "") in {"opening", "script"}
+    )
+    status = "pass"
+    blocking = False
+    notes: list[str] = []
+
+    if section_count < SCRIPT_MODE_MIN_SECTIONS or generic_single_section:
+        status = "blocked"
+        blocking = True
+        notes.append(
+            "Manual script format is missing clear section headings. "
+            "Use Markdown headings like '## COLD OPEN', '## PREMISE', and '## CLOSING'."
+        )
+    elif section_count < SCRIPT_MODE_RECOMMENDED_MIN_SECTIONS:
+        status = "review"
+        notes.append(
+            f"Only {section_count} sections detected. Long-form PodcastV2 usually works best with "
+            f"{SCRIPT_MODE_RECOMMENDED_MIN_SECTIONS}-{SCRIPT_MODE_RECOMMENDED_MAX_SECTIONS} sections."
+        )
+    elif section_count > SCRIPT_MODE_RECOMMENDED_MAX_SECTIONS:
+        status = "review"
+        notes.append(
+            f"{section_count} sections detected. This is usable, but may be more fragmented than the "
+            f"recommended {SCRIPT_MODE_RECOMMENDED_MIN_SECTIONS}-{SCRIPT_MODE_RECOMMENDED_MAX_SECTIONS} sections."
+        )
+    else:
+        notes.append("Manual script section format looks good.")
+
+    return {
+        "source": source,
+        "status": status,
+        "blocking": blocking,
+        "section_count": section_count,
+        "section_titles": titles,
+        "minimum_sections": SCRIPT_MODE_MIN_SECTIONS,
+        "recommended_min_sections": SCRIPT_MODE_RECOMMENDED_MIN_SECTIONS,
+        "recommended_max_sections": SCRIPT_MODE_RECOMMENDED_MAX_SECTIONS,
+        "required_heading_format": "## SECTION NAME",
+        "example": [
+            "## COLD OPEN",
+            "## PREMISE",
+            "## MAIN TOPIC",
+            "## CLOSING",
+        ],
+        "notes": notes,
+    }
+
+
+def _clean_manual_script_line(line: str) -> str:
+    cleaned = str(line or "").strip()
+    if not cleaned:
+        return ""
+    cleaned = re.sub(r"^\s*(?:[-*_]\s*){3,}$", "", cleaned).strip()
+    if not cleaned:
+        return ""
+    if cleaned.startswith("|") and cleaned.endswith("|"):
+        return ""
+    if re.match(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$", cleaned):
+        return ""
+    if re.match(r"^\s*\*\*[^*]+:\*\*", cleaned):
+        label = re.sub(r"^\s*\*\*([^*]+):\*\*.*$", r"\1", cleaned).strip().lower()
+        if label in {"ช่อง", "ความยาว", "tone", "voice", "format", "word count target"}:
+            return ""
+    cleaned = re.sub(r"^\s*[-*]\s+", "", cleaned).strip()
+    cleaned = re.sub(r"\*\*", "", cleaned)
+    cleaned = re.sub(r"^\s*\[[^\]]+\]\s*$", "", cleaned).strip()
+    cleaned = re.sub(r"\[[^\]]*(?:visual|sfx|beat|cut to|fade out|fade|title card)[^\]]*\]", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _manual_section_title(raw_title: str) -> str:
+    title = re.sub(r"\*\*", "", str(raw_title or "")).strip()
+    title = re.sub(r"^\[[^\]]+\]\s*", "", title).strip()
+    title = re.sub(r"^#+\s*", "", title).strip()
+    title = re.sub(r"^#\s*", "", title).strip()
+    title = re.sub(r"^\d+\s*/\s*", "", title).strip()
+    title = re.sub(r"\s+", " ", title).strip(" -")
+    return title or "Script"
+
+
+def _looks_like_manual_section_cue(line: str) -> bool:
+    lowered = line.strip().lower()
+    if not lowered:
+        return False
+    if re.match(r"^(cold open|premise|closing|conclusion)\b", lowered):
+        return True
+    if re.match(r"^#?\s*\d+\s*(?:/|\.|—|-)", lowered):
+        return True
+    if re.match(r"^เรื่องที่(?:หนึ่ง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ)", line.strip()):
+        return True
+    return False
+
+
+def _parse_manual_script_sections(raw_text: str) -> tuple[list[dict], str]:
+    sections: list[dict] = []
+    current_title = "Opening"
+    current_paragraphs: list[str] = []
+    saw_content = False
+
+    def flush() -> None:
+        nonlocal current_paragraphs, current_title
+        paragraphs = [p for p in current_paragraphs if p.strip()]
+        if paragraphs:
+            sections.append({
+                "section_index": len(sections) + 1,
+                "section_title": current_title,
+                "paragraphs": paragraphs,
+                "chars_no_space": _count_chars_no_space("\n\n".join(paragraphs)),
+            })
+        current_paragraphs = []
+
+    for raw_line in str(raw_text or "").splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        heading = re.match(r"^\s{0,3}(#{1,3})\s+(.+)$", stripped)
+        if heading:
+            title = _manual_section_title(heading.group(2))
+            if title.lower() in {"โครงเรื่อง", "outline"}:
+                continue
+            if heading.group(1) == "#" and not saw_content and not sections:
+                current_title = title
+                continue
+            flush()
+            current_title = title
+            saw_content = False
+            continue
+
+        cleaned = _clean_manual_script_line(stripped)
+        if not cleaned:
+            continue
+        if _looks_like_manual_section_cue(cleaned):
+            if current_paragraphs or sections:
+                flush()
+            current_title = _manual_section_title(cleaned)
+        current_paragraphs.append(cleaned)
+        saw_content = True
+
+    flush()
+    if not sections:
+        cleaned = [
+            _clean_manual_script_line(line)
+            for line in str(raw_text or "").splitlines()
+        ]
+        cleaned = [line for line in cleaned if line]
+        if cleaned:
+            sections.append({
+                "section_index": 1,
+                "section_title": "Script",
+                "paragraphs": cleaned,
+                "chars_no_space": _count_chars_no_space("\n\n".join(cleaned)),
+            })
+    cleaned_text = "\n\n".join(
+        paragraph
+        for section in sections
+        for paragraph in section.get("paragraphs", [])
+    )
+    return sections, cleaned_text
+
+
+def _split_manual_paragraph_for_beats(paragraph: str) -> list[str]:
+    paragraph = re.sub(r"\s+", " ", str(paragraph or "")).strip()
+    if _count_chars_no_space(paragraph) <= SCRIPT_MODE_MAX_BEAT_CHARS:
+        return [paragraph] if paragraph else []
+    tokens = [token for token in paragraph.split(" ") if token]
+    if len(tokens) <= 1:
+        chunks = []
+        text = paragraph
+        while _count_chars_no_space(text) > SCRIPT_MODE_MAX_BEAT_CHARS:
+            chunks.append(text[:SCRIPT_MODE_MAX_BEAT_CHARS].strip())
+            text = text[SCRIPT_MODE_MAX_BEAT_CHARS:].strip()
+        if text:
+            chunks.append(text)
+        return chunks
+    chunks = []
+    current: list[str] = []
+    for token in tokens:
+        proposed = " ".join(current + [token])
+        if current and _count_chars_no_space(proposed) > SCRIPT_MODE_MAX_BEAT_CHARS:
+            chunks.append(" ".join(current).strip())
+            current = [token]
+        else:
+            current.append(token)
+    if current:
+        chunks.append(" ".join(current).strip())
+    return [chunk for chunk in chunks if chunk]
+
+
+def _split_sections_into_visual_beats(sections: list[dict]) -> list[dict]:
+    beats: list[dict] = []
+    single_generic_section = (
+        len(sections) == 1
+        and str(sections[0].get("section_title") or "").strip().lower() in {"opening", "script"}
+    )
+    for section in sections:
+        pieces: list[str] = []
+        for paragraph in section.get("paragraphs", []):
+            pieces.extend(_split_manual_paragraph_for_beats(paragraph))
+
+        section_beats: list[str] = []
+        current: list[str] = []
+        for piece in pieces:
+            proposed = "\n\n".join(current + [piece])
+            if current and _count_chars_no_space(proposed) > SCRIPT_MODE_MAX_BEAT_CHARS:
+                section_beats.append("\n\n".join(current).strip())
+                current = [piece]
+            else:
+                current.append(piece)
+            if current and _count_chars_no_space("\n\n".join(current)) >= SCRIPT_MODE_TARGET_BEAT_CHARS:
+                section_beats.append("\n\n".join(current).strip())
+                current = []
+        if current:
+            section_beats.append("\n\n".join(current).strip())
+
+        total_section_beats = max(1, len(section_beats))
+        for beat_index, narration in enumerate(section_beats, start=1):
+            title = ""
+            if not single_generic_section:
+                title = str(section.get("section_title") or "Script").strip()
+                if total_section_beats > 1:
+                    title = f"{title} {beat_index}/{total_section_beats}"
+            beats.append({
+                "section_index": section.get("section_index", len(beats) + 1),
+                "section_title": section.get("section_title", "Script"),
+                "visual_beat": len(beats) + 1,
+                "visual_beat_in_section": beat_index,
+                "section_beat_count": total_section_beats,
+                "scene_title": _compact_text(title, 100) if title else "",
+                "narration": narration,
+                "chars_no_space": _count_chars_no_space(narration),
+            })
+    return beats
+
+
 # ---------------------------------------------------------------------------
 # PodcastV2 class
 # ---------------------------------------------------------------------------
@@ -1324,6 +1621,8 @@ class PodcastV2:
 
         report_path = os.path.join(self.episode_dir, "script_qc.json")
         scene_count = len(scenes or [])
+        narration_text = "\n\n".join(str(scene.get("narration", "") or "") for scene in (scenes or []))
+        length_qc = _script_length_qc(narration_text, source=source)
         missing_fields = []
         for index, scene in enumerate(scenes or [], start=1):
             for field in ("scene_title", "narration", "image_prompt"):
@@ -1331,8 +1630,8 @@ class PodcastV2:
                     missing_fields.append({"scene": index, "field": field})
 
         fallback_report = {
-            "overall_score": 0 if scene_count != 20 or missing_fields else 70,
-            "status": "review" if scene_count != 20 or missing_fields else "pass",
+            "overall_score": 0 if scene_count <= 0 or missing_fields else 70,
+            "status": "review" if scene_count <= 0 or missing_fields else "pass",
             "summary": "Deterministic QC completed. LLM QC was not available.",
             "strengths": [],
             "issues": [],
@@ -1342,14 +1641,24 @@ class PodcastV2:
             "comprehension_notes": [],
             "source": source,
             "scene_count": scene_count,
+            "chars_no_space": length_qc["chars_no_space"],
+            "chars_with_space": length_qc["chars_with_space"],
+            "length_status": length_qc["status"],
             "missing_fields": missing_fields,
         }
-        if scene_count != 20:
+        if scene_count <= 0:
             fallback_report["issues"].append({
                 "severity": "high",
                 "scene": 0,
-                "issue": f"Expected 20 scenes, got {scene_count}.",
-                "suggestion": "Regenerate or split the script into exactly 20 scenes before asset generation.",
+                "issue": "No script scenes or visual beats were produced.",
+                "suggestion": "Regenerate or split the script before asset generation.",
+            })
+        if length_qc["status"] != "pass":
+            fallback_report["issues"].append({
+                "severity": "medium" if not length_qc["blocking"] else "high",
+                "scene": 0,
+                "issue": "; ".join(length_qc.get("notes") or []),
+                "suggestion": "Adjust script length before final production if this duration is not intentional.",
             })
         for item in missing_fields:
             fallback_report["issues"].append({
@@ -1392,12 +1701,15 @@ class PodcastV2:
                 f"Source: {source}\n\n"
                 "Score the script from 0-100. "
                 "Call out only actionable issues, with scene numbers using 1-based indexing. "
+                "The script may be split into a variable number of visual beats; do not require exactly 20 scenes. "
+                "Judge structure, clarity, and visual usefulness instead of a fixed scene count. "
                 "Use severity low, medium, or high. "
                 "A script with complete structure and score 80+ should not be blocked for polish-only issues; "
                 "use review plus warnings instead.\n"
                 "Put notes about whether a non-specialist listener can follow the episode in comprehension_notes. "
                 "Check that hard terms are explained in plain language and that recap/checkpoint sentences appear "
                 "after dense runs of scenes.\n\n"
+                f"LENGTH QC JSON:\n{json.dumps(length_qc, ensure_ascii=False)}\n\n"
                 f"SCENES JSON:\n{json.dumps(compact_scenes, ensure_ascii=False)}"
             )
             raw = generate_text_structured(
@@ -1409,6 +1721,9 @@ class PodcastV2:
             report = self._parse_llm_json(raw, f"script_qc_{source}")
             report["source"] = source
             report["scene_count"] = scene_count
+            report["chars_no_space"] = length_qc["chars_no_space"]
+            report["chars_with_space"] = length_qc["chars_with_space"]
+            report["length_status"] = length_qc["status"]
             report["missing_fields"] = missing_fields
             report["status"] = str(report.get("status", "review")).lower()
             if report["status"] not in {"pass", "review", "blocked"}:
@@ -1428,7 +1743,7 @@ class PodcastV2:
         return report
 
     def _script_qc_needs_rewrite(self, report: dict) -> bool:
-        if report.get("qc_error") and int(report.get("scene_count") or 0) == 20:
+        if report.get("qc_error") and int(report.get("scene_count") or 0) > 0:
             return False
         status = str(report.get("status", "review")).lower()
         try:
@@ -1448,7 +1763,7 @@ class PodcastV2:
             score = 0.0
         scene_count = int(report.get("scene_count") or 0)
         missing_fields = report.get("missing_fields") or []
-        return scene_count == 20 and not missing_fields and score >= 80
+        return scene_count > 0 and not missing_fields and score >= 80
 
     def _script_rewrite_targets(self, report: dict) -> list[int]:
         targets = []
@@ -1457,14 +1772,14 @@ class PodcastV2:
                 scene_number = int(value)
             except (TypeError, ValueError):
                 continue
-            if 1 <= scene_number <= 20 and scene_number not in targets:
+            if 1 <= scene_number <= 200 and scene_number not in targets:
                 targets.append(scene_number)
         for issue in report.get("issues") or []:
             try:
                 scene_number = int(issue.get("scene", 0))
             except (TypeError, ValueError):
                 continue
-            if 1 <= scene_number <= 20 and scene_number not in targets:
+            if 1 <= scene_number <= 200 and scene_number not in targets:
                 targets.append(scene_number)
         return targets
 
@@ -1500,14 +1815,14 @@ class PodcastV2:
         ]
         comprehension_contract = _build_comprehension_contract_block(topic_brief)
         prompt = (
-            f"Rewrite selected scenes in a 20-scene video podcast script about: {self.topic}\n\n"
+            f"Rewrite selected scenes in a video podcast script about: {self.topic}\n\n"
             f"Language: {self.language}\n"
             f"Creative direction: {self.creative_direction}\n"
             f"Rewrite attempt: {attempt}\n"
             f"Primary rewrite targets: {target_text}\n\n"
             f"{comprehension_contract}\n"
             "Rules:\n"
-            "- Return ONLY the rewritten target scenes, not the full 20-scene script.\n"
+            "- Return ONLY the rewritten target scenes, not the full script.\n"
             "- Keep each returned scene number identical to its original scene number.\n"
             "- Keep the same language as the original script.\n"
             "- Keep each narration natural for spoken TTS.\n"
@@ -1889,8 +2204,21 @@ class PodcastV2:
             audio_path = self._scene_audio_path(i)
             scene_num = str(i).zfill(2)
             anchor_img = os.path.join(self.episode_dir, f"scene_{scene_num}_0.png")
+            existing_assets = (
+                glob.glob(os.path.join(self.episode_dir, f"scene_{scene_num}_*.png"))
+                + glob.glob(os.path.join(self.episode_dir, f"scene_{scene_num}_*.mp4"))
+            )
+            expected_assets = 1
+            if os.path.exists(audio_path):
+                duration = _get_audio_duration(audio_path)
+                if duration > 0:
+                    expected_assets = max(1, round(duration / seconds_per_image))
 
-            if os.path.exists(anchor_img) and os.path.exists(audio_path):
+            if (
+                os.path.exists(anchor_img)
+                and os.path.exists(audio_path)
+                and len(existing_assets) >= expected_assets
+            ):
                 print(f"Skipping scene {i + 1}/{total} (already generated).")
             else:
                 print(f"Generating V2 assets for scene {i + 1}/{total}...")
@@ -1935,6 +2263,11 @@ class PodcastV2:
         all_image_paths: list[str] = []
         scene_image_counts: list[int] = []
         scene_asset_types: list[str] = []
+        render_image_only = os.environ.get("PODCAST_RENDER_IMAGE_ONLY", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
 
         for i in range(total):
             scene_num = str(i).zfill(2)
@@ -1964,7 +2297,7 @@ class PodcastV2:
                 mp4 = os.path.join(self.episode_dir, f"scene_{scene_num}_{asset_idx}.mp4")
                 if os.path.exists(png):
                     scene_assets.append((os.path.abspath(png), "image"))
-                elif os.path.exists(mp4):
+                elif os.path.exists(mp4) and not render_image_only:
                     scene_assets.append((os.path.abspath(mp4), "video"))
                 else:
                     break
@@ -2042,8 +2375,8 @@ class PodcastV2:
             ["node", "scripts/render.mjs", props_file_path],
             cwd=str(remotion_dir),
             check=True,
-            shell=True,
-            timeout=1800,
+            shell=False,
+            timeout=7200,
         )
 
         assert os.path.exists(raw_final_path), f"final_unnormalized.mp4 not found at {raw_final_path}"
@@ -2308,52 +2641,70 @@ class PodcastV2:
         if not self.episode_dir:
             raise ValueError("episode_dir is not set.")
 
-        schema = {
-            "type": "object",
-            "properties": {"segments": {"type": "array", "items": {"type": "string"}}},
-            "required": ["segments"],
-        }
-        system_prompt = (
-            "You are a script editor. Split the provided narration text into segments for a video podcast. "
-            "Rules:\n"
-            "- Divide the text into EXACTLY 20 segments. No more, no fewer.\n"
-            "- CRITICAL: DO NOT automatically translate the text to English. Keep the exact original language.\n"
-            "- Do NOT change, rephrase, or omit any content โ€” copy the exact words verbatim.\n"
-            "- Each segment should be a natural, coherent chunk.\n"
-            "- Return ONLY valid JSON matching the schema."
-        )
-        split_prompt = (
-            f"Split this narration into EXACTLY 20 segments. "
-            f"Do not translate. Do not change any wording.\n\nNARRATION:\n{text.strip()}"
-        )
+        os.makedirs(self.episode_dir, exist_ok=True)
         script_model = get_podcast_script_model()
-        result_json = generate_text_structured(split_prompt, system_prompt, schema, model_name=script_model)
-        try:
-            segments = json.loads(result_json).get("segments", [])
-            segments = [s.strip() for s in segments if s.strip()]
-        except (json.JSONDecodeError, AttributeError):
-            segments = []
 
-        if len(segments) != 20:
-            words = [w.strip() for w in text.split() if w.strip()]
-            chunk_size = math.ceil(max(1, len(words) / 20))
-            segments = [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)][:20]
-            while len(segments) < 20:
-                segments.append("...")
+        sections, cleaned_text = _parse_manual_script_sections(text)
+        format_qc = _script_format_qc(sections, source="manual_script")
+        length_qc = _script_length_qc(cleaned_text, source="manual_script")
+
+        with open(os.path.join(self.episode_dir, "manual_script_clean.txt"), "w", encoding="utf-8") as f:
+            f.write(cleaned_text)
+        with open(os.path.join(self.episode_dir, "script_sections.json"), "w", encoding="utf-8") as f:
+            json.dump(sections, f, ensure_ascii=False, indent=2)
+        with open(os.path.join(self.episode_dir, "script_format_qc.json"), "w", encoding="utf-8") as f:
+            json.dump(format_qc, f, ensure_ascii=False, indent=2)
+        with open(os.path.join(self.episode_dir, "script_length_qc.json"), "w", encoding="utf-8") as f:
+            json.dump(length_qc, f, ensure_ascii=False, indent=2)
+
+        if format_qc["blocking"]:
+            raise RuntimeError(
+                "Manual script format is not valid for PodcastV2 section mode: "
+                + " ".join(format_qc.get("notes", []))
+            )
+
+        if length_qc["blocking"]:
+            raise RuntimeError(
+                "Manual script is too short for PodcastV2 long-form mode: "
+                f"{length_qc['chars_no_space']} chars without whitespace "
+                f"(minimum {length_qc['minimum_chars_no_space']})."
+            )
+
+        visual_beats = _split_sections_into_visual_beats(sections)
+        if not visual_beats:
+            raise ValueError("Manual script did not produce any visual beats.")
+        with open(os.path.join(self.episode_dir, "visual_beats.json"), "w", encoding="utf-8") as f:
+            json.dump(visual_beats, f, ensure_ascii=False, indent=2)
 
         scenes = []
-        for narration in segments:
+        for beat in visual_beats:
+            narration = beat["narration"]
             image_prompt = _generate_image_prompt(narration, model_name=script_model)
             if self.style_prompt:
                 image_prompt = f"{self.style_prompt} {image_prompt}"
-            scene_title = _generate_scene_title(narration, model_name=script_model)
-            scenes.append({"scene_title": scene_title, "narration": narration, "image_prompt": image_prompt})
+            scene_title = beat.get("scene_title") or _generate_scene_title(narration, model_name=script_model)
+            scenes.append({
+                "scene_title": scene_title,
+                "narration": narration,
+                "image_prompt": image_prompt,
+                "section_index": beat.get("section_index"),
+                "section_title": beat.get("section_title"),
+                "visual_beat": beat.get("visual_beat"),
+                "visual_beat_in_section": beat.get("visual_beat_in_section"),
+                "section_beat_count": beat.get("section_beat_count"),
+                "chars_no_space": beat.get("chars_no_space"),
+            })
 
         script_path = os.path.join(self.episode_dir, "script.json")
-        os.makedirs(self.episode_dir, exist_ok=True)
         with open(script_path, "w", encoding="utf-8") as f:
             json.dump(scenes, f, ensure_ascii=False, indent=2)
         self._write_script_quality_report(scenes, source="manual_script")
+        print(
+            "Manual script mode: "
+            f"{len(sections)} sections, {len(scenes)} visual beats, "
+            f"{length_qc['chars_no_space']} chars without whitespace "
+            f"({length_qc['status']})."
+        )
         return scenes
 
     # ------------------------------------------------------------------

@@ -45,7 +45,10 @@ function cleanupStaged() {
 // ─── Composition selection ────────────────────────────────────────────────────
 const composition = rawProps.composition || "VideoShort";
 const isPodcast = composition === "VideoPodcast";
+const isClipShort = composition === "ClipShort";
 const fps = isPodcast ? 25 : 30;
+const concurrency = Number(process.env.REMOTION_CONCURRENCY || rawProps.concurrency || (isPodcast ? 2 : 8));
+const renderTimeoutMs = Number(process.env.REMOTION_RENDER_TIMEOUT_MS || rawProps.renderTimeoutMs || 7_200_000);
 
 // ─── Stage assets ─────────────────────────────────────────────────────────────
 const imagePaths = (rawProps.imagePaths || [])
@@ -53,8 +56,13 @@ const imagePaths = (rawProps.imagePaths || [])
   .filter(Boolean);
 
 const audioPath = stageAsset(rawProps.audioPath);
-if (!audioPath) {
+if (!audioPath && !isClipShort) {
   console.error("ERROR: Audio file not found:", rawProps.audioPath);
+  process.exit(1);
+}
+const videoPath = rawProps.videoPath ? stageAsset(rawProps.videoPath) : undefined;
+if (isClipShort && !videoPath) {
+  console.error("ERROR: Video file not found:", rawProps.videoPath);
   process.exit(1);
 }
 
@@ -89,6 +97,16 @@ if (isPodcast) {
     ...(rawProps.sceneAssetDurations && { sceneAssetDurations: rawProps.sceneAssetDurations }),
     ...(rawProps.glossaryEntries && { glossaryEntries: rawProps.glossaryEntries }),
   };
+} else if (isClipShort) {
+  resolvedProps = {
+    videoPath,
+    title: rawProps.title || "",
+    subtitle: rawProps.subtitle || "",
+    srtContent,
+    keywordHighlights: rawProps.keywordHighlights || [],
+    startAtSeconds: rawProps.startAtSeconds || 0,
+    durationInSeconds,
+  };
 } else {
   resolvedProps = {
     topic: rawProps.topic,
@@ -121,7 +139,7 @@ const cmd = [
   "--pixel-format=yuv420p",
   "--image-format=png",
   "--crf=18",
-  "--concurrency=8",
+  `--concurrency=${concurrency}`,
   "--overwrite",
 ].join(" ");
 
@@ -131,7 +149,7 @@ try {
     cwd: remotionDir,
     stdio: "inherit",
     shell: true,   // required on Windows: npx is a .cmd file
-    timeout: 1_800_000,  // 30-minute safety valve (podcasts have many more frames)
+    timeout: renderTimeoutMs,
   });
 } finally {
   cleanupStaged();
