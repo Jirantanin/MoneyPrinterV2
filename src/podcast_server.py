@@ -486,16 +486,42 @@ def _infer_step_states_from_dir(episode_dir: str) -> tuple[list, str, int]:
     metadata_path = os.path.join(episode_dir, "metadata.json")
     final_path = os.path.join(episode_dir, "final.mp4")
     thumbnail_path = os.path.join(episode_dir, "thumbnail.png")
-    scene_pngs = glob.glob(os.path.join(episode_dir, "scene_*.png"))
-    scene_wavs = glob.glob(os.path.join(episode_dir, "scene_*.wav"))
 
     if os.path.exists(script_path):
         step_states[0]["status"] = "done"
         current_step = max(current_step, 1)
-    if scene_pngs and scene_wavs:
+
+    script_data = _load_json_if_exists(script_path, []) if os.path.exists(script_path) else []
+    expected_scene_count = len(script_data) if isinstance(script_data, list) else 0
+    assets_ready = False
+    if expected_scene_count:
+        assets_ready = True
+        for index in range(expected_scene_count):
+            scene_num = str(index).zfill(2)
+            wav_path = os.path.join(episode_dir, f"scene_{scene_num}.wav")
+            has_audio = os.path.exists(wav_path)
+            has_visual = bool(
+                glob.glob(os.path.join(episode_dir, f"scene_{scene_num}_*.png"))
+                or glob.glob(os.path.join(episode_dir, f"scene_{scene_num}_*.mp4"))
+                or os.path.exists(os.path.join(episode_dir, f"scene_{scene_num}.png"))
+            )
+            if not has_audio or not has_visual:
+                assets_ready = False
+                break
+
+    if assets_ready:
         step_states[1]["status"] = "done"
         current_step = max(current_step, 2)
-    if os.path.exists(metadata_path):
+
+    metadata = _load_json_if_exists(metadata_path, {}) if os.path.exists(metadata_path) else {}
+    metadata_ready = bool(
+        isinstance(metadata, dict)
+        and str(metadata.get("title") or "").strip()
+        and str(metadata.get("description") or "").strip()
+        and isinstance(metadata.get("tags"), list)
+        and metadata.get("tags")
+    )
+    if metadata_ready:
         step_states[2]["status"] = "done"
         current_step = max(current_step, 3)
     thumbnail_prompt_path = os.path.join(episode_dir, "thumbnail_prompt.txt")
@@ -570,14 +596,14 @@ def _restore_episode_from_disk(episode_id: str) -> dict | None:
                 {
                     "name": disk_step.get("name") or _STEPS[index],
                     "status": "done" if disk_step.get("status") == "done" else persisted_step.get("status", disk_step.get("status", "pending")),
-                    "message": persisted_step.get("message") or "",
+                    "message": "" if disk_step.get("status") == "done" else persisted_step.get("message") or "",
                 }
             )
         step_states = merged_step_states
 
     persisted_status = persisted_state.get("status")
     if isinstance(persisted_status, str) and persisted_status in {"idle", "done", "uploaded", "error", "cancelled", "partial"}:
-        if persisted_status == "error" or _next_incomplete_step(step_states) is not None:
+        if _next_incomplete_step(step_states) is not None:
             status = persisted_status
 
     persisted_current_step = persisted_state.get("current_step")
@@ -738,7 +764,14 @@ class _StdoutCapture:
         self.original = original_stdout
 
     def write(self, text: str):
-        self.original.write(text)
+        try:
+            self.original.write(text)
+        except UnicodeEncodeError:
+            safe_text = text.encode(self.original.encoding or "utf-8", "replace").decode(
+                self.original.encoding or "utf-8",
+                "replace",
+            )
+            self.original.write(safe_text)
         text = text.strip()
         if text:
             ep = episodes.get(self.episode_id)
@@ -2842,6 +2875,6 @@ def launch_podcast_server():
     """Start the FastAPI server and open browser automatically."""
     import webbrowser
 
-    PORT = 8899
+    PORT = int(os.environ.get("PODCAST_STUDIO_PORT") or os.environ.get("PORT") or "8899")
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")

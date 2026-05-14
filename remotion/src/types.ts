@@ -39,3 +39,13 @@ export interface PodcastProps {
   sceneAssetDurations?: number[];
   glossaryEntries?: GlossaryEntry[];
 }
+
+export interface ClipShortProps {
+  videoPath: string;
+  title: string;
+  subtitle?: string;
+  srtContent: string;
+  keywordHighlights?: string[];
+  startAtSeconds: number;
+  durationInSeconds: number;
+}
