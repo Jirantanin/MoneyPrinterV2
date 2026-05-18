@@ -87,7 +87,11 @@ async def serve_ui_asset(filename: str):
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404)
     media_type = "application/javascript" if ext == ".js" else "text/css"
-    return FileResponse(file_path, media_type=media_type)
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +149,10 @@ _STEPS = [
 ]
 
 _TTS_SOURCES = {"edge", "elevenlabs", "gemini"}
+_TTS_TONE_PRESETS = {"natural_storyteller", "classic_documentary"}
+_DEFAULT_TTS_TONE_PRESET = "natural_storyteller"
+_PODCAST_V2_LANGUAGE = "Thai"
+_PODCAST_V2_TTS_SOURCE = "gemini"
 
 
 def _get_youtube_auth_status() -> dict:
@@ -210,6 +218,22 @@ def _normalize_tts_source(tts_source: str | None, language: str) -> str:
     return normalized_source
 
 
+def _normalize_tts_tone_preset(tts_tone_preset: str | None) -> str:
+    normalized = (tts_tone_preset or _DEFAULT_TTS_TONE_PRESET).strip().lower().replace("-", "_")
+    aliases = {
+        "natural": "natural_storyteller",
+        "normal": "natural_storyteller",
+        "storyteller": "natural_storyteller",
+        "classic": "classic_documentary",
+        "documentary": "classic_documentary",
+        "documentary_dread": "classic_documentary",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in _TTS_TONE_PRESETS:
+        return _DEFAULT_TTS_TONE_PRESET
+    return normalized
+
+
 def _apply_request_system_settings(request_data: dict | None) -> None:
     if not isinstance(request_data, dict):
         return
@@ -255,6 +279,14 @@ def _load_episode_script_data(ep: dict) -> list:
 
 def _is_v2_episode(ep: dict) -> bool:
     return (ep.get("episode_id") or "").startswith("podcast_v2_")
+
+
+def _apply_podcast_v2_voice_defaults(ep: dict) -> dict:
+    if _is_v2_episode(ep):
+        ep["language"] = _PODCAST_V2_LANGUAGE
+        ep["tts_source"] = _PODCAST_V2_TTS_SOURCE
+        ep["tts_tone_preset"] = _normalize_tts_tone_preset(ep.get("tts_tone_preset"))
+    return ep
 
 
 def _scene_asset_statuses(ep: dict) -> list[dict]:
@@ -457,9 +489,11 @@ def _persist_episode_state(episode_id: str) -> None:
             {
                 "topic": ep.get("topic", ""),
                 "creative_direction": ep.get("creative_direction", ""),
+                "visual_style": ep.get("visual_style", ""),
                 "language": ep.get("language", "English"),
                 "mode": ep.get("mode", "auto"),
                 "tts_source": ep.get("tts_source", _default_tts_source(ep.get("language", "English"))),
+                "tts_tone_preset": _normalize_tts_tone_preset(ep.get("tts_tone_preset")),
                 "script_mode": bool(ep.get("script_mode", False)),
                 "raw_script": ep.get("raw_script", ""),
                 "status": ep.get("status", "idle"),
@@ -615,6 +649,7 @@ def _restore_episode_from_disk(episode_id: str) -> dict | None:
         "podcast": None,
         "topic": persisted_state.get("topic") or metadata.get("title") or _topic_from_episode_id(episode_id),
         "creative_direction": persisted_state.get("creative_direction") or metadata.get("creative_direction", ""),
+        "visual_style": persisted_state.get("visual_style") or metadata.get("visual_style", ""),
         "language": persisted_state.get("language") or metadata.get("language", "English"),
         "mode": persisted_state.get("mode", "auto"),
         "script_mode": bool(persisted_state.get("script_mode", False)),
@@ -622,6 +657,9 @@ def _restore_episode_from_disk(episode_id: str) -> dict | None:
         "tts_source": _normalize_tts_source(
             persisted_state.get("tts_source") or metadata.get("tts_source"),
             persisted_state.get("language") or metadata.get("language", "English"),
+        ),
+        "tts_tone_preset": _normalize_tts_tone_preset(
+            persisted_state.get("tts_tone_preset") or metadata.get("tts_tone_preset")
         ),
         "status": status,
         "current_step": current_step,
@@ -636,6 +674,7 @@ def _restore_episode_from_disk(episode_id: str) -> dict | None:
         "logs": persisted_state.get("logs") if isinstance(persisted_state.get("logs"), list) else [],
         "thumbnail_gen_prompt": _load_text_if_exists(os.path.join(episode_dir, "thumbnail_prompt.txt")),
     }
+    _apply_podcast_v2_voice_defaults(ep)
     episodes[episode_id] = ep
     episode_events.setdefault(episode_id, [])
     episode_approvals.setdefault(episode_id, threading.Event())
@@ -645,7 +684,7 @@ def _restore_episode_from_disk(episode_id: str) -> dict | None:
 def _get_or_restore_episode(episode_id: str) -> dict | None:
     ep = episodes.get(episode_id)
     if ep:
-        return ep
+        return _apply_podcast_v2_voice_defaults(ep)
     return _restore_episode_from_disk(episode_id)
 
 
@@ -1140,6 +1179,8 @@ async def api_resume_episode(episode_id: str, request_data: dict | None = None):
     if mode not in ("auto", "step"):
         mode = "auto"
     ep["tts_source"] = _normalize_tts_source(body.get("tts_source", ep.get("tts_source")), ep.get("language", "English"))
+    ep["tts_tone_preset"] = _normalize_tts_tone_preset(body.get("tts_tone_preset", ep.get("tts_tone_preset")))
+    _apply_podcast_v2_voice_defaults(ep)
 
     ep["mode"] = mode
     ep["status"] = "idle"
@@ -1182,6 +1223,8 @@ async def api_redo_episode(episode_id: str, request_data: dict | None = None):
     if mode not in ("auto", "step"):
         mode = "auto"
     ep["tts_source"] = _normalize_tts_source(body.get("tts_source", ep.get("tts_source")), ep.get("language", "English"))
+    ep["tts_tone_preset"] = _normalize_tts_tone_preset(body.get("tts_tone_preset", ep.get("tts_tone_preset")))
+    _apply_podcast_v2_voice_defaults(ep)
 
     try:
         ep["mode"] = mode
@@ -1367,7 +1410,10 @@ async def api_episode(episode_id: str):
             "visual_style": ep.get("visual_style", ""),
             "language": ep.get("language", "English"),
             "tts_source": ep.get("tts_source", _default_tts_source(ep.get("language", "English"))),
+            "tts_tone_preset": _normalize_tts_tone_preset(ep.get("tts_tone_preset")),
             "mode": ep.get("mode", "auto"),
+            "script_mode": bool(ep.get("script_mode", False)),
+            "raw_script": ep.get("raw_script", ""),
             "status": ep["status"],
             "current_step": ep["current_step"],
             "step_states": ep["step_states"],
@@ -1523,8 +1569,9 @@ def _build_podcast_v2_instance(ep: dict):
 
     podcast = PodcastV2(
         topic=ep.get("topic", ""),
-        language=ep.get("language", "English"),
-        tts_source=ep.get("tts_source", _default_tts_source(ep.get("language", "English"))),
+        language=_PODCAST_V2_LANGUAGE,
+        tts_source=_PODCAST_V2_TTS_SOURCE,
+        tts_tone_preset=_normalize_tts_tone_preset(ep.get("tts_tone_preset")),
         creative_direction=ep.get("creative_direction", ""),
         visual_style=ep.get("visual_style", ""),
         script_mode=ep.get("script_mode", False),
@@ -1578,8 +1625,9 @@ def _run_v2_pipeline(episode_id: str, start_step: int = 0):
                 if os.path.exists(_episode_metadata_path):
                     with open(_episode_metadata_path, "r", encoding="utf-8") as _f:
                         _lang_meta = json.load(_f)
-                _lang_meta["language"] = ep.get("language", "English")
-                _lang_meta["tts_source"] = ep.get("tts_source", _default_tts_source(ep.get("language", "English")))
+                _lang_meta["language"] = _PODCAST_V2_LANGUAGE
+                _lang_meta["tts_source"] = _PODCAST_V2_TTS_SOURCE
+                _lang_meta["tts_tone_preset"] = _normalize_tts_tone_preset(ep.get("tts_tone_preset"))
                 _lang_meta["creative_direction"] = ep.get("creative_direction", "")
                 _lang_meta["visual_style"] = ep.get("visual_style", "")
                 with open(_episode_metadata_path, "w", encoding="utf-8") as _f:
@@ -1690,10 +1738,9 @@ async def api_v2_generate(request_data: dict):
     if mode not in ("auto", "step"):
         mode = "auto"
 
-    language = (request_data.get("language") or "English").strip()
-    if language not in ("Thai", "English"):
-        language = "English"
-    tts_source = _normalize_tts_source(request_data.get("tts_source"), language)
+    language = _PODCAST_V2_LANGUAGE
+    tts_source = _PODCAST_V2_TTS_SOURCE
+    tts_tone_preset = _normalize_tts_tone_preset(request_data.get("tts_tone_preset"))
     creative_direction = (request_data.get("creative_direction") or "").strip()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1707,6 +1754,7 @@ async def api_v2_generate(request_data: dict):
         "visual_style": (request_data.get("visual_style") or "").strip(),
         "language": language,
         "tts_source": tts_source,
+        "tts_tone_preset": tts_tone_preset,
         "mode": mode,
         "script_mode": script_mode,
         "raw_script": raw_script,
@@ -1755,8 +1803,9 @@ async def api_v2_upload(episode_id: str, request_data: dict = None):
         from classes.PodcastV2 import PodcastV2  # noqa: PLC0415
         podcast = PodcastV2(
             topic=ep.get("topic", ""),
-            language=ep.get("language", "English"),
-            tts_source=ep.get("tts_source", _default_tts_source(ep.get("language", "English"))),
+            language=_PODCAST_V2_LANGUAGE,
+            tts_source=_PODCAST_V2_TTS_SOURCE,
+            tts_tone_preset=_normalize_tts_tone_preset(ep.get("tts_tone_preset")),
             creative_direction=ep.get("creative_direction", ""),
         )
         podcast.episode_dir = ep.get("episode_dir", "")

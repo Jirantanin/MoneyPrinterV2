@@ -1,0 +1,34 @@
+# Ripgrep/search guardrails for this repo.
+#
+# .gitignore protects git status, but day-to-day search sometimes uses
+# --hidden, --no-ignore, or broad recursive tooling. Keep heavy runtime and
+# dependency trees out of ripgrep unless a task explicitly targets them.
+
+.git/
+.claude/
+.planning/
+.superpowers/
+.mp/
+venv/
+logs/
+Songs/
+
+__pycache__/
+*.py[cod]
+
+remotion/node_modules/
+remotion/public/assets/
+remotion/.render-props*.json
+
+space_automation/output/
+
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.png
+*.jpg
+*.jpeg
+*.webp

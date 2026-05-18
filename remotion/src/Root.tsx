@@ -3,7 +3,8 @@ import { Composition, registerRoot } from "remotion";
 import { VideoShort } from "./VideoShort";
 import { VideoPodcast } from "./VideoPodcast";
 import { ClipShort } from "./ClipShort";
-import { VideoProps, PodcastProps, ClipShortProps } from "./types";
+import { StillImageShort } from "./StillImageShort";
+import { VideoProps, PodcastProps, ClipShortProps, StillImageShortProps } from "./types";
 
 const DEFAULT_PROPS: VideoProps = {
   topic: "Test Topic",
@@ -32,6 +33,13 @@ const DEFAULT_CLIP_SHORT_PROPS: ClipShortProps = {
   keywordHighlights: [],
   startAtSeconds: 0,
   durationInSeconds: 45,
+};
+
+const DEFAULT_STILL_IMAGE_SHORT_PROPS: StillImageShortProps = {
+  imagePaths: [],
+  sceneDurations: [40],
+  overlayEvents: [],
+  durationInSeconds: 40,
 };
 
 const RemotionRoot: React.FC = () => {
@@ -71,6 +79,18 @@ const RemotionRoot: React.FC = () => {
         defaultProps={DEFAULT_CLIP_SHORT_PROPS}
         calculateMetadata={({ props }: any) => ({
           durationInFrames: Math.ceil((props as ClipShortProps).durationInSeconds * 30),
+        })}
+      />
+      <Composition
+        id="StillImageShort"
+        component={StillImageShort as any}
+        durationInFrames={DEFAULT_STILL_IMAGE_SHORT_PROPS.durationInSeconds * 30}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={DEFAULT_STILL_IMAGE_SHORT_PROPS}
+        calculateMetadata={({ props }: any) => ({
+          durationInFrames: Math.ceil((props as StillImageShortProps).durationInSeconds * 30),
         })}
       />
     </>

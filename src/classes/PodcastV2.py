@@ -45,6 +45,7 @@ from kling_provider import generate_video_from_image
 from llm_provider import generate_text, generate_text_structured
 from runtime_trace import append_trace, reset_trace_run_id, set_trace_run_id, summarize_run_cost
 from classes.Tts import TTS
+from classes.Tts import normalize_gemini_tts_tone_preset
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
@@ -129,22 +130,72 @@ def _build_topic_interpretation_block(topic: str, creative_direction: str) -> st
     return ""
 
 
+SCENE_FAITHFUL_DOCUMENTARY_STYLE_PROMPT = (
+    "Scene-faithful documentary still, natural grounded composition, "
+    "concrete subject and setting from the narration beat, realistic physical texture, "
+    "16:9 frame --"
+)
+
+_LEGACY_GLOBAL_STYLE_PREFIXES = (
+    "cinematic documentary illustration",
+    "cinematic realism, photorealistic",
+    "flat design illustration, kurzgesagt style",
+)
+
+_GLOBAL_STYLE_EFFECT_PHRASES = (
+    "dramatic lighting",
+    "volumetric fog",
+    "unreal engine 5 render style",
+    "unreal engine render style",
+    "unreal engine",
+    "glowing ui",
+    "glowing interface",
+    "hologram",
+    "holographic",
+    "light beams",
+    "beams of light",
+)
+
+_GENERATED_STYLE_BOILERPLATE = (
+    "cinematic realism",
+    "photorealistic",
+    "8k resolution",
+    "highly detailed",
+    "dramatic lighting",
+    "volumetric fog",
+    "unreal engine 5 render style",
+    "unreal engine render style",
+    "unreal engine",
+)
+
+_UNREQUESTED_EFFECT_PATTERNS = (
+    (r"\bglowing\s+(?:ui|interface|screen|display|control panel)s?\b", ("ui", "interface", "screen", "display", "control panel")),
+    (r"\bholograms?\b|\bholographic\b", ("hologram", "holographic", "projection")),
+    (r"\blight beams?\b|\bbeams of light\b|\bshafts of light\b", ("light beam", "beam of light", "laser", "sunbeam", "spotlight")),
+    (r"\bvolumetric fog\b|\bfoggy\b|\bfog\b", ("fog", "mist", "haze")),
+    (r"\bglowing\b|\bglow\b", ("glow", "glowing", "luminous", "bioluminescent", "radiation", "plasma")),
+)
+
+
 def _generate_image_prompt(narration: str, model_name: str | None = None) -> str:
     try:
         raw = generate_text(
-            "You generate concise visual image prompts for podcast scenes.\n"
+            "You generate concise, scene-faithful documentary image prompts for podcast scenes.\n"
             "IMPORTANT: The image prompt MUST be written in English only. Never use Thai or other non-Latin scripts in the image prompt.\n"
-            "If there is any text shown in the image, it must be in English.\n\n"
+            "If there is any text shown in the image, it must be in English.\n"
+            "Base the image only on the concrete narration beat: subject, place, action, scale, object, and physical clue.\n"
+            "Do not add generic mood or render boilerplate such as engine names, resolution tags, or stock cinematic effects.\n"
+            "Do not add holograms, light beams, glowing UI, fog, or glow unless the narration explicitly calls for them.\n\n"
             f"Write a vivid visual image prompt for this narration:\n{narration}\n\n"
             "Return only the image prompt, no explanation, no label, no preamble.",
             model_name=model_name,
         )
         result = raw.strip()
         if result:
-            return result
+            return _clean_scene_image_prompt(result, narration)
     except Exception:
         pass
-    return narration[:300]
+    return _fallback_scene_image_prompt(narration)
 
 
 def _generate_scene_title(narration: str, model_name: str | None = None) -> str:
@@ -447,6 +498,105 @@ def _compact_text(value, limit: int) -> str:
     return text[: max(0, limit - 1)].rstrip() + "..."
 
 
+def _cleanup_prompt_text(value: str) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    text = re.sub(r"\s+([,.;:])", r"\1", text)
+    text = re.sub(r"(?:\s*,\s*){2,}", ", ", text)
+    text = re.sub(r"\s+--\s*", " -- ", text)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    text = re.sub(r"^[,.;:\-\s]+", "", text)
+    text = re.sub(r"[,.;:\-\s]+$", "", text)
+    return text.strip()
+
+
+def _remove_prompt_phrases(value: str, phrases: tuple[str, ...]) -> str:
+    text = str(value or "")
+    for phrase in phrases:
+        text = re.sub(rf"\b{re.escape(phrase)}\b", "", text, flags=re.IGNORECASE)
+    return _cleanup_prompt_text(text)
+
+
+def _clean_global_style_prompt(style_prompt: str) -> str:
+    return _remove_prompt_phrases(style_prompt, _GLOBAL_STYLE_EFFECT_PHRASES)
+
+
+def _is_legacy_global_style(style_prompt: str) -> bool:
+    normalized = _cleanup_prompt_text(style_prompt).lower()
+    return any(normalized.startswith(prefix) for prefix in _LEGACY_GLOBAL_STYLE_PREFIXES)
+
+
+def _resolve_podcast_v2_style_prompt(visual_style: str, configured_style: str) -> str:
+    explicit_style = (visual_style or "").strip()
+    if explicit_style:
+        return _clean_global_style_prompt(explicit_style) or SCENE_FAITHFUL_DOCUMENTARY_STYLE_PROMPT
+
+    configured_style = (configured_style or "").strip()
+    if not configured_style or _is_legacy_global_style(configured_style):
+        return SCENE_FAITHFUL_DOCUMENTARY_STYLE_PROMPT
+    return _clean_global_style_prompt(configured_style) or SCENE_FAITHFUL_DOCUMENTARY_STYLE_PROMPT
+
+
+def _context_supports_visual_effect(context: str, allowed_terms: tuple[str, ...]) -> bool:
+    normalized = str(context or "").lower()
+    return any(term in normalized for term in allowed_terms)
+
+
+def _fallback_scene_image_prompt(narration: str) -> str:
+    moment = _compact_text(narration, 220)
+    if moment and moment.isascii():
+        return (
+            "Scene-faithful documentary still of the concrete subject, setting, "
+            f"and physical details implied by this narration beat: {moment}. "
+            "Natural composition, no text overlays, no logos, 16:9 frame."
+        )
+    return (
+        "Scene-faithful documentary still with a concrete subject, grounded setting, "
+        "natural composition, no text overlays, no logos, 16:9 frame."
+    )
+
+
+def _clean_scene_image_prompt(image_prompt: str, narration_context: str = "") -> str:
+    text = _remove_prompt_phrases(image_prompt, _GENERATED_STYLE_BOILERPLATE)
+    for pattern, allowed_terms in _UNREQUESTED_EFFECT_PATTERNS:
+        if not _context_supports_visual_effect(narration_context, allowed_terms):
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+    text = _cleanup_prompt_text(text)
+    return text or _fallback_scene_image_prompt(narration_context)
+
+
+def _strip_scene_style_prefix(image_prompt: str) -> str:
+    text = _cleanup_prompt_text(image_prompt)
+    if "--" in text:
+        _, subject = text.split("--", 1)
+        return _cleanup_prompt_text(subject)
+    return text
+
+
+def _compose_scene_image_prompt(style_prompt: str, narration: str, image_prompt: str) -> str:
+    style = _clean_global_style_prompt(style_prompt)
+    prompt = _clean_scene_image_prompt(image_prompt, narration)
+    if not style:
+        return prompt
+    return f"{style.rstrip(' -')} -- {prompt}"
+
+
+def _build_image_prompt_rules(style_prompt: str) -> str:
+    style_hint = _compact_text(_clean_global_style_prompt(style_prompt), 180)
+    rules = [
+        "Image prompt rules:",
+        "- Make image_prompt a scene-faithful documentary still for the exact narration beat.",
+        "- Describe concrete subject, setting, action, scale, object, and physical clue from that beat.",
+        "- Do not use generic render boilerplate, engine names, resolution tags, or stock mood effects.",
+        "- Do not add holograms, light beams, glowing UI, fog, or glow unless the beat explicitly requires them.",
+        "- Keep image_prompt in English only, with no text overlays and no logos.",
+    ]
+    if style_hint:
+        rules.append(
+            f"- Optional visual boundary: {style_hint}. Use it lightly; do not copy it verbatim into image_prompt."
+        )
+    return "\n".join(rules) + "\n"
+
+
 def _build_comprehension_contract_block(topic_brief: dict) -> str:
     """Return the listener-understanding constraints shared by beat and script prompts."""
     main_question = str(topic_brief.get("main_question") or topic_brief.get("topic_anchor") or "").strip()
@@ -602,7 +752,7 @@ def _script_format_qc(sections: list[dict], source: str = "manual_script") -> di
         "minimum_sections": SCRIPT_MODE_MIN_SECTIONS,
         "recommended_min_sections": SCRIPT_MODE_RECOMMENDED_MIN_SECTIONS,
         "recommended_max_sections": SCRIPT_MODE_RECOMMENDED_MAX_SECTIONS,
-        "required_heading_format": "## SECTION NAME",
+        "required_heading_format": "# SECTION NAME or ## SECTION NAME",
         "example": [
             "## COLD OPEN",
             "## PREMISE",
@@ -681,7 +831,7 @@ def _parse_manual_script_sections(raw_text: str) -> tuple[list[dict], str]:
         stripped = raw_line.strip()
         if not stripped:
             continue
-        heading = re.match(r"^\s{0,3}(#{1,3})\s+(.+)$", stripped)
+        heading = re.match(r"^\s{0,3}(#{1,3})\s*(.+)$", stripped)
         if heading:
             title = _manual_section_title(heading.group(2))
             if title.lower() in {"โครงเรื่อง", "outline"}:
@@ -822,16 +972,18 @@ class PodcastV2:
         visual_style: str = "",
         script_mode: bool = False,
         raw_script: str = "",
+        tts_tone_preset: str = "natural_storyteller",
     ) -> None:
         self.topic = topic
         self.language = language
         self.tts_source = (tts_source or "edge").lower()
+        self.tts_tone_preset = normalize_gemini_tts_tone_preset(tts_tone_preset)
         self.creative_direction = (creative_direction or "").strip()
         self.visual_style = (visual_style or "").strip()
         self.script_mode = script_mode
         self.raw_script = (raw_script or "").strip()
         self.narrator = get_podcast_narrator()
-        self.style_prompt = self.visual_style if self.visual_style else get_podcast_style_prompt()
+        self.style_prompt = _resolve_podcast_v2_style_prompt(self.visual_style, get_podcast_style_prompt())
         self.episode_dir: str = ""
         self.metadata: dict = {}
 
@@ -1814,6 +1966,7 @@ class PodcastV2:
             if not target_set or int(issue.get("scene", 0) or 0) in target_set
         ]
         comprehension_contract = _build_comprehension_contract_block(topic_brief)
+        image_prompt_rules = _build_image_prompt_rules(self.style_prompt)
         prompt = (
             f"Rewrite selected scenes in a video podcast script about: {self.topic}\n\n"
             f"Language: {self.language}\n"
@@ -1829,8 +1982,8 @@ class PodcastV2:
             "- Fix every QC issue directly.\n"
             "- Reduce concept overload before polishing wording.\n"
             "- Add or preserve listener checkpoint sentences when a scene follows dense material.\n"
-            "- Keep image_prompt in English only and concrete for visual generation.\n"
             "- Follow the target beat sheet.\n\n"
+            f"{image_prompt_rules}\n"
             f"TARGET BEATS JSON:\n{json.dumps(focused_beats, ensure_ascii=False)}\n\n"
             f"FOCUSED SCENES TO FIX:\n{json.dumps(focused_scenes, ensure_ascii=False)}\n\n"
             f"TARGET QC ISSUES JSON:\n{json.dumps(focused_issues, ensure_ascii=False)}"
@@ -1939,6 +2092,7 @@ class PodcastV2:
                     TTS().synthesize_gemini(
                         narration, output_file=audio_path,
                         scene_index=scene_index, total_scenes=total_scenes,
+                        tone_preset=self.tts_tone_preset,
                     )
                 elif self.language == "Thai":
                     TTS().synthesize(
@@ -2022,19 +2176,20 @@ class PodcastV2:
                 "instrument, texture, or physical clue from this moment. Avoid a wide scene."
             ),
             (
-                "metaphor",
-                "Create a symbolic visual metaphor for the idea in this moment. Use a new visual motif, "
-                "not the same literal subject as the anchor image."
+                "evidence",
+                "Create another concrete documentary visual from the same beat: a physical process, "
+                "scientific instrument, material clue, celestial body, geological feature, lab object, "
+                "or observable evidence. Do not use symbolic nature metaphors."
             ),
             (
                 "environment",
-                "Create a wide environmental or mood shot that supports this moment through place, "
-                "lighting, scale, or atmosphere. Focus on setting, not the anchor subject."
+                "Create a wide setting shot that supports this moment through place, scale, "
+                "weather, material, or spatial context only if the narration supports it."
             ),
             (
                 "human_scale",
                 "Create a human-scale visual anchor such as a lab, observatory, instrument, notebook, "
-                "screen, or silhouette reacting to the concept. Do not show a celebrity likeness."
+                "workbench, or silhouette reacting to the concept. Do not show a celebrity likeness."
             ),
             (
                 "texture",
@@ -2044,19 +2199,30 @@ class PodcastV2:
         ]
         role_name, role_direction = roles[(asset_idx - 1) % len(roles)]
         title = _compact_text(scene.get("scene_title", ""), 80)
-        anchor_prompt = _compact_text(scene.get("image_prompt", ""), 420)
+        title_line = f"Scene title: {title}\n" if title and title.isascii() else ""
         moment = _compact_text(narration_chunk or scene.get("narration", ""), 300)
+        moment_line = f"Narration moment to visualize: {moment}\n" if moment and moment.isascii() else ""
+        scene_context = _compact_text(
+            _strip_scene_style_prefix(
+                _clean_scene_image_prompt(scene.get("image_prompt", ""), scene.get("narration", ""))
+            ),
+            360,
+        )
         prompt = (
-            f"{anchor_prompt}\n\n"
+            "Scene-faithful documentary supporting visual, 16:9 frame.\n\n"
             f"Fallback asset role: {role_name}.\n"
             f"{role_direction}\n"
-            f"Scene title: {title}\n"
-            f"Narration moment to visualize: {moment}\n\n"
-            "Make this image visibly different from the scene anchor: change subject emphasis, "
-            "camera distance, composition, and visual motif. Do not recreate the same framing. "
-            "No text overlays, no logos, cinematic 16:9."
+            f"{title_line}"
+            f"Scene context: {scene_context}\n"
+            f"{moment_line}\n"
+            "Use only concrete details from this beat. Make this visibly different from the main scene "
+            "by changing subject scale, camera distance, composition, and visual motif. "
+            "Do not repeat the main scene composition. Do not introduce trees, forests, dirt paths, roads, "
+            "rivers, lone-tree symbols, or generic landscape metaphors unless they are explicitly named in "
+            "the scene context.\n\n"
+            "No text overlays, no logos."
         )
-        return role_name, prompt
+        return role_name, _clean_scene_image_prompt(prompt, moment)
 
     def generate_scene_assets(
         self,
@@ -2138,8 +2304,17 @@ class PodcastV2:
                 broll_found = False
                 if pexels_key:
                     from pexels_provider import search_pexels_video
+                    pexels_context = "\n".join(
+                        str(part or "")
+                        for part in (
+                            scene.get("scene_title", ""),
+                            scene.get("section_title", ""),
+                            scene.get("image_prompt", ""),
+                            chunks[asset_idx],
+                        )
+                    )
                     result = search_pexels_video(
-                        narration_chunk=chunks[asset_idx],
+                        narration_chunk=pexels_context,
                         api_key=pexels_key,
                         output_path=mp4_path,
                         time_per_asset=time_per_asset,
@@ -2504,15 +2679,12 @@ class PodcastV2:
                         )
                 raise ValueError(f"LLM returned invalid JSON after 3 attempts: {last_exc}") from last_exc
 
-            style_constraint = (
-                f"The image_prompt will be prefixed with this style: '{self.style_prompt[:80]}'. "
-                "Do NOT add keywords that contradict this style."
-            )
+            image_prompt_rules = _build_image_prompt_rules(self.style_prompt)
             common_scene_rules = (
                 f"Each scene needs a 'scene_title' (a short 1-4 word summarizing title in the same language as the podcast), "
                 f"a 'narration' (about {sentence_length} sentences of engaging spoken text), "
                 "and an 'image_prompt' (vivid visual description for an illustration, MUST be in English only).\n"
-                f"{style_constraint}\n"
+                f"{image_prompt_rules}"
                 f"{comprehension_contract}"
                 "Narration must sound like guided explanation, not an essay being read aloud.\n"
                 "Use listener checkpoint sentences such as 'At this point, remember only this...' after dense ideas.\n"
@@ -2593,11 +2765,13 @@ class PodcastV2:
             all_scenes = scenes_1 + scenes_2 + scenes_3
             assert len(all_scenes) == 20, f"Expected 20 scenes total, got {len(all_scenes)}"
 
-            style_prompt = self.style_prompt
             for scene in all_scenes:
                 if not scene.get("scene_title"):
                     scene["scene_title"] = _generate_scene_title(scene["narration"], model_name=script_model)
-                scene["image_prompt"] = f"{style_prompt} {scene['image_prompt']}"
+                scene["image_prompt"] = _clean_scene_image_prompt(
+                    scene.get("image_prompt", ""),
+                    scene.get("narration", ""),
+                )
 
             all_scenes, qc_report = self._prepare_script_scenes(
                 all_scenes,
@@ -2605,6 +2779,12 @@ class PodcastV2:
                 topic_brief=topic_brief,
                 script_model=script_model,
             )
+            for scene in all_scenes:
+                scene["image_prompt"] = _compose_scene_image_prompt(
+                    self.style_prompt,
+                    scene.get("narration", ""),
+                    scene.get("image_prompt", ""),
+                )
             script_path = os.path.join(episode_dir, "script.json")
             with open(script_path, "w", encoding="utf-8") as f:
                 json.dump(all_scenes, f, ensure_ascii=False, indent=2)
@@ -2680,8 +2860,7 @@ class PodcastV2:
         for beat in visual_beats:
             narration = beat["narration"]
             image_prompt = _generate_image_prompt(narration, model_name=script_model)
-            if self.style_prompt:
-                image_prompt = f"{self.style_prompt} {image_prompt}"
+            image_prompt = _compose_scene_image_prompt(self.style_prompt, narration, image_prompt)
             scene_title = beat.get("scene_title") or _generate_scene_title(narration, model_name=script_model)
             scenes.append({
                 "scene_title": scene_title,

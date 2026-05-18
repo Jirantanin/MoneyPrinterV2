@@ -49,3 +49,31 @@ export interface ClipShortProps {
   startAtSeconds: number;
   durationInSeconds: number;
 }
+
+export interface StillImageShortOverlay {
+  text: string;
+  startSeconds: number;
+  durationSeconds: number;
+  kind?: "headline" | "metric" | "label" | "question";
+  y?: number;
+  fontSize?: number;
+  color?: string;
+}
+
+export interface StillImageShortFooterCover {
+  enabled?: boolean;
+  title?: string;
+  subtitle?: string;
+  metric?: string;
+  height?: number;
+}
+
+export interface StillImageShortProps {
+  imagePaths: string[];
+  assetTypes?: AssetType[];
+  sceneDurations: number[];
+  overlayEvents?: StillImageShortOverlay[];
+  footerCover?: StillImageShortFooterCover;
+  audioPath?: string;
+  durationInSeconds: number;
+}

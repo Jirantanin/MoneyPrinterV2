@@ -46,6 +46,7 @@ function cleanupStaged() {
 const composition = rawProps.composition || "VideoShort";
 const isPodcast = composition === "VideoPodcast";
 const isClipShort = composition === "ClipShort";
+const isStillImageShort = composition === "StillImageShort";
 const fps = isPodcast ? 25 : 30;
 const concurrency = Number(process.env.REMOTION_CONCURRENCY || rawProps.concurrency || (isPodcast ? 2 : 8));
 const renderTimeoutMs = Number(process.env.REMOTION_RENDER_TIMEOUT_MS || rawProps.renderTimeoutMs || 7_200_000);
@@ -56,7 +57,7 @@ const imagePaths = (rawProps.imagePaths || [])
   .filter(Boolean);
 
 const audioPath = stageAsset(rawProps.audioPath);
-if (!audioPath && !isClipShort) {
+if (!audioPath && !isClipShort && !isStillImageShort) {
   console.error("ERROR: Audio file not found:", rawProps.audioPath);
   process.exit(1);
 }
@@ -105,6 +106,16 @@ if (isPodcast) {
     srtContent,
     keywordHighlights: rawProps.keywordHighlights || [],
     startAtSeconds: rawProps.startAtSeconds || 0,
+    durationInSeconds,
+  };
+} else if (isStillImageShort) {
+  resolvedProps = {
+    imagePaths,
+    assetTypes: rawProps.assetTypes || [],
+    sceneDurations: rawProps.sceneDurations || [],
+    overlayEvents: rawProps.overlayEvents || [],
+    footerCover: rawProps.footerCover,
+    audioPath,
     durationInSeconds,
   };
 } else {

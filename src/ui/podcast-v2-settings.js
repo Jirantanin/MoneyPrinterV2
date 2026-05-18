@@ -1,4 +1,10 @@
 const PODCAST_V2_SETTINGS_STORAGE_KEY = 'mpv2_podcast_v2_system_settings_v1';
+const PODCAST_V2_SCENE_FAITHFUL_STYLE_PROMPT = 'Scene-faithful documentary still, natural grounded composition, concrete subject and setting from the narration beat, realistic physical texture, 16:9 frame --';
+const PODCAST_V2_LEGACY_STYLE_PREFIXES = [
+  'cinematic documentary illustration',
+  'cinematic realism, photorealistic',
+  'flat design illustration, kurzgesagt style',
+];
 const PODCAST_V2_SETTINGS_DEFAULTS = {
   voices: {
     english_edge_voice: 'en-US-ChristopherNeural',
@@ -18,7 +24,7 @@ const PODCAST_V2_SETTINGS_DEFAULTS = {
   },
   prompting: {
     narrator_persona: 'A curious and engaging narrator who explains complex topics clearly',
-    podcast_style_prompt: 'cinematic documentary illustration, single coherent scene, no comic panels, no superhero styling, no exaggerated heroic poses, no named characters unless explicitly requested, restrained realistic composition, moody lighting, subtle texture, thoughtful atmosphere --',
+    podcast_style_prompt: PODCAST_V2_SCENE_FAITHFUL_STYLE_PROMPT,
     script_system_prompt: 'You are {narrator_name}, {narrator_persona}. /no_think Narrate in {language} language. Narrate in a compelling storytelling voice. Output ONLY valid JSON matching the provided schema. No markdown, no asterisks, no extra commentary.',
     metadata_system_prompt: 'You are a YouTube metadata writer for long-form podcast videos.\n\nWrite ALL metadata in {language}.\nIf {language} is Thai, the title, description, hashtags, and tags must be in Thai except unavoidable proper nouns.\nDo not switch to English unless the source topic itself is a proper noun, branded term, or official mission name.\n\nTopic: {topic}\nOpening narration: {opening_narration}\n\n{creative_direction_block}Generate YouTube metadata for this podcast episode. Return ONLY valid JSON with title, description, and tags.',
     thumbnail_system_prompt: 'YouTube thumbnail for a podcast episode about: {topic}. {creative_direction_block}Single dramatic scene, no comic panels, no borders, no gutters. Dark cinematic mood, bold colors, high contrast. One striking central subject that fills the frame. Photorealistic or painterly illustration style. No text, no logos.',
@@ -77,7 +83,13 @@ function deepMergePodcastSettingsV2(target, source) {
 function normalizePodcastSettingsV2(raw) {
   const source = raw?.settings || raw?.data || raw || {};
   const merged = clonePodcastSettingsV2();
-  return deepMergePodcastSettingsV2(merged, source);
+  deepMergePodcastSettingsV2(merged, source);
+  const stylePrompt = String(merged.prompting?.podcast_style_prompt || '').trim();
+  const normalizedStyle = stylePrompt.toLowerCase();
+  if (!stylePrompt || PODCAST_V2_LEGACY_STYLE_PREFIXES.some((prefix) => normalizedStyle.startsWith(prefix))) {
+    merged.prompting.podcast_style_prompt = PODCAST_V2_SCENE_FAITHFUL_STYLE_PROMPT;
+  }
+  return merged;
 }
 
 function getPodcastSettingByPathV2(settings, path) {
@@ -169,8 +181,7 @@ function updatePodcastSettingsSummaryV2(settings = podcastV2SystemSettings || PO
   if (!summary) return;
   const source = normalizePodcastSettingsV2(settings);
   summary.textContent =
-    `Defaults: EN ${source.voices.english_edge_voice} ${source.voices.english_edge_rate} · ` +
-    `TH ${source.voices.thai_edge_voice} ${source.voices.thai_edge_rate} · ` +
+    `PodcastV2: Thai + Gemini TTS · ` +
     `Script ${source.models.script_model} · Image ${source.models.image_model}`;
 }
 

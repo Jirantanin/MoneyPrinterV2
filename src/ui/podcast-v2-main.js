@@ -5,8 +5,9 @@ let episodeIdV2 = null;
 let pollIntervalV2 = null;
 let podcastEventSourceV2 = null;
 let isGeneratingV2 = false;
-let selectedLanguageV2 = 'English';
-let selectedTtsSourceV2 = 'edge';
+let selectedLanguageV2 = 'Thai';
+let selectedTtsSourceV2 = 'gemini';
+let selectedTtsTonePresetV2 = 'natural_storyteller';
 let currentEpisodeStatusV2 = 'idle';
 let isCurrentEpisodeUploadedV2 = false;
 let hasAutoLoadedEpisodeV2 = false;
@@ -121,6 +122,31 @@ function setModeValueV2(mode) {
   onModeChangeV2();
 }
 
+function setInputModeValueV2(isScript) {
+  const toggle = document.getElementById('inputModeToggleV2');
+  if (!toggle) return;
+  toggle.checked = !!isScript;
+  onInputModeChangeV2();
+}
+
+function setVisualStyleValueV2(value) {
+  const select = document.getElementById('visualStyleSelectV2');
+  if (!select) return;
+  const visualStyle = String(value || '').trim();
+  if (!visualStyle) {
+    select.selectedIndex = 0;
+    return;
+  }
+  const exists = Array.from(select.options).some((option) => option.value === visualStyle);
+  if (!exists) {
+    const option = document.createElement('option');
+    option.value = visualStyle;
+    option.textContent = 'Loaded episode style';
+    select.appendChild(option);
+  }
+  select.value = visualStyle;
+}
+
 function newEpisodeV2() {
   episodeIdV2 = null;
   document.getElementById('topicInputV2').value = '';
@@ -128,9 +154,12 @@ function newEpisodeV2() {
   document.getElementById('scriptTitleInputV2').value = '';
   document.getElementById('scriptInputV2').value = '';
   resetUIV2();
-  setLanguageV2('English');
-  setTtsSourceV2('edge');
+  setLanguageV2('Thai');
+  setTtsSourceV2('gemini');
+  setTtsTonePresetV2('natural_storyteller');
   setModeValueV2('auto');
+  setInputModeValueV2(false);
+  setVisualStyleValueV2('');
   const isScript = document.getElementById('inputModeToggleV2').checked;
   document.getElementById(isScript ? 'scriptTitleInputV2' : 'topicInputV2').focus();
 }
@@ -188,9 +217,12 @@ function applyEpisodeStateV2(data) {
   currentEpisodeStatusV2 = data.status || 'idle';
   isCurrentEpisodeUploadedV2 = !!data.is_uploaded;
   episodeIdV2 = data.episode_id || episodeIdV2;
-  setLanguageV2(data.language || data.metadata?.language || 'English');
-  setTtsSourceV2(data.tts_source || data.metadata?.tts_source || 'edge');
+  setLanguageV2(data.language || data.metadata?.language || 'Thai');
+  setTtsSourceV2(data.tts_source || data.metadata?.tts_source || 'gemini');
+  setTtsTonePresetV2(data.tts_tone_preset || data.metadata?.tts_tone_preset || 'natural_storyteller');
   setModeValueV2(data.mode || 'auto');
+  const isScriptMode = !!data.script_mode;
+  setInputModeValueV2(isScriptMode);
   currentSceneCountV2 = data.scene_count || (Array.isArray(data.scenes) ? data.scenes.length : 0);
   currentAssetStatusesV2 = Array.isArray(data.asset_statuses) ? data.asset_statuses : [];
   currentScriptQcV2 = data.script_qc || {};
@@ -204,10 +236,12 @@ function applyEpisodeStateV2(data) {
   renderImageGalleryV2();
 
   document.getElementById('topicInputV2').value = data.topic || '';
+  document.getElementById('scriptTitleInputV2').value = data.metadata?.title || data.topic || '';
+  document.getElementById('scriptInputV2').value = data.raw_script || (Array.isArray(data.scenes) ? data.scenes.join('\n\n') : '');
   currentCreativeDirectionV2 = data.creative_direction || '';
   document.getElementById('creativeDirectionInputV2').value = currentCreativeDirectionV2;
   if (data.visual_style !== undefined) {
-    document.getElementById('visualStyleSelectV2').value = data.visual_style;
+    setVisualStyleValueV2(data.visual_style);
   }
   if (data.scenes && data.scenes.length > 0) renderScriptV2(data.scenes);
   else document.getElementById('scriptPanelV2').innerHTML =
@@ -246,30 +280,54 @@ function applyEpisodeStateV2(data) {
 }
 
 function setLanguageV2(lang) {
-  selectedLanguageV2 = lang;
+  selectedLanguageV2 = 'Thai';
   const enBtn = document.getElementById('langBtnEnV2');
   const thBtn = document.getElementById('langBtnThV2');
-  if (lang === 'Thai') {
+  if (enBtn && thBtn) {
     enBtn.classList.remove('bg-overlay', 'text-highlight');
     enBtn.classList.add('bg-charcoal', 'text-subtext');
     thBtn.classList.remove('bg-charcoal', 'text-subtext');
     thBtn.classList.add('bg-overlay', 'text-highlight');
-  } else {
-    thBtn.classList.remove('bg-overlay', 'text-highlight');
-    thBtn.classList.add('bg-charcoal', 'text-subtext');
-    enBtn.classList.remove('bg-charcoal', 'text-subtext');
-    enBtn.classList.add('bg-overlay', 'text-highlight');
   }
   syncTtsSourceUIV2();
 }
 
 function setTtsSourceV2(source) {
-  if (selectedLanguageV2 !== 'Thai' && (source === 'elevenlabs' || source === 'gemini')) {
-    selectedTtsSourceV2 = 'edge';
-  } else {
-    selectedTtsSourceV2 = source;
-  }
+  selectedTtsSourceV2 = 'gemini';
   syncTtsSourceUIV2();
+}
+
+function normalizeTtsTonePresetV2(preset) {
+  const normalized = String(preset || 'natural_storyteller').trim().toLowerCase().replace(/-/g, '_');
+  if (['classic', 'documentary', 'documentary_dread', 'classic_documentary'].includes(normalized)) {
+    return 'classic_documentary';
+  }
+  return 'natural_storyteller';
+}
+
+function setTtsTonePresetV2(preset) {
+  selectedTtsTonePresetV2 = normalizeTtsTonePresetV2(preset);
+  syncTtsTonePresetUIV2();
+}
+
+function syncTtsTonePresetUIV2() {
+  const naturalBtn = document.getElementById('ttsToneNaturalBtnV2');
+  const classicBtn = document.getElementById('ttsToneClassicBtnV2');
+  const hint = document.getElementById('ttsToneHintV2');
+  if (!naturalBtn || !classicBtn || !hint) return;
+
+  const isNatural = selectedTtsTonePresetV2 === 'natural_storyteller';
+  naturalBtn.classList.toggle('bg-overlay', isNatural);
+  naturalBtn.classList.toggle('text-highlight', isNatural);
+  naturalBtn.classList.toggle('bg-charcoal', !isNatural);
+  naturalBtn.classList.toggle('text-subtext', !isNatural);
+
+  classicBtn.classList.toggle('bg-overlay', !isNatural);
+  classicBtn.classList.toggle('text-highlight', !isNatural);
+  classicBtn.classList.toggle('bg-charcoal', isNatural);
+  classicBtn.classList.toggle('text-subtext', isNatural);
+
+  hint.textContent = isNatural ? 'Standard documentary' : 'Classic documentary';
 }
 
 function syncTtsSourceUIV2() {
@@ -277,12 +335,11 @@ function syncTtsSourceUIV2() {
   const elevenBtn = document.getElementById('ttsBtnElevenLabsV2');
   const geminiBtn = document.getElementById('ttsBtnGeminiV2');
   const hint = document.getElementById('ttsSourceHintV2');
+  selectedLanguageV2 = 'Thai';
+  selectedTtsSourceV2 = 'gemini';
   if (!edgeBtn || !elevenBtn || !hint) return;
 
-  const thaiEnabled = selectedLanguageV2 === 'Thai';
-  if (!thaiEnabled) {
-    selectedTtsSourceV2 = 'edge';
-  }
+  const thaiEnabled = true;
 
   edgeBtn.disabled = false;
   edgeBtn.classList.toggle('bg-overlay', selectedTtsSourceV2 === 'edge');
@@ -409,12 +466,17 @@ function onPublishModeChangeV2() {
   }
 }
 
+window.setTtsTonePresetV2 = setTtsTonePresetV2;
+window.setLanguageV2 = setLanguageV2;
+window.setTtsSourceV2 = setTtsSourceV2;
+
 // -------------------------------------------------------------------------
 // Upload
 // -------------------------------------------------------------------------
 window.addEventListener('load', () => {
   renderStepsPanelV2();
   syncTtsSourceUIV2();
+  syncTtsTonePresetUIV2();
   initPodcastSettingsTooltipsV2();
   loadPodcastSettingsV2();
   fetchEpisodeLibraryV2();

@@ -30,7 +30,8 @@ function connectEpisodeStreamV2(targetEpisodeId) {
 async function startGenerationV2() {
   const isScript = document.getElementById('inputModeToggleV2').checked;
 
-  let topic, creativeDirection, rawScript, scriptTitle, visualStyle;
+  let topic, creativeDirection, rawScript, scriptTitle;
+  const visualStyle = document.getElementById('visualStyleSelectV2')?.value || '';
   if (isScript) {
     rawScript = document.getElementById('scriptInputV2').value.trim();
     scriptTitle = document.getElementById('scriptTitleInputV2').value.trim() || 'Custom Script';
@@ -38,13 +39,13 @@ async function startGenerationV2() {
   } else {
     topic = document.getElementById('topicInputV2').value.trim();
     creativeDirection = document.getElementById('creativeDirectionInputV2').value.trim();
-    visualStyle = document.getElementById('visualStyleSelectV2').value;
     if (!topic || isGeneratingV2) return;
   }
 
   const mode = document.getElementById('modeToggleV2').checked ? 'step' : 'auto';
   const language = selectedLanguageV2;
   const ttsSource = selectedTtsSourceV2;
+  const ttsTonePreset = selectedTtsTonePresetV2;
 
   isGeneratingV2 = true;
   shouldLoadVideoPreviewV2 = true;
@@ -71,8 +72,8 @@ async function startGenerationV2() {
   }
 
   const payload = isScript
-    ? { script_mode: true, raw_script: rawScript, title: scriptTitle, mode, language, tts_source: ttsSource, system_settings: systemSettingsPayload }
-    : { topic, creative_direction: creativeDirection, visual_style: visualStyle, mode, language, tts_source: ttsSource, system_settings: systemSettingsPayload };
+    ? { script_mode: true, raw_script: rawScript, title: scriptTitle, visual_style: visualStyle, mode, language, tts_source: ttsSource, tts_tone_preset: ttsTonePreset, system_settings: systemSettingsPayload }
+    : { topic, creative_direction: creativeDirection, visual_style: visualStyle, mode, language, tts_source: ttsSource, tts_tone_preset: ttsTonePreset, system_settings: systemSettingsPayload };
 
   let res;
   try {
@@ -120,6 +121,7 @@ async function resumeGenerationV2() {
       body: JSON.stringify({
         mode,
         tts_source: selectedTtsSourceV2,
+        tts_tone_preset: selectedTtsTonePresetV2,
         system_settings: getPodcastSystemSettingsPayloadV2(),
       }),
     });
@@ -173,6 +175,7 @@ async function redoFromStepV2(stepIndex) {
         step: stepIndex,
         mode,
         tts_source: selectedTtsSourceV2,
+        tts_tone_preset: selectedTtsTonePresetV2,
         system_settings: getPodcastSystemSettingsPayloadV2(),
       }),
     });

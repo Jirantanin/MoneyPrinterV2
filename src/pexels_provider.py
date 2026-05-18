@@ -29,7 +29,7 @@ PEXELS_USE_LLM_KEYWORDS = os.environ.get("PEXELS_USE_LLM_KEYWORDS", "").strip().
 }
 
 
-def _keyword_from_narration(narration_chunk: str) -> str:
+def _keyword_from_narration(narration_chunk: str) -> str | None:
     """Fast local stock-footage keyword selection.
 
     The asset pipeline must never wait indefinitely on an extra LLM call just
@@ -37,29 +37,62 @@ def _keyword_from_narration(narration_chunk: str) -> str:
     to AI-generated images.
     """
     text = str(narration_chunk or "").lower()
+    non_stock_markers = {
+        "diagram", "chart", "cutaway", "cross-section", "visualization",
+        "heat map", "world map", "whiteboard", "chalkboard", "timeline",
+        "comparison", "inset", "labeled", "labelled", "data poster",
+        "equation", "orbital diagram", "split scientific",
+    }
+    if any(marker in text for marker in non_stock_markers):
+        return None
+
     keyword_rules = [
+        (("ดวงจันทร์", "moon", "lunar", "apollo"), "moon night sky"),
+        (("ดาวอังคาร", "mars"), "mars planet space"),
+        (("ดาวเคราะห์", "โลก", "earth", "planet", "orbit", "space"), "earth from space"),
+        (("ดวงอาทิตย์", "sun", "solar", "red giant"), "sun sky"),
+        (("ท้องฟ้า", "ดวงดาว", "milky way", "night sky", "star-filled", "stars"), "night sky stars"),
+        (("ภูเขาไฟ", "volcano", "volcanic", "lava", "magma"), "volcano eruption"),
+        (("น้ำแข็ง", "glacier", "ice", "snowball"), "glacier ice"),
+        (("ทะเลทราย", "แห้งแล้ง", "desert", "scorched", "barren", "dry clay"), "desert heat"),
+        (("ปะการัง", "coral"), "coral reef"),
+        (("แบคทีเรีย", "microbe", "bacteria", "cyanobacteria", "microscope"), "microscope laboratory"),
         (("lab", "research", "scientist", "harvard", "yamanaka", "cell", "protein", "senolytic"), "scientist laboratory"),
         (("biology", "biological", "aging", "longevity", "immortality", "medical", "medicine"), "medical research laboratory"),
         (("bezos", "billionaire", "wealth", "capital", "investor", "market", "economy"), "business finance city"),
         (("population", "birth", "demographic", "family", "generation"), "crowded city people"),
-        (("earth", "climate", "resource", "planet", "footprint"), "earth from space"),
         (("brain", "memory", "identity", "mind", "neuroscience"), "human brain science"),
         (("office", "worker", "career", "job", "company"), "modern office workers"),
         (("future", "technology", "civilization", "society"), "future technology city"),
+        (("forest", "trees", "rocky landscape", "cliff", "horizon"), "wide landscape nature"),
     ]
     for needles, keyword in keyword_rules:
         if any(needle in text for needle in needles):
             return keyword
 
     ascii_words = re.findall(r"\b[a-z][a-z0-9]{2,}\b", text)
+    boilerplate = {
+        "scene", "faithful", "documentary", "still", "natural", "grounded",
+        "composition", "concrete", "subject", "setting", "narration", "beat",
+        "realistic", "physical", "texture", "frame", "wide", "angle", "view",
+        "visual", "supporting", "moment", "scale", "camera", "distance",
+        "effects", "logos", "text", "overlay", "title", "section", "asset",
+    }
     stopwords = {
         "the", "and", "for", "that", "this", "with", "from", "into", "are",
         "but", "not", "you", "your", "can", "will", "would", "could",
     }
-    words = [word for word in ascii_words if word not in stopwords]
-    if words:
+    generic = {
+        "science", "technology", "hypothesis", "giant", "subscribe",
+        "documentary", "cinematic", "data", "future",
+    }
+    words = [
+        word for word in ascii_words
+        if word not in stopwords and word not in boilerplate and word not in generic
+    ]
+    if len(words) >= 2:
         return " ".join(words[:3])[:60]
-    return "science technology"
+    return None
 
 
 def search_pexels_video(
@@ -96,6 +129,7 @@ def search_pexels_video(
             keyword = re.sub(r"[^a-z0-9 ]", "", raw_kw.strip().lower()).strip()[:60]
         if not keyword:
             return None
+        print(f"  Pexels keyword: {keyword}")
 
         search_url = "https://api.pexels.com/videos/search"
         params = {
