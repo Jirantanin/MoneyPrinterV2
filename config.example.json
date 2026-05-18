@@ -59,6 +59,12 @@
   "podcast_thumbnail_system_prompt": "YouTube thumbnail for a podcast episode about: {topic}. {creative_direction_block}Single dramatic scene, no comic panels, no borders, no gutters. Dark cinematic mood, bold colors, high contrast. One striking central subject that fills the frame. Photorealistic or painterly illustration style. No text, no logos.",
   "podcast_image_retry_count": 3,
   "podcast_audio_retry_count": 3,
+  "podcast_outro_hold_seconds": 3,
+  "podcast_background_bed_enabled": true,
+  "podcast_background_bed_path": "Songs/hope.mp3",
+  "podcast_background_bed_volume_db": -10,
+  "podcast_background_bed_ducking_ratio": 2,
+  "podcast_background_bed_fade_seconds": 2,
   "podcast_settings": {
     "voices": {
       "english_edge_voice": "en-US-ChristopherNeural",
@@ -90,7 +96,15 @@
     "advanced": {
       "image_retry_count": 3,
       "audio_retry_count": 3,
-      "script_sentence_length": 4
+      "script_sentence_length": 4,
+      "outro_hold_seconds": 3
+    },
+    "audio": {
+      "background_bed_enabled": true,
+      "background_bed_path": "Songs/hope.mp3",
+      "background_bed_volume_db": -10,
+      "background_bed_ducking_ratio": 2,
+      "background_bed_fade_seconds": 2
     }
   }
 }

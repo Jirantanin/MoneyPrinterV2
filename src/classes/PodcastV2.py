@@ -24,9 +24,11 @@ from datetime import datetime
 
 from config import (
     ROOT_DIR,
+    get_podcast_background_bed_settings,
     get_podcast_audio_retry_count,
     get_podcast_image_retry_count,
     get_podcast_narrator,
+    get_podcast_outro_hold_seconds,
     get_podcast_script_model,
     get_podcast_metadata_system_prompt,
     get_podcast_script_system_prompt,
@@ -498,6 +500,39 @@ def _compact_text(value, limit: int) -> str:
     return text[: max(0, limit - 1)].rstrip() + "..."
 
 
+_SCENE_PART_SUFFIX_RE = re.compile(r"\s+\d+\s*/\s*\d+\s*$")
+_GENERIC_SECTION_TITLES = {"opening", "script"}
+
+
+def _clean_display_title(value, limit: int = 100) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    text = _SCENE_PART_SUFFIX_RE.sub("", text).strip()
+    return _compact_text(text, limit)
+
+
+def _scene_display_title(scene: dict, fallback: str = "") -> str:
+    section_title = _clean_display_title(scene.get("section_title", ""))
+    scene_title = _clean_display_title(scene.get("scene_title", ""))
+    if section_title and section_title.casefold() not in _GENERIC_SECTION_TITLES:
+        return section_title
+    return scene_title or section_title or fallback
+
+
+def _dedupe_consecutive_display_titles(titles: list[str]) -> list[str]:
+    display_titles: list[str] = []
+    previous_key = ""
+    for title in titles:
+        cleaned = _clean_display_title(title)
+        key = cleaned.casefold()
+        if cleaned and key == previous_key:
+            display_titles.append("")
+            continue
+        display_titles.append(cleaned)
+        if cleaned:
+            previous_key = key
+    return display_titles
+
+
 def _cleanup_prompt_text(value: str) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     text = re.sub(r"\s+([,.;:])", r"\1", text)
@@ -935,8 +970,6 @@ def _split_sections_into_visual_beats(sections: list[dict]) -> list[dict]:
             title = ""
             if not single_generic_section:
                 title = str(section.get("section_title") or "Script").strip()
-                if total_section_beats > 1:
-                    title = f"{title} {beat_index}/{total_section_beats}"
             beats.append({
                 "section_index": section.get("section_index", len(beats) + 1),
                 "section_title": section.get("section_title", "Script"),
@@ -1692,11 +1725,15 @@ class PodcastV2:
 
         lines = ["Chapters:"]
         elapsed = 0.0
+        previous_title_key = ""
         for index, scene in enumerate(scenes):
-            scene_title = str(scene.get("scene_title", "")).strip() or f"Scene {index + 1}"
-            lines.append(f"{self._format_timestamp(elapsed)} {scene_title}")
+            scene_title = _scene_display_title(scene, fallback=f"Scene {index + 1}")
+            title_key = scene_title.casefold()
+            if scene_title and title_key != previous_title_key:
+                lines.append(f"{self._format_timestamp(elapsed)} {scene_title}")
+                previous_title_key = title_key
             elapsed += self._scene_duration_seconds(index)
-        return "\n".join(lines)
+        return "\n".join(lines) if len(lines) > 1 else ""
 
     def _build_glossary_entries(self, scenes: list[dict], scene_durations: list[float]) -> list[dict]:
         """Create one-time glossary overlays for hard terms found in narration."""
@@ -1733,6 +1770,118 @@ class PodcastV2:
             elapsed += duration
 
         return entries
+
+    def _resolve_background_bed_path(self, configured_path: str) -> str:
+        path = str(configured_path or "").strip().strip('"')
+        if not path:
+            return ""
+        if os.path.isabs(path):
+            return path
+        return os.path.abspath(os.path.join(ROOT_DIR, path))
+
+    def _find_background_bed_candidate(self) -> str:
+        songs_dir = os.path.join(ROOT_DIR, "Songs")
+        if not os.path.isdir(songs_dir):
+            return ""
+        candidates = []
+        for name in os.listdir(songs_dir):
+            if not name.lower().endswith((".mp3", ".wav", ".m4a", ".ogg", ".flac")):
+                continue
+            path = os.path.join(songs_dir, name)
+            if os.path.isfile(path):
+                candidates.append(path)
+        if not candidates:
+            return ""
+        candidates.sort(key=lambda item: (os.path.getmtime(item), os.path.getsize(item)), reverse=True)
+        return candidates[0]
+
+    def _mix_background_bed(
+        self,
+        narration_audio: str,
+        total_duration: float,
+        narration_pad_seconds: float = 0.0,
+    ) -> str:
+        """Create a quiet ducked audio bed under narration when configured."""
+        settings = get_podcast_background_bed_settings()
+        enabled = bool(settings.get("background_bed_enabled", False))
+        env_enabled = os.environ.get("PODCAST_BACKGROUND_BED_ENABLED")
+        if env_enabled is not None:
+            enabled = env_enabled.strip().lower() in {"1", "true", "yes", "on"}
+        if not enabled:
+            return narration_audio
+
+        bed_path = os.environ.get("PODCAST_BACKGROUND_BED_PATH") or settings.get("background_bed_path", "")
+        bed_path = self._resolve_background_bed_path(str(bed_path))
+        if not bed_path or not os.path.exists(bed_path):
+            fallback_bed_path = self._find_background_bed_candidate()
+            if not fallback_bed_path:
+                print("Background bed skipped: audio file not found.")
+                return narration_audio
+            print(f"Background bed path not found; using latest Songs file: {fallback_bed_path}")
+            bed_path = fallback_bed_path
+
+        output_path = os.path.join(self.episode_dir, "merged_audio_with_bed.wav")
+        if os.path.exists(output_path):
+            os.remove(output_path)
+
+        volume_db = float(settings.get("background_bed_volume_db", -10.0))
+        ducking_ratio = float(settings.get("background_bed_ducking_ratio", 2.0))
+        fade_seconds = float(settings.get("background_bed_fade_seconds", 2.0))
+        fade_seconds = max(0.0, min(fade_seconds, max(0.0, total_duration / 2)))
+        fade_out_start = max(0.0, total_duration - fade_seconds)
+
+        bed_filters = [
+            f"atrim=0:{total_duration:.3f}",
+            "asetpts=PTS-STARTPTS",
+            f"volume={volume_db:.1f}dB",
+        ]
+        if fade_seconds > 0:
+            bed_filters.append(f"afade=t=in:st=0:d={fade_seconds:.3f}")
+            bed_filters.append(f"afade=t=out:st={fade_out_start:.3f}:d={fade_seconds:.3f}")
+
+        filter_complex = (
+            f"[0:a]apad=pad_dur={max(0.0, narration_pad_seconds):.3f},"
+            "asetpts=PTS-STARTPTS,asplit=2[narr_mix][narr_side];"
+            f"[1:a]{','.join(bed_filters)}[bed];"
+            f"[bed][narr_side]sidechaincompress=threshold=0.025:ratio={ducking_ratio:.2f}:"
+            "attack=80:release=900:makeup=1[ducked];"
+            "[narr_mix][ducked]amix=inputs=2:duration=first:normalize=0,"
+            "alimiter=limit=0.95[out]"
+        )
+
+        print(f"Mixing background bed: {bed_path}")
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    narration_audio,
+                    "-stream_loop",
+                    "-1",
+                    "-i",
+                    bed_path,
+                    "-filter_complex",
+                    filter_complex,
+                    "-map",
+                    "[out]",
+                    "-c:a",
+                    "pcm_s16le",
+                    output_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            print(f"Background bed skipped: ffmpeg mix failed ({exc}).")
+            if exc.stderr:
+                print(exc.stderr[-1200:])
+            return narration_audio
+        if not os.path.exists(output_path) or os.path.getsize(output_path) <= 100_000:
+            print("Background bed skipped: mix output was not valid.")
+            return narration_audio
+        return output_path
 
     def _normalize_rendered_audio(self, input_path: str, output_path: str) -> None:
         """Normalize podcast render loudness without re-encoding video."""
@@ -2494,7 +2643,9 @@ class PodcastV2:
                 scene_asset_types.append(asset_type)
             scene_image_counts.append(len(scene_assets))
 
-        total_duration = sum(scene_durations)
+        narration_duration = sum(scene_durations)
+        outro_hold_seconds = max(0.0, float(get_podcast_outro_hold_seconds()))
+        render_duration = narration_duration + outro_hold_seconds
 
         # Merge audio
         merged_audio = os.path.join(self.episode_dir, "merged_audio.wav")
@@ -2510,25 +2661,39 @@ class PodcastV2:
                  "-i", concat_audio_path, "-c", "copy", merged_audio],
                 capture_output=True, text=True, check=True,
             )
+        render_audio = self._mix_background_bed(
+            merged_audio,
+            render_duration,
+            narration_pad_seconds=outro_hold_seconds,
+        )
 
-        # Build per-asset durations: each asset in a scene shares equal time
+        render_scene_durations = list(scene_durations)
+        if outro_hold_seconds > 0 and render_scene_durations:
+            render_scene_durations[-1] += outro_hold_seconds
+
+        # Build per-asset durations: each asset in a scene shares equal time,
+        # then the final asset holds for the outro end-screen window.
         scene_asset_durations: list[float] = []
         for i, count in enumerate(scene_image_counts):
             per_asset = scene_durations[i] / count
             scene_asset_durations.extend([per_asset] * count)
+        if outro_hold_seconds > 0 and scene_asset_durations:
+            scene_asset_durations[-1] += outro_hold_seconds
 
         from pathlib import Path
         remotion_dir = Path(ROOT_DIR) / "remotion"
-        scene_titles = [s.get("scene_title", "") for s in scenes][:total]
+        scene_titles = _dedupe_consecutive_display_titles(
+            [_scene_display_title(s) for s in scenes[:total]]
+        )
         glossary_entries = self._build_glossary_entries(scenes, scene_durations)
 
         props = {
             "composition": "VideoPodcast",
             "imagePaths": all_image_paths,
-            "audioPath": os.path.abspath(merged_audio),
-            "sceneDurations": scene_durations,
+            "audioPath": os.path.abspath(render_audio),
+            "sceneDurations": render_scene_durations,
             "sceneTitles": scene_titles,
-            "durationInSeconds": total_duration,
+            "durationInSeconds": render_duration,
             "outputPath": os.path.abspath(raw_final_path),
             "sceneImageCounts": scene_image_counts,
             "sceneAssetTypes": scene_asset_types,
@@ -2545,7 +2710,10 @@ class PodcastV2:
         props_file.write_text(_json.dumps(props, ensure_ascii=False), encoding="utf-8")
         props_file_path = str(props_file.resolve())
 
-        print(f"Rendering {total} scenes via Remotion ({total_duration:.1f}s total)...")
+        print(
+            f"Rendering {total} scenes via Remotion "
+            f"({render_duration:.1f}s total, outro hold={outro_hold_seconds:.1f}s)..."
+        )
         subprocess.run(
             ["node", "scripts/render.mjs", props_file_path],
             cwd=str(remotion_dir),

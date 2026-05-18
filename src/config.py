@@ -51,6 +51,27 @@ def _normalize_int(value, fallback: int, minimum: int = 1, maximum: int = 10) ->
     return max(minimum, min(parsed, maximum))
 
 
+def _normalize_float(value, fallback: float, minimum: float, maximum: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = fallback
+    return max(minimum, min(parsed, maximum))
+
+
+def _normalize_bool(value, fallback: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return fallback
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if text in {"0", "false", "no", "off", "disabled"}:
+        return False
+    return fallback
+
+
 def _normalize_rate(value, fallback: str) -> str:
     text = str(value or "").strip()
     if not text:
@@ -131,6 +152,14 @@ def _default_podcast_settings() -> dict:
             "image_retry_count": 3,
             "audio_retry_count": 3,
             "script_sentence_length": 4,
+            "outro_hold_seconds": 3.0,
+        },
+        "audio": {
+            "background_bed_enabled": True,
+            "background_bed_path": "Songs/hope.mp3",
+            "background_bed_volume_db": -10.0,
+            "background_bed_ducking_ratio": 2.0,
+            "background_bed_fade_seconds": 2.0,
         },
     }
 
@@ -183,6 +212,14 @@ def _default_podcast_settings_schema() -> dict:
             "image_retry_count": {"type": "number", "label": "Image retry count", "min": 1, "max": 10},
             "audio_retry_count": {"type": "number", "label": "Audio retry count", "min": 1, "max": 10},
             "script_sentence_length": {"type": "number", "label": "Script sentence length", "min": 1, "max": 10},
+            "outro_hold_seconds": {"type": "number", "label": "Outro hold seconds", "min": 0, "max": 10},
+        },
+        "audio": {
+            "background_bed_enabled": {"type": "checkbox", "label": "Background bed"},
+            "background_bed_path": {"type": "text", "label": "Background audio path"},
+            "background_bed_volume_db": {"type": "number", "label": "Background volume dB", "min": -42, "max": -4},
+            "background_bed_ducking_ratio": {"type": "number", "label": "Ducking ratio", "min": 2, "max": 20},
+            "background_bed_fade_seconds": {"type": "number", "label": "Fade seconds", "min": 0, "max": 8},
         },
     }
 
@@ -318,6 +355,63 @@ def get_podcast_settings() -> dict:
         or defaults["advanced"]["script_sentence_length"],
         defaults["advanced"]["script_sentence_length"],
     )
+    outro_hold_seconds = _get_nested(nested, "advanced", "outro_hold_seconds")
+    if outro_hold_seconds is None:
+        outro_hold_seconds = config_json.get("podcast_outro_hold_seconds")
+    if outro_hold_seconds is None:
+        outro_hold_seconds = defaults["advanced"]["outro_hold_seconds"]
+    settings["advanced"]["outro_hold_seconds"] = _normalize_float(
+        outro_hold_seconds,
+        defaults["advanced"]["outro_hold_seconds"],
+        0.0,
+        10.0,
+    )
+
+    background_enabled = _get_nested(nested, "audio", "background_bed_enabled")
+    if background_enabled is None:
+        background_enabled = config_json.get("podcast_background_bed_enabled")
+    settings["audio"]["background_bed_enabled"] = _normalize_bool(
+        background_enabled,
+        defaults["audio"]["background_bed_enabled"],
+    )
+    settings["audio"]["background_bed_path"] = str(
+        _get_nested(nested, "audio", "background_bed_path")
+        or config_json.get("podcast_background_bed_path")
+        or defaults["audio"]["background_bed_path"]
+    ).strip()
+    background_volume_db = _get_nested(nested, "audio", "background_bed_volume_db")
+    if background_volume_db is None:
+        background_volume_db = config_json.get("podcast_background_bed_volume_db")
+    if background_volume_db is None:
+        background_volume_db = defaults["audio"]["background_bed_volume_db"]
+    settings["audio"]["background_bed_volume_db"] = _normalize_float(
+        background_volume_db,
+        defaults["audio"]["background_bed_volume_db"],
+        -42.0,
+        -4.0,
+    )
+    background_ducking_ratio = _get_nested(nested, "audio", "background_bed_ducking_ratio")
+    if background_ducking_ratio is None:
+        background_ducking_ratio = config_json.get("podcast_background_bed_ducking_ratio")
+    if background_ducking_ratio is None:
+        background_ducking_ratio = defaults["audio"]["background_bed_ducking_ratio"]
+    settings["audio"]["background_bed_ducking_ratio"] = _normalize_float(
+        background_ducking_ratio,
+        defaults["audio"]["background_bed_ducking_ratio"],
+        2.0,
+        20.0,
+    )
+    background_fade_seconds = _get_nested(nested, "audio", "background_bed_fade_seconds")
+    if background_fade_seconds is None:
+        background_fade_seconds = config_json.get("podcast_background_bed_fade_seconds")
+    if background_fade_seconds is None:
+        background_fade_seconds = defaults["audio"]["background_bed_fade_seconds"]
+    settings["audio"]["background_bed_fade_seconds"] = _normalize_float(
+        background_fade_seconds,
+        defaults["audio"]["background_bed_fade_seconds"],
+        0.0,
+        8.0,
+    )
 
     return settings
 
@@ -358,6 +452,38 @@ def save_podcast_settings(updates: dict) -> dict:
         merged["advanced"]["image_retry_count"] = _normalize_int(merged["advanced"].get("image_retry_count"), existing["advanced"]["image_retry_count"])
         merged["advanced"]["audio_retry_count"] = _normalize_int(merged["advanced"].get("audio_retry_count"), existing["advanced"]["audio_retry_count"])
         merged["advanced"]["script_sentence_length"] = _normalize_int(merged["advanced"].get("script_sentence_length"), existing["advanced"]["script_sentence_length"])
+        merged["advanced"]["outro_hold_seconds"] = _normalize_float(
+            merged["advanced"].get("outro_hold_seconds"),
+            existing["advanced"]["outro_hold_seconds"],
+            0.0,
+            10.0,
+        )
+
+        merged["audio"]["background_bed_enabled"] = _normalize_bool(
+            merged["audio"].get("background_bed_enabled"),
+            existing["audio"]["background_bed_enabled"],
+        )
+        merged["audio"]["background_bed_path"] = str(
+            merged["audio"].get("background_bed_path", "")
+        ).strip() or existing["audio"]["background_bed_path"]
+        merged["audio"]["background_bed_volume_db"] = _normalize_float(
+            merged["audio"].get("background_bed_volume_db"),
+            existing["audio"]["background_bed_volume_db"],
+            -42.0,
+            -4.0,
+        )
+        merged["audio"]["background_bed_ducking_ratio"] = _normalize_float(
+            merged["audio"].get("background_bed_ducking_ratio"),
+            existing["audio"]["background_bed_ducking_ratio"],
+            2.0,
+            20.0,
+        )
+        merged["audio"]["background_bed_fade_seconds"] = _normalize_float(
+            merged["audio"].get("background_bed_fade_seconds"),
+            existing["audio"]["background_bed_fade_seconds"],
+            0.0,
+            8.0,
+        )
 
         config_json["podcast_settings"] = merged
         config_json["tts"] = config_json.get("tts", {})
@@ -391,6 +517,12 @@ def save_podcast_settings(updates: dict) -> dict:
         config_json["podcast_image_retry_count"] = merged["advanced"]["image_retry_count"]
         config_json["podcast_audio_retry_count"] = merged["advanced"]["audio_retry_count"]
         config_json["script_sentence_length"] = merged["advanced"]["script_sentence_length"]
+        config_json["podcast_outro_hold_seconds"] = merged["advanced"]["outro_hold_seconds"]
+        config_json["podcast_background_bed_enabled"] = merged["audio"]["background_bed_enabled"]
+        config_json["podcast_background_bed_path"] = merged["audio"]["background_bed_path"]
+        config_json["podcast_background_bed_volume_db"] = merged["audio"]["background_bed_volume_db"]
+        config_json["podcast_background_bed_ducking_ratio"] = merged["audio"]["background_bed_ducking_ratio"]
+        config_json["podcast_background_bed_fade_seconds"] = merged["audio"]["background_bed_fade_seconds"]
         _write_config(config_json)
         return copy.deepcopy(merged)
 
@@ -401,6 +533,15 @@ def get_podcast_system_settings() -> dict:
 
 def update_podcast_system_settings(settings: dict) -> dict:
     return save_podcast_settings(settings)
+
+
+def get_podcast_background_bed_settings() -> dict:
+    return copy.deepcopy(get_podcast_settings().get("audio", {}))
+
+
+def get_podcast_outro_hold_seconds() -> float:
+    return float(get_podcast_settings().get("advanced", {}).get("outro_hold_seconds", 3.0))
+
 
 def assert_folder_structure() -> None:
     """

@@ -33,6 +33,14 @@ const PODCAST_V2_SETTINGS_DEFAULTS = {
     image_retry_count: '3',
     audio_retry_count: '3',
     script_sentence_length: '4',
+    outro_hold_seconds: '3',
+  },
+  audio: {
+    background_bed_enabled: true,
+    background_bed_path: 'Songs/hope.mp3',
+    background_bed_volume_db: '-10',
+    background_bed_ducking_ratio: '2',
+    background_bed_fade_seconds: '2',
   },
 };
 const PODCAST_V2_SETTINGS_TOOLTIPS = {
@@ -56,7 +64,15 @@ const PODCAST_V2_SETTINGS_TOOLTIPS = {
   'advanced.image_retry_count': 'เธเธณเธเธงเธเธเธฃเธฑเนเธเธ—เธตเนเธฃเธฐเธเธเธเธฐเธฅเธญเธเธชเธฃเนเธฒเธเธ เธฒเธเนเธซเธกเนเธญเธฑเธ•เนเธเธกเธฑเธ•เธดเน€เธกเธทเนเธญ image generation fail',
   'advanced.audio_retry_count': 'เธเธณเธเธงเธเธเธฃเธฑเนเธเธ—เธตเนเธฃเธฐเธเธเธเธฐเธฅเธญเธเธชเธฃเนเธฒเธเน€เธชเธตเธขเธเนเธซเธกเนเธญเธฑเธ•เนเธเธกเธฑเธ•เธดเน€เธกเธทเนเธญ TTS fail เธซเธฃเธทเธญเนเธ"เนเนเธเธฅเนเน€เธชเธตเธขเธเนเธกเนเธชเธกเธเธนเธฃเธ"เน',
   'advanced.script_sentence_length': 'เธเธณเธเธงเธเธเธฃเธฐเนเธขเธเนเธ"เธขเธเธฃเธฐเธกเธฒเธ"เธ•เนเธญ scene เธ—เธตเนเนเธเนเน€เธเนเธเน€เธเนเธฒเธซเธกเธฒเธขเธ•เธญเธ generate script',
+  'advanced.outro_hold_seconds': 'Extra seconds to keep the final visual on screen after narration ends.',
 };
+Object.assign(PODCAST_V2_SETTINGS_TOOLTIPS, {
+  'audio.background_bed_enabled': 'Enable a quiet background bed under narration during PodcastV2 render.',
+  'audio.background_bed_path': 'Local audio path for the background bed. Relative paths start at the repo root.',
+  'audio.background_bed_volume_db': 'Base volume before ducking. Lower is quieter; -10 dB keeps this bed audible.',
+  'audio.background_bed_ducking_ratio': 'How strongly the bed ducks under narration. Higher means narration stays clearer.',
+  'audio.background_bed_fade_seconds': 'Fade in and out duration for the bed.',
+});
 
 function clonePodcastSettingsV2(settings = PODCAST_V2_SETTINGS_DEFAULTS) {
   return JSON.parse(JSON.stringify(settings));
@@ -161,7 +177,7 @@ function populatePodcastSettingsOptionsV2() {
 function readPodcastSettingsFormV2() {
   const settings = clonePodcastSettingsV2();
   document.querySelectorAll('#podcastV2SettingsForm [data-setting-path]').forEach((el) => {
-    const value = el.tagName === 'TEXTAREA' ? el.value : el.value.trim();
+    const value = el.type === 'checkbox' ? el.checked : (el.tagName === 'TEXTAREA' ? el.value : el.value.trim());
     setPodcastSettingByPathV2(settings, el.dataset.settingPath, value);
   });
   return settings;
@@ -171,7 +187,11 @@ function writePodcastSettingsFormV2(settings) {
   const source = normalizePodcastSettingsV2(settings);
   document.querySelectorAll('#podcastV2SettingsForm [data-setting-path]').forEach((el) => {
     const value = getPodcastSettingByPathV2(source, el.dataset.settingPath);
-    el.value = value === undefined || value === null ? '' : String(value);
+    if (el.type === 'checkbox') {
+      el.checked = !!value;
+    } else {
+      el.value = value === undefined || value === null ? '' : String(value);
+    }
   });
   updatePodcastSettingsSummaryV2(source);
 }
