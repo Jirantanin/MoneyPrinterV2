@@ -302,6 +302,15 @@ class TTS:
 
         audio_b64 = response.json()["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
         pcm_data = base64.b64decode(audio_b64)
+        duration_seconds = len(pcm_data) / (2 * 24000)
+        append_api_usage(
+            "gemini_tts",
+            "seconds",
+            float(duration_seconds),
+            model="gemini-3.1-flash-tts-preview",
+            voice=voice,
+            tone_preset=tone_preset,
+        )
 
         with wave.open(output_file, "wb") as wf:
             wf.setnchannels(1)

@@ -59,10 +59,22 @@
   "podcast_thumbnail_system_prompt": "YouTube thumbnail for a podcast episode about: {topic}. {creative_direction_block}Single dramatic scene, no comic panels, no borders, no gutters. Dark cinematic mood, bold colors, high contrast. One striking central subject that fills the frame. Photorealistic or painterly illustration style. No text, no logos.",
   "podcast_image_retry_count": 3,
   "podcast_audio_retry_count": 3,
+  "pexels_api_key": "",
+  "pixabay_api_key": "",
+  "runware_api_key": "",
+  "runware_api_base_url": "https://api.runware.ai/v1",
+  "runware_image_model": "runware:101@1",
+  "runware_image_width": 1024,
+  "runware_image_height": 576,
+  "runware_image_steps": 28,
+  "runware_image_cfg_scale": 3.5,
+  "runware_image_output_format": "PNG",
+  "runware_image_output_quality": 90,
+  "runware_image_retry_count": 1,
   "podcast_outro_hold_seconds": 3,
   "podcast_background_bed_enabled": true,
   "podcast_background_bed_path": "Songs/hope.mp3",
-  "podcast_background_bed_volume_db": -10,
+  "podcast_background_bed_volume_db": -16,
   "podcast_background_bed_ducking_ratio": 2,
   "podcast_background_bed_fade_seconds": 2,
   "podcast_settings": {
@@ -102,7 +114,7 @@
     "audio": {
       "background_bed_enabled": true,
       "background_bed_path": "Songs/hope.mp3",
-      "background_bed_volume_db": -10,
+      "background_bed_volume_db": -16,
       "background_bed_ducking_ratio": 2,
       "background_bed_fade_seconds": 2
     }

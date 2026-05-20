@@ -45,6 +45,7 @@ from config import (
     get_podcast_system_settings,
     update_podcast_system_settings,
 )
+from runtime_trace import reset_trace_run_id, set_trace_run_id, summarize_run_cost
 
 # Module-level episode state storage
 # episodes[episode_id] = {
@@ -268,6 +269,77 @@ def _episode_final_video_path(ep: dict) -> str:
 
 def _episode_state_path(episode_dir: str) -> str:
     return os.path.join(episode_dir, "state.json")
+
+
+def _episode_cost_summary_path(episode_dir: str) -> str:
+    return os.path.join(episode_dir, "cost_summary.json")
+
+
+def _make_trace_run_id(episode_id: str, start_step: int) -> str:
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{episode_id}_step{start_step}_{stamp}"
+
+
+def _safe_write_cost_summary(ep: dict, summary: dict) -> None:
+    episode_dir = ep.get("episode_dir", "")
+    if not episode_dir:
+        return
+    try:
+        os.makedirs(episode_dir, exist_ok=True)
+        with open(_episode_cost_summary_path(episode_dir), "w", encoding="utf-8") as handle:
+            json.dump(summary, handle, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _refresh_episode_cost_summary(episode_id: str, run_id: str, status: str = "") -> dict:
+    ep = episodes.get(episode_id)
+    if not ep or not run_id:
+        return {}
+
+    summary = summarize_run_cost(run_id)
+    summary["status"] = status or ep.get("status", "")
+    summary["updated_at"] = datetime.now().isoformat()
+    ep["trace_run_id"] = run_id
+    ep["estimated_cost"] = summary
+    _safe_write_cost_summary(ep, summary)
+    _persist_episode_state(episode_id)
+    return summary
+
+
+def _load_episode_cost_summary(ep: dict, persisted_state: dict | None = None) -> dict:
+    persisted_state = persisted_state or {}
+    episode_dir = ep.get("episode_dir", "")
+    if episode_dir:
+        summary = _load_json_if_exists(_episode_cost_summary_path(episode_dir), {})
+        if isinstance(summary, dict) and summary:
+            return summary
+    summary = persisted_state.get("estimated_cost")
+    return summary if isinstance(summary, dict) else {}
+
+
+def _publish_terminal_episode_cost_summary(episode_id: str, run_id: str) -> dict:
+    ep = episodes.get(episode_id)
+    if not ep or not run_id:
+        return {}
+
+    status = ep.get("status", "")
+    if status not in {"done", "error", "cancelled"}:
+        return {}
+
+    existing = ep.get("estimated_cost")
+    if (
+        isinstance(existing, dict)
+        and existing.get("run_id") == run_id
+        and existing.get("status") == status
+        and "cost_usd" in existing
+    ):
+        return existing
+
+    summary = _refresh_episode_cost_summary(episode_id, run_id, status=status)
+    if summary:
+        _push_event(episode_id, {"type": "cost_summary", "estimated_cost": summary})
+    return summary
 
 
 def _load_episode_script_data(ep: dict) -> list:
@@ -503,6 +575,8 @@ def _persist_episode_state(episode_id: str) -> None:
                 "logs": (ep.get("logs") or [])[-500:],
                 "beat_qc": ep.get("beat_qc") or {},
                 "script_qc": ep.get("script_qc") or {},
+                "trace_run_id": ep.get("trace_run_id", ""),
+                "estimated_cost": ep.get("estimated_cost") or {},
                 "updated_at": datetime.now().isoformat(),
             },
             f,
@@ -672,8 +746,11 @@ def _restore_episode_from_disk(episode_id: str) -> dict | None:
         "episode_dir": episode_dir,
         "cancelled": False,
         "logs": persisted_state.get("logs") if isinstance(persisted_state.get("logs"), list) else [],
+        "trace_run_id": persisted_state.get("trace_run_id", ""),
+        "estimated_cost": {},
         "thumbnail_gen_prompt": _load_text_if_exists(os.path.join(episode_dir, "thumbnail_prompt.txt")),
     }
+    ep["estimated_cost"] = _load_episode_cost_summary(ep, persisted_state)
     _apply_podcast_v2_voice_defaults(ep)
     episodes[episode_id] = ep
     episode_events.setdefault(episode_id, [])
@@ -690,6 +767,7 @@ def _get_or_restore_episode(episode_id: str) -> dict | None:
 
 def _episode_summary_from_dir(episode_id: str, episode_dir: str) -> dict:
     metadata = _load_json_if_exists(os.path.join(episode_dir, "metadata.json"), {})
+    cost_summary = _load_json_if_exists(_episode_cost_summary_path(episode_dir), {})
     step_states, status, current_step = _infer_step_states_from_dir(episode_dir)
     done_count = sum(1 for step in step_states if step["status"] == "done")
     is_uploaded = bool(metadata.get("video_id") or metadata.get("uploaded_at"))
@@ -703,6 +781,9 @@ def _episode_summary_from_dir(episode_id: str, episode_dir: str) -> dict:
         "can_resume": _next_incomplete_step(step_states) is not None,
         "video_url": metadata.get("video_url"),
         "uploaded_at": metadata.get("uploaded_at"),
+        "estimated_cost_usd": (
+            cost_summary.get("cost_usd") if isinstance(cost_summary, dict) else None
+        ),
         "updated_at": datetime.fromtimestamp(os.path.getmtime(episode_dir)).isoformat(),
         "thumbnail_url": (
             f"/static/{episode_id}/thumbnail.png?ts={int(os.path.getmtime(os.path.join(episode_dir, 'thumbnail.png')))}"
@@ -900,6 +981,10 @@ def _run_pipeline(episode_id: str, start_step: int = 0):
     ep["error"] = None
     step_mode = ep.get("mode") == "step"
     start_step = max(0, min(start_step, len(_STEPS) - 1))
+    run_id = _make_trace_run_id(episode_id, start_step)
+    ep["trace_run_id"] = run_id
+    ep["estimated_cost"] = {}
+    trace_token = set_trace_run_id(run_id)
 
     original_stdout = sys.stdout
     sys.stdout = _StdoutCapture(episode_id, original_stdout)
@@ -1014,15 +1099,22 @@ def _run_pipeline(episode_id: str, start_step: int = 0):
                 return
 
         ep["status"] = "done"
+        cost_summary = _refresh_episode_cost_summary(episode_id, run_id, status="done")
         _persist_episode_state(episode_id)
+        _push_event(episode_id, {"type": "cost_summary", "estimated_cost": cost_summary})
         _push_event(episode_id, {"type": "complete"})
 
     except Exception as exc:
         ep["status"] = "error"
         ep["error"] = str(exc)
+        cost_summary = _refresh_episode_cost_summary(episode_id, run_id, status="error")
         _persist_episode_state(episode_id)
+        if cost_summary:
+            _push_event(episode_id, {"type": "cost_summary", "estimated_cost": cost_summary})
         _push_event(episode_id, {"type": "error", "message": str(exc)})
     finally:
+        _publish_terminal_episode_cost_summary(episode_id, run_id)
+        reset_trace_run_id(trace_token)
         sys.stdout = original_stdout
 
 
@@ -1120,6 +1212,8 @@ async def api_generate(request_data: dict):
         "episode_dir": "",
         "cancelled": False,
         "logs": [],
+        "trace_run_id": "",
+        "estimated_cost": {},
     }
     episode_events[episode_id] = []
     episode_approvals[episode_id] = threading.Event()
@@ -1434,6 +1528,8 @@ async def api_episode(episode_id: str):
             "episode_dir": ep["episode_dir"],
             "error": ep["error"],
             "logs": ep.get("logs") or [],
+            "trace_run_id": ep.get("trace_run_id", ""),
+            "estimated_cost": ep.get("estimated_cost") or _load_episode_cost_summary(ep),
             "can_resume": _can_resume_episode(ep),
             "next_incomplete_step": _next_incomplete_step(ep.get("step_states") or []),
             "is_uploaded": bool((ep.get("metadata") or {}).get("video_id") or (ep.get("metadata") or {}).get("uploaded_at")),
@@ -1591,6 +1687,10 @@ def _run_v2_pipeline(episode_id: str, start_step: int = 0):
     ep["error"] = None
     step_mode = ep.get("mode") == "step"
     start_step = max(0, min(start_step, len(_STEPS) - 1))
+    run_id = _make_trace_run_id(episode_id, start_step)
+    ep["trace_run_id"] = run_id
+    ep["estimated_cost"] = {}
+    trace_token = set_trace_run_id(run_id)
 
     original_stdout = sys.stdout
     sys.stdout = _StdoutCapture(episode_id, original_stdout)
@@ -1705,15 +1805,22 @@ def _run_v2_pipeline(episode_id: str, start_step: int = 0):
                 return
 
         ep["status"] = "done"
+        cost_summary = _refresh_episode_cost_summary(episode_id, run_id, status="done")
         _persist_episode_state(episode_id)
+        _push_event(episode_id, {"type": "cost_summary", "estimated_cost": cost_summary})
         _push_event(episode_id, {"type": "complete"})
 
     except Exception as exc:
         ep["status"] = "error"
         ep["error"] = str(exc)
+        cost_summary = _refresh_episode_cost_summary(episode_id, run_id, status="error")
         _persist_episode_state(episode_id)
+        if cost_summary:
+            _push_event(episode_id, {"type": "cost_summary", "estimated_cost": cost_summary})
         _push_event(episode_id, {"type": "error", "message": str(exc)})
     finally:
+        _publish_terminal_episode_cost_summary(episode_id, run_id)
+        reset_trace_run_id(trace_token)
         sys.stdout = original_stdout
 
 
@@ -1769,6 +1876,8 @@ async def api_v2_generate(request_data: dict):
         "episode_dir": "",
         "cancelled": False,
         "logs": [],
+        "trace_run_id": "",
+        "estimated_cost": {},
     }
     episode_events[episode_id] = []
     episode_approvals[episode_id] = threading.Event()

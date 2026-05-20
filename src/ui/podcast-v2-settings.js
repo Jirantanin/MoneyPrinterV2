@@ -38,7 +38,7 @@ const PODCAST_V2_SETTINGS_DEFAULTS = {
   audio: {
     background_bed_enabled: true,
     background_bed_path: 'Songs/hope.mp3',
-    background_bed_volume_db: '-10',
+    background_bed_volume_db: '-16',
     background_bed_ducking_ratio: '2',
     background_bed_fade_seconds: '2',
   },
@@ -69,7 +69,7 @@ const PODCAST_V2_SETTINGS_TOOLTIPS = {
 Object.assign(PODCAST_V2_SETTINGS_TOOLTIPS, {
   'audio.background_bed_enabled': 'Enable a quiet background bed under narration during PodcastV2 render.',
   'audio.background_bed_path': 'Local audio path for the background bed. Relative paths start at the repo root.',
-  'audio.background_bed_volume_db': 'Base volume before ducking. Lower is quieter; -10 dB keeps this bed audible.',
+  'audio.background_bed_volume_db': 'Base volume before ducking. Lower is quieter; -16 dB keeps this bed subtle.',
   'audio.background_bed_ducking_ratio': 'How strongly the bed ducks under narration. Higher means narration stays clearer.',
   'audio.background_bed_fade_seconds': 'Fade in and out duration for the bed.',
 });

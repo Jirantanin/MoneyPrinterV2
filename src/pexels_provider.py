@@ -101,6 +101,7 @@ def search_pexels_video(
     output_path: str,
     time_per_asset: float,
     asset_index: int = 0,
+    keyword: str | None = None,
 ) -> str | None:
     """Search Pexels for a B-roll video clip, download and trim it.
 
@@ -115,8 +116,9 @@ def search_pexels_video(
         return None
 
     try:
-        keyword = _keyword_from_narration(narration_chunk)
-        if PEXELS_USE_LLM_KEYWORDS:
+        keyword = re.sub(r"[^a-z0-9 ]", " ", str(keyword or "").lower()).strip()[:60]
+        keyword = re.sub(r"\s+", " ", keyword).strip() or _keyword_from_narration(narration_chunk)
+        if PEXELS_USE_LLM_KEYWORDS and not keyword:
             from llm_provider import generate_text
 
             raw_kw = generate_text(

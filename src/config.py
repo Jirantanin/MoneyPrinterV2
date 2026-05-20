@@ -11,7 +11,7 @@ ROOT_DIR = os.path.dirname(sys.path[0])
 
 
 def _load_config() -> dict:
-    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)
 
 
@@ -118,7 +118,7 @@ def _default_podcast_settings() -> dict:
             "script_system_prompt": (
                 "You are {narrator_name}, {narrator_persona}. /no_think "
                 "Narrate in {language} language. "
-                "Write in the style of Kurzgesagt – In a Nutshell: open with a big thought-provoking question, "
+                "Write in the style of Kurzgesagt - In a Nutshell: open with a big thought-provoking question, "
                 "use \"we\" to include the listener in the journey, "
                 "build from simple everyday concepts to mind-blowing scale, "
                 "mix short punchy sentences with longer explanatory ones, "
@@ -157,7 +157,7 @@ def _default_podcast_settings() -> dict:
         "audio": {
             "background_bed_enabled": True,
             "background_bed_path": "Songs/hope.mp3",
-            "background_bed_volume_db": -10.0,
+            "background_bed_volume_db": -16.0,
             "background_bed_ducking_ratio": 2.0,
             "background_bed_fade_seconds": 2.0,
         },
@@ -572,7 +572,7 @@ def get_verbose() -> bool:
     Returns:
         verbose (bool): The verbose flag
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["verbose"]
 
 def get_firefox_profile_path() -> str:
@@ -582,7 +582,7 @@ def get_firefox_profile_path() -> str:
     Returns:
         path (str): The path to the Firefox profile
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["firefox_profile"]
 
 def get_headless() -> bool:
@@ -592,16 +592,16 @@ def get_headless() -> bool:
     Returns:
         headless (bool): The headless flag
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["headless"]
 
 def get_minimax_api_key() -> str:
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("minimax_api_key", "")
 
 
 def get_anthropic_api_key() -> str:
-    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         configured = json.load(file).get("anthropic_api_key", "")
         return configured or os.environ.get("ANTHROPIC_API_KEY", "")
 
@@ -613,7 +613,7 @@ def get_minimax_model() -> str:
     return get_podcast_settings()["models"]["minimax_model"]
 
 def get_minimax_api_base_url() -> str:
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("minimax_api_base_url", "https://openrouter.ai/api/v1")
 
 def get_elevenlabs_api_key() -> str:
@@ -623,7 +623,7 @@ def get_elevenlabs_api_key() -> str:
     Returns:
         key (str): ElevenLabs API key
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("elevenlabs_api_key", "")
 
 def get_elevenlabs_voice_id_th() -> str:
@@ -637,7 +637,7 @@ def get_elevenlabs_voice_id_th() -> str:
 
 def get_gemini_tts_api_key() -> str:
     """Gets the Gemini TTS API key, falling back to nanobanana2_api_key or GEMINI_API_KEY env."""
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as f:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as f:
         cfg = json.load(f)
     return (
         cfg.get("gemini_tts_api_key", "")
@@ -656,7 +656,7 @@ def get_ollama_base_url() -> str:
     Returns:
         url (str): The Ollama base URL
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("ollama_base_url", "http://127.0.0.1:11434")
 
 def get_ollama_model() -> str:
@@ -679,7 +679,7 @@ def get_nanobanana2_api_base_url() -> str:
     Returns:
         url (str): API base URL
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get(
             "nanobanana2_api_base_url",
             "https://generativelanguage.googleapis.com/v1beta",
@@ -692,7 +692,7 @@ def get_nanobanana2_api_key() -> str:
     Returns:
         key (str): API key
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         configured = json.load(file).get("nanobanana2_api_key", "")
         return configured or os.environ.get("GEMINI_API_KEY", "")
 
@@ -714,6 +714,45 @@ def get_nanobanana2_aspect_ratio() -> str:
     """
     return get_podcast_settings()["models"]["image_aspect_ratio"]
 
+def _normalize_runware_output_format(value: str | None) -> str:
+    fmt = str(value or "").strip().upper()
+    if fmt in {"PNG", "JPG", "WEBP"}:
+        return fmt
+    if fmt == "JPEG":
+        return "JPG"
+    return "PNG"
+
+def _round_to_step(value: int, step: int = 16) -> int:
+    if step <= 1:
+        return value
+    return max(step, int(round(value / step) * step))
+
+def get_runware_api_key() -> str:
+    """
+    Gets the Runware API key for FLUX fallback image generation.
+
+    Returns:
+        key (str): API key
+    """
+    return str(_load_config().get("runware_api_key") or os.environ.get("RUNWARE_API_KEY", "") or "")
+
+def get_runware_image_settings() -> dict:
+    """Return budget-conscious Runware settings for PodcastV2 fallback images."""
+    cfg = _load_config()
+    width = _normalize_int(cfg.get("runware_image_width"), 1024, 128, 2048)
+    height = _normalize_int(cfg.get("runware_image_height"), 576, 128, 2048)
+    return {
+        "api_base_url": str(cfg.get("runware_api_base_url") or "https://api.runware.ai/v1"),
+        "model": str(cfg.get("runware_image_model") or "runware:101@1"),
+        "width": _round_to_step(width, 16),
+        "height": _round_to_step(height, 16),
+        "steps": _normalize_int(cfg.get("runware_image_steps"), 28, 1, 50),
+        "cfg_scale": _normalize_float(cfg.get("runware_image_cfg_scale"), 3.5, 1.0, 20.0),
+        "output_format": _normalize_runware_output_format(cfg.get("runware_image_output_format")),
+        "output_quality": _normalize_int(cfg.get("runware_image_output_quality"), 90, 20, 99),
+        "retry_count": _normalize_int(cfg.get("runware_image_retry_count"), 1, 1, 3),
+    }
+
 def get_threads() -> int:
     """
     Gets the amount of threads to use for example when writing to a file with MoviePy.
@@ -721,7 +760,7 @@ def get_threads() -> int:
     Returns:
         threads (int): Amount of threads
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["threads"]
     
 def get_zip_url() -> str:
@@ -731,7 +770,7 @@ def get_zip_url() -> str:
     Returns:
         url (str): The URL to the zip file
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["zip_url"]
 
 def get_is_for_kids() -> bool:
@@ -741,7 +780,7 @@ def get_is_for_kids() -> bool:
     Returns:
         is_for_kids (bool): The is for kids flag
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["is_for_kids"]
 
 def get_tts_voice() -> str:
@@ -836,7 +875,7 @@ def get_assemblyai_api_key() -> str:
     Returns:
         key (str): The AssemblyAI API key
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["assembly_ai_api_key"]
 
 def get_stt_provider() -> str:
@@ -846,7 +885,7 @@ def get_stt_provider() -> str:
     Returns:
         provider (str): The STT provider
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("stt_provider", "local_whisper")
 
 def get_whisper_model() -> str:
@@ -856,7 +895,7 @@ def get_whisper_model() -> str:
     Returns:
         model (str): Whisper model name
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("whisper_model", "base")
 
 def get_whisper_device() -> str:
@@ -866,7 +905,7 @@ def get_whisper_device() -> str:
     Returns:
         device (str): Whisper device
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("whisper_device", "auto")
 
 def get_whisper_compute_type() -> str:
@@ -876,11 +915,11 @@ def get_whisper_compute_type() -> str:
     Returns:
         compute_type (str): Whisper compute type
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("whisper_compute_type", "int8")
     
 def get_topic_discovery_config() -> dict:
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file).get("topic_discovery", {})
 
 def get_topic_discovery_enabled() -> bool:
@@ -924,7 +963,7 @@ def get_font() -> str:
     Returns:
         font (str): The font
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["font"]
 
 def get_fonts_dir() -> str:
@@ -943,7 +982,7 @@ def get_imagemagick_path() -> str:
     Returns:
         path (str): The path to ImageMagick
     """
-    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r", encoding="utf-8-sig") as file:
         return json.load(file)["imagemagick_path"]
 
 def get_script_sentence_length() -> int:

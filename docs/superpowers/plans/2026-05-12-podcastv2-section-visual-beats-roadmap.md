@@ -28,7 +28,7 @@ Move PodcastV2 manual script mode away from a hard `20 scenes` story contract an
 
 - [x] Created the isolated worktree `MoneyPrinterV2-section-beats`.
 - [x] Added manual-script length QC with:
-  - minimum: `8000` chars without whitespace
+  - minimum: `5000` chars without whitespace
   - ideal: `8800-9500`
   - soft max: `10000`
 - [x] Added manual section parsing in `PodcastV2.generate_script_from_text()`.

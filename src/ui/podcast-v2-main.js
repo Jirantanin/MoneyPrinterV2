@@ -19,6 +19,7 @@ let regeneratingSceneIndicesV2 = new Set();
 let currentMetadataV2 = {};
 let currentScriptQcV2 = {};
 let currentCreativeDirectionV2 = '';
+let currentCostEstimateV2 = {};
 let podcastV2SystemSettings = null;
 let podcastV2SettingsLoadPromise = null;
 let activeDialogResolverV2 = null;
@@ -177,7 +178,9 @@ function resetUIV2() {
   regeneratingSceneIndicesV2 = new Set();
   currentScriptQcV2 = {};
   currentCreativeDirectionV2 = '';
+  currentCostEstimateV2 = {};
   renderStepsPanelV2();
+  clearCostEstimateV2();
 
   document.getElementById('approveBannerV2').classList.add('hidden');
   document.getElementById('resumeBtnV2').classList.add('hidden');
@@ -226,6 +229,7 @@ function applyEpisodeStateV2(data) {
   currentSceneCountV2 = data.scene_count || (Array.isArray(data.scenes) ? data.scenes.length : 0);
   currentAssetStatusesV2 = Array.isArray(data.asset_statuses) ? data.asset_statuses : [];
   currentScriptQcV2 = data.script_qc || {};
+  currentCostEstimateV2 = data.estimated_cost || {};
   stepStatesV2 = (data.step_states || STEP_NAMES_V2.map(name => ({ name, status: 'pending', message: '' })))
     .map((step, index) => ({
       name: step.name || STEP_NAMES_V2[index],
@@ -233,6 +237,7 @@ function applyEpisodeStateV2(data) {
       message: step.message || '',
     }));
   renderStepsPanelV2();
+  renderCostEstimateV2(currentCostEstimateV2);
   renderImageGalleryV2();
 
   document.getElementById('topicInputV2').value = data.topic || '';
@@ -435,6 +440,9 @@ function handleEventV2(evt) {
     appendPodcastLogV2(evt.message || 'Resuming pipeline...');
   } else if (evt.type === 'thumbnail_updated') {
     fetchEpisodeDataV2();
+  } else if (evt.type === 'cost_summary') {
+    currentCostEstimateV2 = evt.estimated_cost || {};
+    renderCostEstimateV2(currentCostEstimateV2);
   }
 }
 

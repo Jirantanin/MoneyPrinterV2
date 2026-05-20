@@ -22,9 +22,17 @@ _DEFAULT_RATE_CARD = {
     "gemini_image": {"per_request_usd": 0.039},
     "kling_image2video": {"per_request_usd": 0.0},
     "pexels_video": {"per_request_usd": 0.0},
+    "pixabay_video": {"per_request_usd": 0.0},
+    "runware_flux1_image": {"per_request_usd": 0.0038},
+    # edge-tts uses the public Edge endpoint in this repo, not billable Azure Speech.
     "edge_tts": {"per_char_usd": 0.0},
-    "elevenlabs_tts": {"per_char_usd": 0.0},
-    "gemini_tts": {"per_char_usd": 0.0},
+    # Eleven Multilingual v2 consumes 1 credit per text character. This uses a
+    # conservative Creator-tier list price approximation: $22 / 121k credits.
+    "elevenlabs_tts": {"per_char_usd": 0.00018182},
+    # Gemini 3.1 Flash TTS Preview: text input $1/M tokens, audio output
+    # $20/M tokens. Audio tokens correspond to 25 tokens/sec; text tokens are
+    # approximated as 4 chars/token until the API returns billable token usage.
+    "gemini_tts": {"per_char_usd": 0.00000025, "per_second_usd": 0.0005},
 }
 
 
@@ -88,6 +96,10 @@ def trace_http_request(
 
 def set_trace_run_id(run_id: str):
     return _TRACE_RUN_ID.set(run_id or "")
+
+
+def get_trace_run_id() -> str:
+    return _TRACE_RUN_ID.get() or ""
 
 
 def reset_trace_run_id(token) -> None:
@@ -187,7 +199,9 @@ def summarize_run_cost(run_id: str) -> dict:
     for provider, units in provider_units.items():
         rates = pricing.get(provider, {})
         provider_cost = 0.0
-        if "requests" in units:
+        if "usd" in units:
+            provider_cost += units["usd"]
+        elif "requests" in units:
             provider_cost += units["requests"] * float(rates.get("per_request_usd", 0.0))
         if "chars" in units:
             provider_cost += units["chars"] * float(rates.get("per_char_usd", 0.0))

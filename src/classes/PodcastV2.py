@@ -4,7 +4,7 @@ PodcastV2.py โ€” Enhanced Video Podcast pipeline (V2).
 Extends the V1 Podcast pipeline with:
   Feature 1 โ€” TTS receives scene_index + total_scenes for scene-aware pacing.
   Feature 2 โ€” Audio is generated first; image count per scene scales with duration.
-  Feature 3 โ€” B-roll clips from Pexels replace secondary AI images where possible.
+  Feature 3 โ€” B-roll clips from stock providers replace secondary AI images where possible.
   Feature 4 โ€” render() passes multi-asset props to Remotion (sceneImageCounts,
                sceneAssetTypes, sceneAssetDurations).
 
@@ -34,6 +34,7 @@ from config import (
     get_podcast_script_system_prompt,
     get_podcast_style_prompt,
     get_podcast_thumbnail_system_prompt,
+    get_runware_image_settings,
     get_script_sentence_length,
     get_tts_edge_rate,
     get_tts_edge_voice,
@@ -45,9 +46,10 @@ from config import (
 from image_provider import generate_image
 from kling_provider import generate_video_from_image
 from llm_provider import generate_text, generate_text_structured
-from runtime_trace import append_trace, reset_trace_run_id, set_trace_run_id, summarize_run_cost
+from runtime_trace import append_trace, get_trace_run_id, reset_trace_run_id, set_trace_run_id, summarize_run_cost
 from classes.Tts import TTS
 from classes.Tts import normalize_gemini_tts_tone_preset
+from visual_planner import append_stock_query_report, get_asset_plan, upsert_scene_visual_plan
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
@@ -688,7 +690,7 @@ GLOSSARY_TERMS = [
 ]
 
 
-SCRIPT_MODE_MIN_CHARS_NO_SPACE = 8_000
+SCRIPT_MODE_MIN_CHARS_NO_SPACE = 5_000
 SCRIPT_MODE_IDEAL_MIN_CHARS_NO_SPACE = 8_800
 SCRIPT_MODE_IDEAL_MAX_CHARS_NO_SPACE = 9_500
 SCRIPT_MODE_SOFT_MAX_CHARS_NO_SPACE = 10_000
@@ -725,7 +727,7 @@ def _script_length_qc(text: str, source: str = "manual_script") -> dict:
         )
     elif chars_no_space < SCRIPT_MODE_IDEAL_MIN_CHARS_NO_SPACE:
         status = "review"
-        notes.append("Script is usable but a little below the preferred 8,800-9,500 char band.")
+        notes.append("Script is usable but below the preferred 8,800-9,500 char band.")
     elif chars_no_space > SCRIPT_MODE_IDEAL_MAX_CHARS_NO_SPACE:
         status = "review"
         notes.append("Script is usable but a little above the preferred 8,800-9,500 char band.")
@@ -988,7 +990,7 @@ def _split_sections_into_visual_beats(sections: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 class PodcastV2:
-    """V2 Video Podcast pipeline with multi-image-per-scene and Pexels B-roll."""
+    """V2 Video Podcast pipeline with multi-image-per-scene and stock B-roll."""
 
     SCOPES = [
         "https://www.googleapis.com/auth/youtube.upload",
@@ -1824,7 +1826,7 @@ class PodcastV2:
         if os.path.exists(output_path):
             os.remove(output_path)
 
-        volume_db = float(settings.get("background_bed_volume_db", -10.0))
+        volume_db = float(settings.get("background_bed_volume_db", -16.0))
         ducking_ratio = float(settings.get("background_bed_ducking_ratio", 2.0))
         fade_seconds = float(settings.get("background_bed_fade_seconds", 2.0))
         fade_seconds = max(0.0, min(fade_seconds, max(0.0, total_duration / 2)))
@@ -2278,7 +2280,7 @@ class PodcastV2:
 
     # ------------------------------------------------------------------
     # Feature 2 โ€” gen audio first, then scale image count by duration
-    # Feature 3 โ€” Pexels B-roll for secondary images
+    # Feature 3 โ€” stock B-roll for secondary images
     # ------------------------------------------------------------------
 
     def _generate_scene_image_with_retry(
@@ -2311,6 +2313,42 @@ class PodcastV2:
 
     def _get_pexels_api_key(self) -> str:
         return str(_get_config_value("pexels_api_key", "") or "")
+
+    def _get_pixabay_api_key(self) -> str:
+        return str(_get_config_value("pixabay_api_key", "") or os.environ.get("PIXABAY_API_KEY", "") or "")
+
+    def _get_runware_api_key(self) -> str:
+        return str(_get_config_value("runware_api_key", "") or os.environ.get("RUNWARE_API_KEY", "") or "")
+
+    def _generate_runware_fallback_image_with_retry(
+        self, image_prompt: str, image_path: str, scene_number: int,
+    ) -> None:
+        from runware_provider import generate_flux1_image
+
+        settings = get_runware_image_settings()
+        max_attempts = max(1, int(settings.get("retry_count", 1)))
+        api_key = self._get_runware_api_key()
+        last_error = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                result = generate_flux1_image(image_prompt, image_path, api_key=api_key)
+                if result is None or not os.path.exists(image_path) or os.path.getsize(image_path) == 0:
+                    raise RuntimeError("Runware did not return a valid image")
+                return
+            except Exception as exc:
+                last_error = exc
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+                print(
+                    f"  Warning: Runware FLUX fallback failed for scene {scene_number} "
+                    f"(attempt {attempt}/{max_attempts}): {exc}"
+                )
+                if attempt < max_attempts:
+                    time.sleep(2)
+        raise RuntimeError(
+            f"Scene {scene_number}: Runware FLUX fallback failed after {max_attempts} "
+            f"attempts: {last_error}"
+        ) from last_error
 
     def _fallback_image_prompt_for_asset(
         self,
@@ -2381,13 +2419,14 @@ class PodcastV2:
         total_scenes: int = 20,
         _scenes: list | None = None,
         _pexels_key: str | None = None,
+        _pixabay_key: str | None = None,
         _seconds_per_image: int | None = None,
     ) -> None:
         """Generate audio then scaled multi-image assets for a single scene.
 
         Audio is generated first so its duration drives n_images.
         Image[0] is always AI-generated (anchor visual).
-        Image[1+] try Pexels B-roll first, fall back to AI gen.
+        Image[1+] try Pexels, then Pixabay B-roll, then fall back to Runware FLUX.1.
         """
         scenes = _scenes if _scenes is not None else self._load_script_scenes()
         if scene_index < 0 or scene_index >= len(scenes):
@@ -2433,9 +2472,17 @@ class PodcastV2:
         chunks = chunks[:n_images]
         while len(chunks) < n_images:
             chunks.append(chunks[-1] if chunks else narration[:100])
+        scene_visual_plan = upsert_scene_visual_plan(
+            self.episode_dir,
+            scenes,
+            scene_index,
+            n_images,
+            chunks,
+        )
 
         # โ”€โ”€ Step C: Generate images (Feature 2 + 3) โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€
         pexels_key = _pexels_key if _pexels_key is not None else self._get_pexels_api_key()
+        pixabay_key = _pixabay_key if _pixabay_key is not None else self._get_pixabay_api_key()
 
         for asset_idx in range(n_images):
             png_path = os.path.join(self.episode_dir, f"scene_{scene_num}_{asset_idx}.png")
@@ -2449,39 +2496,92 @@ class PodcastV2:
                 # Anchor visual โ€” always AI gen
                 self._generate_scene_image_with_retry(scene["image_prompt"], png_path, scene_number)
             else:
-                # Try Pexels B-roll first
+                asset_plan = get_asset_plan(scene_visual_plan, asset_idx)
+                stock_context = "\n".join(
+                    str(part or "")
+                    for part in (
+                        scene.get("scene_title", ""),
+                        scene.get("section_title", ""),
+                        chunks[asset_idx],
+                    )
+                )
+                stock_keywords = [
+                    str(keyword or "").strip()
+                    for keyword in (asset_plan.get("stock_keywords") or [])
+                    if str(keyword or "").strip()
+                ]
+                if not stock_keywords:
+                    stock_keywords = [stock_context]
+
+                # Try stock B-roll before the FLUX.1 image fallback.
                 broll_found = False
-                if pexels_key:
-                    from pexels_provider import search_pexels_video
-                    pexels_context = "\n".join(
-                        str(part or "")
-                        for part in (
-                            scene.get("scene_title", ""),
-                            scene.get("section_title", ""),
-                            scene.get("image_prompt", ""),
-                            chunks[asset_idx],
+                for keyword in stock_keywords[:3]:
+                    if pexels_key:
+                        from pexels_provider import search_pexels_video
+                        result = search_pexels_video(
+                            narration_chunk=stock_context,
+                            api_key=pexels_key,
+                            output_path=mp4_path,
+                            time_per_asset=time_per_asset,
+                            asset_index=asset_idx,
+                            keyword=keyword,
                         )
-                    )
-                    result = search_pexels_video(
-                        narration_chunk=pexels_context,
-                        api_key=pexels_key,
-                        output_path=mp4_path,
-                        time_per_asset=time_per_asset,
-                        asset_index=asset_idx,
-                    )
-                    if result:
-                        broll_found = True
-                        print(f"  Pexels B-roll: scene {scene_number} asset {asset_idx}")
+                        append_stock_query_report(
+                            self.episode_dir,
+                            {
+                                "scene_index": scene_index,
+                                "scene_number": scene_number,
+                                "asset_index": asset_idx,
+                                "provider": "pexels",
+                                "keyword": keyword,
+                                "success": bool(result),
+                                "source": "visual_plan",
+                            },
+                        )
+                        if result:
+                            broll_found = True
+                            print(f"  Pexels B-roll: scene {scene_number} asset {asset_idx} keyword={keyword}")
+                            break
+
+                    if pixabay_key:
+                        from pixabay_provider import search_pixabay_video
+                        result = search_pixabay_video(
+                            narration_chunk=stock_context,
+                            api_key=pixabay_key,
+                            output_path=mp4_path,
+                            time_per_asset=time_per_asset,
+                            asset_index=asset_idx,
+                            keyword=keyword,
+                        )
+                        append_stock_query_report(
+                            self.episode_dir,
+                            {
+                                "scene_index": scene_index,
+                                "scene_number": scene_number,
+                                "asset_index": asset_idx,
+                                "provider": "pixabay",
+                                "keyword": keyword,
+                                "success": bool(result),
+                                "source": "visual_plan",
+                            },
+                        )
+                        if result:
+                            broll_found = True
+                            print(f"  Pixabay B-roll: scene {scene_number} asset {asset_idx} keyword={keyword}")
+                            break
 
                 if not broll_found:
-                    # Fall back to AI gen with a distinct visual role per asset.
-                    role_name, varied_prompt = self._fallback_image_prompt_for_asset(
-                        scene,
-                        chunks[asset_idx],
-                        asset_idx,
-                    )
-                    print(f"  AI fallback image: scene {scene_number} asset {asset_idx} role={role_name}")
-                    self._generate_scene_image_with_retry(varied_prompt, png_path, scene_number)
+                    # Fall back to low-cost FLUX.1 gen with a distinct visual role per asset.
+                    role_name = str(asset_plan.get("camera_role") or "")
+                    varied_prompt = str(asset_plan.get("ai_fallback_prompt") or "").strip()
+                    if not role_name or not varied_prompt:
+                        role_name, varied_prompt = self._fallback_image_prompt_for_asset(
+                            scene,
+                            chunks[asset_idx],
+                            asset_idx,
+                        )
+                    print(f"  FLUX.1 fallback image: scene {scene_number} asset {asset_idx} role={role_name}")
+                    self._generate_runware_fallback_image_with_retry(varied_prompt, png_path, scene_number)
 
     def _generate_scene0_video(self, image_path: str, scene: dict, video_path: str) -> None:
         """Generate Kling animated clip for scene 0 (same as V1)."""
@@ -2522,6 +2622,7 @@ class PodcastV2:
         scenes = self._load_script_scenes()
         total = len(scenes)
         pexels_key = self._get_pexels_api_key()
+        pixabay_key = self._get_pixabay_api_key()
         seconds_per_image = self._get_seconds_per_image()
 
         for i, scene in enumerate(scenes):
@@ -2548,7 +2649,8 @@ class PodcastV2:
                 print(f"Generating V2 assets for scene {i + 1}/{total}...")
                 self.generate_scene_assets(
                     i, total_scenes=total,
-                    _scenes=scenes, _pexels_key=pexels_key, _seconds_per_image=seconds_per_image,
+                    _scenes=scenes, _pexels_key=pexels_key,
+                    _pixabay_key=pixabay_key, _seconds_per_image=seconds_per_image,
                 )
 
             # Scene 0: Kling intro video (uses anchor image)
@@ -2741,8 +2843,9 @@ class PodcastV2:
     # ------------------------------------------------------------------
 
     def generate_script(self, topic: str) -> list:
-        run_id = f"podcast_v2_script_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        trace_token = set_trace_run_id(run_id)
+        active_run_id = get_trace_run_id()
+        run_id = active_run_id or f"podcast_v2_script_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        trace_token = None if active_run_id else set_trace_run_id(run_id)
         append_trace(
             "podcast_v2_generate_script_start",
             run_id=run_id,
@@ -2984,7 +3087,8 @@ class PodcastV2:
             )
             return all_scenes
         finally:
-            reset_trace_run_id(trace_token)
+            if trace_token is not None:
+                reset_trace_run_id(trace_token)
     def generate_script_from_text(self, text: str) -> list:
         if not self.episode_dir:
             raise ValueError("episode_dir is not set.")

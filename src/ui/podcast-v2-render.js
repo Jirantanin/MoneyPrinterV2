@@ -148,6 +148,115 @@ function clearPodcastLogsV2() {
   renderPodcastLogsV2();
 }
 
+function formatCostUsdV2(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return '$0.0000';
+  if (amount > 0 && amount < 0.01) return `$${amount.toFixed(6)}`;
+  return `$${amount.toFixed(4)}`;
+}
+
+function providerLabelV2(provider) {
+  const labels = {
+    anthropic: 'Claude script',
+    gemini_image: 'Gemini image',
+    runware_flux1_image: 'FLUX.1 image',
+    kling_image2video: 'Kling video',
+    pexels_video: 'Pexels',
+    pixabay_video: 'Pixabay',
+    edge_tts: 'Edge TTS',
+    elevenlabs_tts: 'ElevenLabs TTS',
+    gemini_tts: 'Gemini TTS',
+  };
+  return labels[provider] || provider;
+}
+
+function providerUsageTextV2(provider, item, summary) {
+  const usage = item?.usage || {};
+  if (provider === 'anthropic') {
+    const input = Number(usage.input_tokens || 0);
+    const output = Number(usage.output_tokens || 0);
+    const calls = Number(summary?.calls || 0);
+    return `${calls} calls / ${(input + output).toLocaleString()} tokens`;
+  }
+  if (usage.usd) return 'actual API cost';
+  const parts = [];
+  if (usage.requests) parts.push(`${Math.round(Number(usage.requests)).toLocaleString()} requests`);
+  if (usage.chars) parts.push(`${Math.round(Number(usage.chars)).toLocaleString()} chars`);
+  if (usage.seconds) parts.push(`${Math.round(Number(usage.seconds)).toLocaleString()} sec`);
+  if (parts.length) return parts.join(' / ');
+  return 'tracked';
+}
+
+function clearCostEstimateV2() {
+  const panel = document.getElementById('costEstimatePanelV2');
+  if (!panel) return;
+  panel.classList.remove('hidden');
+  document.getElementById('costEstimateTotalV2').textContent = '$0.0000';
+  document.getElementById('costEstimateStatusV2').textContent = 'waiting';
+  document.getElementById('costEstimateBreakdownV2').innerHTML =
+    '<p class="text-subtext sm:col-span-2">Cost will appear after generation finishes.</p>';
+}
+
+function renderCostEstimateV2(summary) {
+  const panel = document.getElementById('costEstimatePanelV2');
+  if (!panel) return;
+  if (!summary || !summary.run_id) {
+    clearCostEstimateV2();
+    return;
+  }
+
+  panel.classList.remove('hidden');
+  const total = Number(summary.cost_usd || 0);
+  document.getElementById('costEstimateTotalV2').textContent = formatCostUsdV2(total);
+  document.getElementById('costEstimateStatusV2').textContent =
+    summary.status === 'done' ? 'final' : summary.status || 'tracked';
+
+  const breakdown = summary.provider_breakdown || {};
+  const items = Object.entries(breakdown)
+    .filter(([, item]) => {
+      const cost = Number(item?.estimated_cost_usd || 0);
+      const usage = item?.usage || {};
+      return cost > 0 || Object.values(usage).some(value => Number(value || 0) > 0);
+    })
+    .sort((a, b) => Number(b[1]?.estimated_cost_usd || 0) - Number(a[1]?.estimated_cost_usd || 0));
+
+  const container = document.getElementById('costEstimateBreakdownV2');
+  container.innerHTML = '';
+  if (!items.length) {
+    const empty = document.createElement('p');
+    empty.className = 'text-subtext sm:col-span-2';
+    empty.textContent = 'No paid usage tracked yet.';
+    container.appendChild(empty);
+    return;
+  }
+
+  items.forEach(([provider, item]) => {
+    const row = document.createElement('div');
+    row.className = 'rounded-lg border border-overlay/70 bg-surface/60 px-3 py-2 min-w-0';
+
+    const top = document.createElement('div');
+    top.className = 'flex items-center justify-between gap-3';
+
+    const name = document.createElement('span');
+    name.className = 'font-medium text-text truncate';
+    name.textContent = providerLabelV2(provider);
+
+    const cost = document.createElement('span');
+    cost.className = 'font-semibold text-accent shrink-0';
+    cost.textContent = formatCostUsdV2(item?.estimated_cost_usd || 0);
+
+    const usage = document.createElement('div');
+    usage.className = 'mt-1 text-[11px] text-subtext truncate';
+    usage.textContent = providerUsageTextV2(provider, item, summary);
+
+    top.appendChild(name);
+    top.appendChild(cost);
+    row.appendChild(top);
+    row.appendChild(usage);
+    container.appendChild(row);
+  });
+}
+
 function clearMetadataViewV2() {
   document.getElementById('metadataPanelV2').classList.add('hidden');
   document.getElementById('metadataActionsV2').classList.add('hidden');

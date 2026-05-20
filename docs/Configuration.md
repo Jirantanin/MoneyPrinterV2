@@ -15,6 +15,15 @@ and should be created from `config.example.json`.
 - `nanobanana2_api_key`: image API key, falls back to `GEMINI_API_KEY`
 - `nanobanana2_model`: image generation model
 - `nanobanana2_aspect_ratio`: image aspect ratio for generated visuals
+- `pexels_api_key`: Pexels stock video key for PodcastV2 B-roll assets
+- `pixabay_api_key`: Pixabay stock video key used after Pexels misses and before AI image fallback
+- `runware_api_key`: Runware key for low-cost FLUX.1 fallback images after Pexels/Pixabay miss
+- `runware_image_model`: Runware model id, default `runware:101@1` for FLUX.1 dev
+- `runware_image_width` / `runware_image_height`: fallback image size, default `1024x576` for cheap 16:9 assets
+- `runware_image_steps`: fallback image steps, default `28`
+- `runware_image_cfg_scale`: fallback guidance scale, default `3.5`
+- `runware_image_output_format`: fallback format, default `PNG`
+- `runware_image_retry_count`: Runware fallback retries, default `1` to avoid surprise spend
 - `threads`: worker count for local media processing
 - `imagemagick_path`: path to `magick.exe` on Windows or `convert` on Unix
 
