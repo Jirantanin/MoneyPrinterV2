@@ -21,6 +21,8 @@ from runtime_trace import append_api_usage
 
 _THAI_ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_GEMINI_TTS_TONE_PRESET = "natural_storyteller"
+HTTP_SESSION = requests.Session()
+HTTP_SESSION.trust_env = False
 
 
 def normalize_gemini_tts_tone_preset(value: str | None) -> str:
@@ -180,7 +182,7 @@ class TTS:
         fallback_voice_id = get_tts_edge_thai_fallback_voice_id()
         for attempt_voice_id in [voice_id, fallback_voice_id]:
             try:
-                response = requests.post(
+                response = HTTP_SESSION.post(
                     f"https://api.elevenlabs.io/v1/text-to-speech/{attempt_voice_id}",
                     params={"output_format": _THAI_ELEVENLABS_OUTPUT_FORMAT},
                     headers=headers,
@@ -289,7 +291,7 @@ class TTS:
             },
         }
 
-        response = requests.post(url, json=payload, timeout=120)
+        response = HTTP_SESSION.post(url, json=payload, timeout=120)
         response.raise_for_status()
         append_api_usage(
             "gemini_tts",

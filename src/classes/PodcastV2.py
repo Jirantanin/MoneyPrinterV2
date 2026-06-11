@@ -46,6 +46,7 @@ from config import (
 from image_provider import generate_image
 from kling_provider import generate_video_from_image
 from llm_provider import generate_text, generate_text_structured
+from remotion_runtime import remotion_subprocess_env, resolve_node_executable
 from runtime_trace import append_trace, get_trace_run_id, reset_trace_run_id, set_trace_run_id, summarize_run_cost
 from classes.Tts import TTS
 from classes.Tts import normalize_gemini_tts_tone_preset
@@ -75,6 +76,11 @@ def _safe_format(template: str, **kwargs) -> str:
         def __missing__(self, key):
             return "{" + key + "}"
     return str(template).format_map(_SafeDict(**kwargs))
+
+
+def _minimum_render_bytes(duration_seconds: float) -> int:
+    duration = max(1.0, float(duration_seconds or 0.0))
+    return max(100_000, min(1_000_000, int(duration * 50_000)))
 
 
 def _build_direction_block(creative_direction: str) -> str:
@@ -1885,7 +1891,12 @@ class PodcastV2:
             return narration_audio
         return output_path
 
-    def _normalize_rendered_audio(self, input_path: str, output_path: str) -> None:
+    def _normalize_rendered_audio(
+        self,
+        input_path: str,
+        output_path: str,
+        min_video_bytes: int = 1_000_000,
+    ) -> None:
         """Normalize podcast render loudness without re-encoding video."""
         temp_output = output_path + ".tmp.mp4"
         if os.path.exists(temp_output):
@@ -1913,7 +1924,7 @@ class PodcastV2:
             text=True,
             check=True,
         )
-        if not os.path.exists(temp_output) or os.path.getsize(temp_output) <= 1_000_000:
+        if not os.path.exists(temp_output) or os.path.getsize(temp_output) <= min_video_bytes:
             raise RuntimeError("Audio normalization did not create a valid final video.")
         os.replace(temp_output, output_path)
 
@@ -2678,10 +2689,21 @@ class PodcastV2:
         final_path = os.path.join(self.episode_dir, "final.mp4")
         raw_final_path = os.path.join(self.episode_dir, "final_unnormalized.mp4")
 
-        if os.path.exists(final_path) and os.path.getsize(final_path) > 1_000_000:
+        recovery_min_bytes = _minimum_render_bytes(0)
+        if os.path.exists(final_path) and os.path.getsize(final_path) > recovery_min_bytes:
             print(f"Skipping render (final.mp4 already exists at {final_path}).")
             return
         if os.path.exists(raw_final_path):
+            if os.path.getsize(raw_final_path) > recovery_min_bytes:
+                print(f"Recovering final.mp4 from existing raw render: {raw_final_path}")
+                try:
+                    self._normalize_rendered_audio(raw_final_path, final_path, recovery_min_bytes)
+                    if os.path.exists(raw_final_path):
+                        os.remove(raw_final_path)
+                    print(f"Recovered final video: {final_path}")
+                    return
+                except Exception as exc:
+                    print(f"Existing raw render could not be normalized ({exc}); rerendering.")
             os.remove(raw_final_path)
 
         wav_paths = []
@@ -2816,24 +2838,46 @@ class PodcastV2:
             f"Rendering {total} scenes via Remotion "
             f"({render_duration:.1f}s total, outro hold={outro_hold_seconds:.1f}s)..."
         )
-        subprocess.run(
-            ["node", "scripts/render.mjs", props_file_path],
-            cwd=str(remotion_dir),
-            check=True,
-            shell=False,
-            timeout=7200,
-        )
+        remotion_log_path = os.path.join(self.episode_dir, "remotion_render.log")
+        print(f"Remotion log: {remotion_log_path}")
+        node_executable = resolve_node_executable()
+        min_render_bytes = _minimum_render_bytes(render_duration)
+        try:
+            with open(remotion_log_path, "w", encoding="utf-8", errors="replace") as render_log:
+                subprocess.run(
+                    [node_executable, "scripts/render.mjs", props_file_path],
+                    cwd=str(remotion_dir),
+                    check=True,
+                    shell=False,
+                    timeout=7200,
+                    env=remotion_subprocess_env(node_executable),
+                    stdout=render_log,
+                    stderr=subprocess.STDOUT,
+                )
+        except subprocess.CalledProcessError as exc:
+            print(f"Remotion exited with code {exc.returncode}. See {remotion_log_path}.")
+            try:
+                with open(remotion_log_path, "r", encoding="utf-8", errors="replace") as render_log:
+                    tail = render_log.readlines()[-80:]
+                if tail:
+                    print("Remotion log tail:")
+                    print("".join(tail)[-4000:])
+            except Exception:
+                pass
+            if not (os.path.exists(raw_final_path) and os.path.getsize(raw_final_path) > min_render_bytes):
+                raise
+            print("Remotion produced a raw output despite the non-zero exit; validating it before normalization.")
 
         assert os.path.exists(raw_final_path), f"final_unnormalized.mp4 not found at {raw_final_path}"
-        assert os.path.getsize(raw_final_path) > 1_000_000, (
+        assert os.path.getsize(raw_final_path) > min_render_bytes, (
             f"final_unnormalized.mp4 is suspiciously small ({os.path.getsize(raw_final_path)} bytes)"
         )
-        self._normalize_rendered_audio(raw_final_path, final_path)
+        self._normalize_rendered_audio(raw_final_path, final_path, min_render_bytes)
         if os.path.exists(raw_final_path):
             os.remove(raw_final_path)
 
         assert os.path.exists(final_path), f"final.mp4 not found at {final_path}"
-        assert os.path.getsize(final_path) > 1_000_000, (
+        assert os.path.getsize(final_path) > min_render_bytes, (
             f"final.mp4 is suspiciously small ({os.path.getsize(final_path)} bytes)"
         )
         print(f"Final video: {final_path} (audio normalized, glossary entries={len(glossary_entries)})")
@@ -3183,6 +3227,10 @@ class PodcastV2:
                 if self.creative_direction else ""
             ),
         )
+        prompt += (
+            "\n\nJSON safety: Do not put raw straight double quotes inside JSON string values. "
+            "Use Thai quotation marks like “...” inside prose, or escape quotes as \\\"."
+        )
         raw = generate_text(prompt, model_name=get_podcast_script_model())
         metadata = None
         try:
@@ -3194,9 +3242,9 @@ class PodcastV2:
             except json.JSONDecodeError:
                 pass
         if metadata is None:
-            default_title_prefix = "เธเธญเธ”เนเธเธชเธ•เน" if self.language == "Thai" else "Podcast"
+            default_title_prefix = "พอดแคสต์" if self.language == "Thai" else "Podcast"
             default_description = (
-                f"เธ•เธญเธเธเธญเธ”เนเธเธชเธ•เนเธ—เธตเนเธเธฐเธเธฒเนเธเธชเธณเธฃเธงเธเน€เธฃเธทเนเธญเธ {self.topic} เนเธเธเธฅเธถเธเธเธถเนเธ"
+                f"ตอนพอดแคสต์ที่จะพาไปสำรวจเรื่อง {self.topic} แบบลึกขึ้น"
                 if self.language == "Thai"
                 else f"A deep dive podcast episode about {self.topic}."
             )

@@ -20,6 +20,30 @@ export interface SrtEntry {
 
 export type AssetType = "image" | "video";
 
+export type ProducerMotionGraphicKind =
+  | "bar_share"
+  | "orbit_slots"
+  | "spectrum"
+  | "queue";
+
+export interface ProducerMotionGraphicBar {
+  label: string;
+  value: number;
+  max?: number;
+  color?: string;
+}
+
+export interface ProducerMotionGraphic {
+  sceneIndex: number;
+  assetIndex?: number;
+  kind: ProducerMotionGraphicKind;
+  title?: string;
+  subtitle?: string;
+  metric?: string;
+  bars?: ProducerMotionGraphicBar[];
+  notes?: string[];
+}
+
 export interface GlossaryEntry {
   term: string;
   meaning: string;
@@ -37,6 +61,7 @@ export interface PodcastProps {
   sceneImageCounts?: number[];
   sceneAssetTypes?: AssetType[];
   sceneAssetDurations?: number[];
+  producerMotionGraphics?: ProducerMotionGraphic[];
   glossaryEntries?: GlossaryEntry[];
 }
 

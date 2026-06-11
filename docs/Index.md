@@ -20,6 +20,10 @@
   - FastAPI backend และ Studio runtime หลัก
 - `src/podcast_ui.html`
   - หน้าจอ Studio ฝั่ง Web UI
+- `src/classes/PodcastV2.py`
+  - long-form PodcastV2 pipeline ปัจจุบัน
+- `src/visual_planner.py`
+  - visual planning และ provider routing สำหรับ secondary assets
 - `src/main.py`
   - legacy launcher (ไม่ใช่เส้นทางหลัก)
 
@@ -51,9 +55,22 @@
   3. `docs/Configuration.md`
 
 - จะแก้ flow generation/render/upload:
-  1. `docs/Roadmap.md`
-  2. `docs/superpowers/specs/` ที่เกี่ยวข้อง
+  1. `docs/QuickMap.md`
+  2. `docs/API-Surface.md`
   3. ค่อยลงโค้ดใน `src/podcast_server.py` และ `src/classes/`
+
+- จะทำงานกับ PodcastV2 long-form ปัจจุบัน:
+  1. `docs/QuickMap.md` หัวข้อ PodcastV2 artifacts
+  2. `docs/Roadmap.md` หัวข้อ Post-v2.0 PodcastV2 production work
+  3. `docs/superpowers/plans/2026-05-12-podcastv2-section-visual-beats-roadmap.md`
+  4. `docs/superpowers/plans/2026-05-20-podcastv2-live-cost-console.md`
+  5. `docs/superpowers/plans/2026-05-20-podcastv2-visual-planner-interactive.html`
+
+- จะ debug provider/cost/render:
+  1. `docs/QuickMap.md`
+  2. `docs/Configuration.md`
+  3. `docs/API-Surface.md`
+  4. โค้ดจริงใน `src/visual_planner.py`, provider modules, `src/runtime_trace.py`, และ `remotion/*`
 
 - ตรวจว่าอะไร legacy:
   1. `docs/archive/`

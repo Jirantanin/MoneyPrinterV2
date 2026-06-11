@@ -28,6 +28,13 @@ PEXELS_USE_LLM_KEYWORDS = os.environ.get("PEXELS_USE_LLM_KEYWORDS", "").strip().
     "yes",
 }
 
+HTTP_SESSION = requests.Session()
+HTTP_SESSION.trust_env = False
+
+
+def _http_get(url: str, **kwargs) -> requests.Response:
+    return HTTP_SESSION.get(url, **kwargs)
+
 
 def _keyword_from_narration(narration_chunk: str) -> str | None:
     """Fast local stock-footage keyword selection.
@@ -143,7 +150,7 @@ def search_pexels_video(
         }
         headers = {"Authorization": api_key}
 
-        resp = requests.get(search_url, params=params, headers=headers, timeout=PEXELS_SEARCH_TIMEOUT)
+        resp = _http_get(search_url, params=params, headers=headers, timeout=PEXELS_SEARCH_TIMEOUT)
         resp.raise_for_status()
         append_api_usage(
             "pexels_video",
@@ -191,7 +198,7 @@ def search_pexels_video(
         try:
             started_at = time.monotonic()
             bytes_written = 0
-            dl_resp = requests.get(chosen_url, stream=True, timeout=PEXELS_DOWNLOAD_TIMEOUT)
+            dl_resp = _http_get(chosen_url, stream=True, timeout=PEXELS_DOWNLOAD_TIMEOUT)
             dl_resp.raise_for_status()
             with open(tmp_path, "wb") as f:
                 for chunk in dl_resp.iter_content(chunk_size=1024 * 256):

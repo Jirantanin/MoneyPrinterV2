@@ -12,17 +12,20 @@ export const KenBurnsFrame: React.FC<{
   imgPath: string;
   variant: KenBurnsVariant;
   durationInFrames: number;
-}> = ({ imgPath, variant, durationInFrames }) => {
+  profile?: 'default' | 'documentary-readable';
+}> = ({ imgPath, variant, durationInFrames, profile = 'default' }) => {
   const frame = useCurrentFrame();
   const progress = frame / Math.max(durationInFrames, 1);
+  const readableMotion = profile === 'documentary-readable';
+  const zoomMax = readableMotion ? 1.045 : 1.2;
 
   let transform = '';
   switch (variant) {
     case 'zoom-in':
-      transform = `scale(${interpolate(progress, [0, 1], [1.0, 1.2], { extrapolateRight: 'clamp' })})`;
+      transform = `scale(${interpolate(progress, [0, 1], [1.0, zoomMax], { extrapolateRight: 'clamp' })})`;
       break;
     case 'zoom-out':
-      transform = `scale(${interpolate(progress, [0, 1], [1.2, 1.0], { extrapolateRight: 'clamp' })})`;
+      transform = `scale(${interpolate(progress, [0, 1], [zoomMax, 1.0], { extrapolateRight: 'clamp' })})`;
       break;
     case 'pan-left':
       transform = `scale(1.15) translateX(${interpolate(progress, [0, 1], [3, -8], { extrapolateRight: 'clamp' })}%)`;

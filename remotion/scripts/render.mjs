@@ -2,7 +2,7 @@ import { readFileSync, mkdirSync, copyFileSync, existsSync, unlinkSync } from "n
 import { writeFileSync } from "node:fs";
 import { resolve, join, extname, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -96,6 +96,7 @@ if (isPodcast) {
     ...(rawProps.sceneImageCounts && { sceneImageCounts: rawProps.sceneImageCounts }),
     ...(rawProps.sceneAssetTypes && { sceneAssetTypes: rawProps.sceneAssetTypes }),
     ...(rawProps.sceneAssetDurations && { sceneAssetDurations: rawProps.sceneAssetDurations }),
+    ...(rawProps.producerMotionGraphics && { producerMotionGraphics: rawProps.producerMotionGraphics }),
     ...(rawProps.glossaryEntries && { glossaryEntries: rawProps.glossaryEntries }),
   };
 } else if (isClipShort) {
@@ -139,12 +140,20 @@ const outputPath = rawProps.outputPath.replace(/\\/g, "/");
 const propsArg = resolvedPropsPath.replace(/\\/g, "/");
 
 // ─── Invoke Remotion render ───────────────────────────────────────────────────
-const cmd = [
-  "npx", "remotion", "render",
+const remotionCli = join(remotionDir, "node_modules", "@remotion", "cli", "remotion-cli.js");
+if (!existsSync(remotionCli)) {
+  console.error("ERROR: Local Remotion CLI not found:", remotionCli);
+  console.error("Run npm install in:", remotionDir);
+  process.exit(1);
+}
+
+const remotionArgs = [
+  remotionCli,
+  "render",
   "src/Root.tsx",
   composition,
-  `"${outputPath}"`,
-  `--props="${propsArg}"`,
+  outputPath,
+  `--props=${propsArg}`,
   `--fps=${fps}`,
   "--codec=h264",
   "--pixel-format=yuv420p",
@@ -152,14 +161,13 @@ const cmd = [
   "--crf=18",
   `--concurrency=${concurrency}`,
   "--overwrite",
-].join(" ");
+];
 
-console.log("[render.mjs] Running:", cmd);
+console.log("[render.mjs] Running:", [process.execPath, ...remotionArgs].join(" "));
 try {
-  execSync(cmd, {
+  execFileSync(process.execPath, remotionArgs, {
     cwd: remotionDir,
     stdio: "inherit",
-    shell: true,   // required on Windows: npx is a .cmd file
     timeout: renderTimeoutMs,
   });
 } finally {

@@ -30,7 +30,18 @@ RUNWARE_NEGATIVE_PROMPT = (
     "oversaturated, cartoon, anime"
 )
 
+HTTP_SESSION = requests.Session()
+HTTP_SESSION.trust_env = False
+
 _last_runware_image_time: float = 0.0
+
+
+def _http_get(url: str, **kwargs) -> requests.Response:
+    return HTTP_SESSION.get(url, **kwargs)
+
+
+def _http_post(url: str, **kwargs) -> requests.Response:
+    return HTTP_SESSION.post(url, **kwargs)
 
 
 def _persist_image(image_bytes: bytes, output_path: str) -> str | None:
@@ -53,7 +64,7 @@ def _download_image(image_url: str, output_path: str) -> str | None:
     if parent:
         os.makedirs(parent, exist_ok=True)
 
-    with requests.get(image_url, stream=True, timeout=RUNWARE_DOWNLOAD_TIMEOUT) as response:
+    with _http_get(image_url, stream=True, timeout=RUNWARE_DOWNLOAD_TIMEOUT) as response:
         response.raise_for_status()
         with open(output_path, "wb") as image_file:
             for chunk in response.iter_content(chunk_size=1024 * 128):
@@ -163,7 +174,7 @@ def generate_flux1_image(prompt: str, output_path: str, api_key: str | None = No
                 "Generating fallback image with Runware FLUX.1 "
                 f"({settings['width']}x{settings['height']}, {settings['steps']} steps)"
             )
-        response = requests.post(endpoint, headers=headers, json=[task], timeout=RUNWARE_REQUEST_TIMEOUT)
+        response = _http_post(endpoint, headers=headers, json=[task], timeout=RUNWARE_REQUEST_TIMEOUT)
         response.raise_for_status()
         body = response.json()
 

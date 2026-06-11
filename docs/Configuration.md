@@ -15,6 +15,9 @@ and should be created from `config.example.json`.
 - `nanobanana2_api_key`: image API key, falls back to `GEMINI_API_KEY`
 - `nanobanana2_model`: image generation model
 - `nanobanana2_aspect_ratio`: image aspect ratio for generated visuals
+- `anthropic_api_key`: Anthropic/Claude key for PodcastV2 script generation
+- `anthropic_model`: Claude model name used through podcast settings, default `claude-sonnet-4-6`
+- `gemini_tts_api_key`: Gemini TTS key, falls back to image/Gemini key paths
 - `pexels_api_key`: Pexels stock video key for PodcastV2 B-roll assets
 - `pixabay_api_key`: Pixabay stock video key used after Pexels misses and before AI image fallback
 - `runware_api_key`: Runware key for low-cost FLUX.1 fallback images after Pexels/Pixabay miss
@@ -24,6 +27,7 @@ and should be created from `config.example.json`.
 - `runware_image_cfg_scale`: fallback guidance scale, default `3.5`
 - `runware_image_output_format`: fallback format, default `PNG`
 - `runware_image_retry_count`: Runware fallback retries, default `1` to avoid surprise spend
+- `podcast_v2_seconds_per_image`: target seconds per secondary asset in PodcastV2 scenes, default `8`
 - `threads`: worker count for local media processing
 - `imagemagick_path`: path to `magick.exe` on Windows or `convert` on Unix
 
@@ -50,6 +54,11 @@ both nested settings and older flat keys.
 - `podcast_narrator.tts_rate`: narrator speech rate
 - `podcast_style_prompt`: style suffix appended to generated podcast image prompts
 - `elevenlabs_voice_id_th`: Thai ElevenLabs voice id when that path is enabled
+- `podcast_background_bed_enabled`: enable quiet bed under PodcastV2 narration
+- `podcast_background_bed_path`: local bed audio path, relative to repo root when not absolute
+- `podcast_background_bed_volume_db`: bed base volume before ducking
+- `podcast_background_bed_ducking_ratio`: how strongly the bed ducks under narration
+- `podcast_background_bed_fade_seconds`: bed fade in/out duration
 
 ## Shorts and Upload Settings
 
@@ -78,6 +87,13 @@ folder is reference-only and not part of the supported runtime path.
 ## Environment Variable Fallbacks
 
 - `GEMINI_API_KEY`: used when `nanobanana2_api_key` is empty
+- `ANTHROPIC_API_KEY`: used when `anthropic_api_key` is empty
+- `PIXABAY_API_KEY`: used when `pixabay_api_key` is empty
+- `RUNWARE_API_KEY`: used when `runware_api_key` is empty
+- `PEXELS_USE_LLM_KEYWORDS`: optional experimental switch for LLM-assisted Pexels keywords
+- `PODCAST_RENDER_IMAGE_ONLY`: set truthy for image-only PodcastV2 render debugging
+- `PODCAST_BACKGROUND_BED_ENABLED`: overrides background bed enablement at render time
+- `PODCAST_BACKGROUND_BED_PATH`: overrides background bed path at render time
 
 ## Recommended Workflow
 

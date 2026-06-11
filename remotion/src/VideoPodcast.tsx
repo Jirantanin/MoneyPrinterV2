@@ -1,10 +1,296 @@
 import React, { useMemo } from "react";
-import { AbsoluteFill, Audio, OffthreadVideo, staticFile, useVideoConfig, useCurrentFrame, interpolate, spring } from "remotion";
+import { AbsoluteFill, Audio, Loop, OffthreadVideo, staticFile, useVideoConfig, useCurrentFrame, interpolate, spring } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
-import { slide } from "@remotion/transitions/slide";
 import { fade } from "@remotion/transitions/fade";
-import { AssetType, GlossaryEntry, PodcastProps } from "./types";
-import { KenBurnsFrame, KB_CYCLE, SLIDE_DIRS, TRANSITION_FRAMES } from "./KenBurns";
+import { AssetType, GlossaryEntry, PodcastProps, ProducerMotionGraphic } from "./types";
+import { KenBurnsFrame, TRANSITION_FRAMES } from "./KenBurns";
+import { PremiumProducerMotionGraphicOverlay } from "./ProducerMotionGraphicOverlay";
+import { PRODUCER_FONT_FAMILY, useProducerFonts } from "./producerFonts";
+
+const PODCAST_MOTION_CYCLE = ['zoom-in', 'zoom-out'] as const;
+const MOTION_GRAPHIC_COLORS = ["#f4c85f", "#64d7cb", "#ff8a72", "#9fb7ff"];
+
+const ProducerMotionGraphicOverlay: React.FC<{
+  spec?: ProducerMotionGraphic;
+  durationInFrames: number;
+}> = ({ spec, durationInFrames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  if (!spec) return null;
+
+  const fadeOutStart = Math.max(18, durationInFrames - Math.floor(fps * 0.5));
+  const opacity = interpolate(
+    frame,
+    [0, 12, fadeOutStart, durationInFrames],
+    [0, 1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const progress = interpolate(
+    frame,
+    [6, Math.max(28, Math.floor(durationInFrames * 0.45))],
+    [0, 1],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const lift = interpolate(frame, [0, 18], [30, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  const bars = spec.bars ?? [];
+  const maxBar = Math.max(
+    1,
+    ...bars.map((bar) => Number(bar.max ?? bar.value ?? 0))
+  );
+  const notes = (spec.notes ?? []).slice(0, 3);
+
+  const labelStyle: React.CSSProperties = {
+    color: "#dfe9f4",
+    fontSize: 28,
+    lineHeight: 1.2,
+    fontWeight: 650,
+    fontFamily: PRODUCER_FONT_FAMILY,
+  };
+
+  return (
+    <AbsoluteFill
+      style={{
+        opacity,
+        background:
+          "linear-gradient(90deg, rgba(0,0,0,0.58) 0%, rgba(0,0,0,0.2) 48%, rgba(0,0,0,0.66) 100%)",
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: 74,
+          top: 96,
+          width: 620,
+          transform: `translateY(${lift}px)`,
+          padding: "30px 34px 32px",
+          borderRadius: 18,
+          background: "rgba(7, 13, 22, 0.76)",
+          border: "1px solid rgba(240, 248, 255, 0.24)",
+          boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
+        }}
+      >
+        {spec.title && (
+          <div
+            style={{
+              color: "#fff8e6",
+              fontSize: 44,
+              lineHeight: 1.05,
+              fontWeight: 850,
+              fontFamily: PRODUCER_FONT_FAMILY,
+              marginBottom: 12,
+            }}
+          >
+            {spec.title}
+          </div>
+        )}
+        {spec.subtitle && (
+          <div style={{ ...labelStyle, color: "#9fd9ce", marginBottom: 20 }}>
+            {spec.subtitle}
+          </div>
+        )}
+        {spec.metric && (
+          <div
+            style={{
+              color: "#f4c85f",
+              fontSize: 78,
+              lineHeight: 0.95,
+              fontWeight: 900,
+              fontFamily: PRODUCER_FONT_FAMILY,
+              marginBottom: 20,
+            }}
+          >
+            {spec.metric}
+          </div>
+        )}
+        {bars.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {bars.map((bar, index) => {
+              const width = Math.max(0, Math.min(1, Number(bar.value || 0) / maxBar)) * progress;
+              const color = bar.color || MOTION_GRAPHIC_COLORS[index % MOTION_GRAPHIC_COLORS.length];
+              return (
+                <div key={`${bar.label}-${index}`}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 20,
+                      marginBottom: 8,
+                      ...labelStyle,
+                    }}
+                  >
+                    <span>{bar.label}</span>
+                    <span style={{ color }}>{bar.value}</span>
+                  </div>
+                  <div
+                    style={{
+                      height: 22,
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.14)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${width * 100}%`,
+                        height: "100%",
+                        borderRadius: 999,
+                        background: color,
+                        boxShadow: `0 0 28px ${color}`,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {notes.length > 0 && (
+          <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 10 }}>
+            {notes.map((note, index) => (
+              <div key={`${note}-${index}`} style={{ ...labelStyle, fontSize: 24, color: "#f3f7fb" }}>
+                {note}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {spec.kind === "orbit_slots" && (
+        <div
+          style={{
+            position: "absolute",
+            right: 120,
+            top: 108,
+            width: 780,
+            height: 780,
+            transform: `scale(${0.9 + progress * 0.1})`,
+          }}
+        >
+          {[0, 1, 2, 3].map((ring) => {
+            const size = 220 + ring * 145;
+            const speed = ring % 2 === 0 ? 0.65 : -0.5;
+            const rotation = frame * speed + ring * 38;
+            return (
+              <div
+                key={ring}
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  width: size,
+                  height: size,
+                  marginLeft: -size / 2,
+                  marginTop: -size / 2,
+                  borderRadius: "50%",
+                  border: "2px solid rgba(180, 229, 255, 0.35)",
+                  transform: `rotate(${rotation}deg)`,
+                }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    top: -8,
+                    width: 16,
+                    height: 16,
+                    borderRadius: "50%",
+                    background: MOTION_GRAPHIC_COLORS[ring % MOTION_GRAPHIC_COLORS.length],
+                    boxShadow: "0 0 24px rgba(255,255,255,0.8)",
+                  }}
+                />
+              </div>
+            );
+          })}
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              width: 156,
+              height: 156,
+              marginLeft: -78,
+              marginTop: -78,
+              borderRadius: "50%",
+              background: "radial-gradient(circle, #66d6ff 0%, #244a71 60%, #101a2a 100%)",
+              boxShadow: "0 0 80px rgba(102,214,255,0.45)",
+            }}
+          />
+        </div>
+      )}
+
+      {spec.kind === "spectrum" && (
+        <div
+          style={{
+            position: "absolute",
+            right: 92,
+            bottom: 100,
+            width: 980,
+            height: 280,
+            display: "grid",
+            gridTemplateColumns: "repeat(9, 1fr)",
+            gap: 12,
+          }}
+        >
+          {Array.from({ length: 9 }).map((_, index) => {
+            const active = ((Math.floor(frame / 10) + index) % 9) / 8;
+            const height = 70 + active * 180 * progress;
+            return (
+              <div
+                key={index}
+                style={{
+                  alignSelf: "end",
+                  height,
+                  borderRadius: "12px 12px 0 0",
+                  background: MOTION_GRAPHIC_COLORS[index % MOTION_GRAPHIC_COLORS.length],
+                  opacity: 0.76,
+                  boxShadow: "0 -10px 34px rgba(255,255,255,0.18)",
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {spec.kind === "queue" && (
+        <div
+          style={{
+            position: "absolute",
+            right: 94,
+            top: 134,
+            width: 880,
+            display: "grid",
+            gridTemplateColumns: "repeat(6, 1fr)",
+            gap: 18,
+          }}
+        >
+          {Array.from({ length: 24 }).map((_, index) => {
+            const filled = index / 24 < progress * 0.86;
+            return (
+              <div
+                key={index}
+                style={{
+                  height: 76,
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: filled
+                    ? MOTION_GRAPHIC_COLORS[index % MOTION_GRAPHIC_COLORS.length]
+                    : "rgba(255,255,255,0.08)",
+                  boxShadow: filled ? "0 0 28px rgba(255,255,255,0.2)" : "none",
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
+    </AbsoluteFill>
+  );
+};
 
 // ─── Chapter Title Overlay ──────────────────────────────────────────────────
 const ChapterTitle: React.FC<{ title: string; durationInFrames: number }> = ({ title, durationInFrames }) => {
@@ -16,8 +302,8 @@ const ChapterTitle: React.FC<{ title: string; durationInFrames: number }> = ({ t
   const cleanTitle = title.trim();
   if (!cleanTitle) return null;
 
-  // Show for ~3.6s (or less if the scene is short)
-  const showDuration = Math.max(24, Math.min(Math.floor(fps * 3.6), durationInFrames - 12));
+  // Keep chapter cards readable long enough for documentary section changes.
+  const showDuration = Math.max(24, Math.min(Math.floor(fps * 6), durationInFrames - 12));
 
   // Fade in/out with a softer curve
   const opacity = interpolate(
@@ -78,7 +364,7 @@ const ChapterTitle: React.FC<{ title: string; durationInFrames: number }> = ({ t
             lineHeight: 1.08,
             fontWeight: 800,
             letterSpacing: 0.3,
-            fontFamily: "Inter, Segoe UI, sans-serif",
+            fontFamily: PRODUCER_FONT_FAMILY,
             textShadow: "0 4px 16px rgba(0,0,0,0.35)",
           }}
         >
@@ -135,7 +421,7 @@ const GlossaryOverlay: React.FC<{ entries?: GlossaryEntry[] }> = ({ entries = []
           padding: "18px 22px 20px",
           boxShadow: "0 14px 34px rgba(0,0,0,0.42)",
           backdropFilter: "blur(6px)",
-          fontFamily: "Inter, Segoe UI, sans-serif",
+          fontFamily: PRODUCER_FONT_FAMILY,
         }}
       >
         <div
@@ -192,25 +478,27 @@ const PodcastSlideshowV1: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDurat
             <TransitionSeries.Sequence durationInFrames={padded}>
               {i === 0 && scene0VideoPath ? (
                 <AbsoluteFill>
-                  <OffthreadVideo
-                    src={staticFile(scene0VideoPath)}
-                    loop
-                    volume={0}
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  />
+                  <Loop durationInFrames={Math.max(1, padded - 1)}>
+                    <OffthreadVideo
+                      src={staticFile(scene0VideoPath)}
+                      volume={0}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </Loop>
                 </AbsoluteFill>
               ) : (
                 <KenBurnsFrame
                   imgPath={imgPath}
-                  variant={KB_CYCLE[i % KB_CYCLE.length]}
+                  variant={PODCAST_MOTION_CYCLE[i % PODCAST_MOTION_CYCLE.length]}
                   durationInFrames={padded}
+                  profile="documentary-readable"
                 />
               )}
               <ChapterTitle title={sceneTitles?.[i] || ""} durationInFrames={padded} />
             </TransitionSeries.Sequence>
             {i < n - 1 && (
               <TransitionSeries.Transition
-                presentation={slide({ direction: SLIDE_DIRS[i % SLIDE_DIRS.length] })}
+                presentation={fade()}
                 timing={linearTiming({ durationInFrames: tf })}
               />
             )}
@@ -222,8 +510,7 @@ const PodcastSlideshowV1: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDurat
 };
 
 // ─── V2 Slideshow: multiple assets per scene ─────────────────────────────────
-// Within a scene: fade transitions between assets.
-// Between scenes: slide transitions (same as V1).
+// Use restrained motion and dissolves so documentary evidence remains readable.
 const PodcastSlideshowV2: React.FC<{
   imagePaths: string[];
   sceneDurations: number[];
@@ -232,6 +519,7 @@ const PodcastSlideshowV2: React.FC<{
   sceneImageCounts: number[];
   sceneAssetTypes: AssetType[];
   sceneAssetDurations: number[];
+  producerMotionGraphics?: ProducerMotionGraphic[];
 }> = ({
   imagePaths,
   sceneDurations,
@@ -240,6 +528,7 @@ const PodcastSlideshowV2: React.FC<{
   sceneImageCounts,
   sceneAssetTypes,
   sceneAssetDurations,
+  producerMotionGraphics = [],
 }) => {
   const { fps } = useVideoConfig();
 
@@ -249,28 +538,77 @@ const PodcastSlideshowV2: React.FC<{
 
   const numScenes = sceneImageCounts.length;
   const minSceneFrames = Math.min(...sceneDurations.map(d => Math.ceil(d * fps)));
-  const slideTf = numScenes > 1 ? Math.min(TRANSITION_FRAMES, Math.floor(minSceneFrames / 2)) : 0;
+  const sceneTf = numScenes > 1 ? Math.min(TRANSITION_FRAMES, Math.floor(minSceneFrames / 2)) : 0;
   const fadeTf = Math.min(15, Math.floor(minSceneFrames / 4));
 
   const sceneSlices = useMemo(() => {
     let offset = 0;
-    return sceneImageCounts.map(count => {
-      const slice = {
-        paths: imagePaths.slice(offset, offset + count),
-        types: sceneAssetTypes.slice(offset, offset + count),
-        assetDurs: sceneAssetDurations.slice(offset, offset + count),
-      };
+    const slices = sceneImageCounts.map(count => {
+      const paths = imagePaths.slice(offset, offset + count);
+      const types = sceneAssetTypes.slice(offset, offset + count);
+      const assetDurs = sceneAssetDurations.slice(offset, offset + count);
       offset += count;
-      return slice;
+
+      const compacted: Array<{ path: string; type: AssetType; duration: number; assetIndex: number }> = [];
+      paths.forEach((path, index) => {
+        const type = types[index];
+        const duration = assetDurs[index] ?? 0;
+        const previous = compacted[compacted.length - 1];
+        if (previous && previous.path === path && previous.type === type && type === "image") {
+          previous.duration += duration;
+          return;
+        }
+        compacted.push({ path, type, duration, assetIndex: index });
+      });
+
+      return {
+        paths: compacted.map((asset) => asset.path),
+        types: compacted.map((asset) => asset.type),
+        assetDurs: compacted.map((asset) => asset.duration),
+        assetIndexes: compacted.map((asset) => asset.assetIndex),
+      };
     });
-  }, [imagePaths, sceneImageCounts, sceneAssetTypes, sceneAssetDurations]);
+
+    for (let sceneIndex = 1; sceneIndex < slices.length; sceneIndex++) {
+      const current = slices[sceneIndex];
+      if ((sceneTitles?.[sceneIndex] || "").trim() || current.paths.length === 0) {
+        continue;
+      }
+
+      let previousIndex = sceneIndex - 1;
+      while (previousIndex >= 0 && slices[previousIndex].paths.length === 0) {
+        previousIndex--;
+      }
+      if (previousIndex < 0) {
+        continue;
+      }
+
+      const previous = slices[previousIndex];
+      const previousAssetIndex = previous.paths.length - 1;
+      const sameStillContinues =
+        previousAssetIndex >= 0 &&
+        previous.paths[previousAssetIndex] === current.paths[0] &&
+        previous.types[previousAssetIndex] === "image" &&
+        current.types[0] === "image";
+
+      if (sameStillContinues) {
+        previous.assetDurs[previousAssetIndex] += current.assetDurs[0];
+        current.paths.shift();
+        current.types.shift();
+        current.assetDurs.shift();
+        current.assetIndexes.shift();
+      }
+    }
+
+    return slices;
+  }, [imagePaths, sceneImageCounts, sceneAssetTypes, sceneAssetDurations, sceneTitles]);
 
   const entries = useMemo(() => {
     const result: React.ReactNode[] = [];
     let globalAssetIdx = 0;
 
     for (let s = 0; s < numScenes; s++) {
-      const { paths, types, assetDurs } = sceneSlices[s];
+      const { paths, types, assetDurs, assetIndexes } = sceneSlices[s];
       const numAssets = paths.length;
 
       for (let a = 0; a < numAssets; a++) {
@@ -281,40 +619,46 @@ const PodcastSlideshowV2: React.FC<{
 
         let padded = rawFrames;
         if (!isLastAssetInScene && fadeTf > 0) padded += fadeTf;
-        else if (isLastAssetInScene && !isLastScene && slideTf > 0) padded += slideTf;
+        else if (isLastAssetInScene && !isLastScene && sceneTf > 0) padded += sceneTf;
 
         const imgPath = paths[a];
         const assetType = types[a];
         const isScene0Asset0 = s === 0 && a === 0;
+        const assetIndex = assetIndexes[a] ?? a;
+        const motionGraphic = producerMotionGraphics.find((spec) => {
+          const sameScene = Number(spec.sceneIndex) === s;
+          const sameAsset =
+            spec.assetIndex === undefined || Number(spec.assetIndex) === assetIndex;
+          return sameScene && sameAsset;
+        });
 
         result.push(
           <TransitionSeries.Sequence key={`s${s}a${a}`} durationInFrames={padded}>
-            {isScene0Asset0 && scene0VideoPath ? (
-              <AbsoluteFill>
+            <AbsoluteFill>
+              {isScene0Asset0 && scene0VideoPath ? (
                 <OffthreadVideo
                   src={staticFile(scene0VideoPath)}
-                  loop
+                  endAt={Math.max(1, padded)}
                   volume={0}
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
-              </AbsoluteFill>
-            ) : assetType === "video" ? (
-              <AbsoluteFill>
+              ) : assetType === "video" ? (
                 <OffthreadVideo
                   src={staticFile(imgPath)}
-                  loop
-                  endAt={Math.floor(assetDur * fps)}
+                  endAt={Math.max(1, padded)}
                   volume={0}
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
-              </AbsoluteFill>
-            ) : (
-              <KenBurnsFrame
-                imgPath={imgPath}
-                variant={KB_CYCLE[globalAssetIdx % KB_CYCLE.length]}
-                durationInFrames={padded}
-              />
-            )}
+              ) : (
+                <KenBurnsFrame
+                  imgPath={imgPath}
+                  variant={PODCAST_MOTION_CYCLE[globalAssetIdx % PODCAST_MOTION_CYCLE.length]}
+                  durationInFrames={padded}
+                  profile="documentary-readable"
+                />
+              )}
+              <PremiumProducerMotionGraphicOverlay spec={motionGraphic} durationInFrames={padded} />
+            </AbsoluteFill>
             {a === 0 && (
               <ChapterTitle title={sceneTitles?.[s] || ""} durationInFrames={padded} />
             )}
@@ -327,8 +671,8 @@ const PodcastSlideshowV2: React.FC<{
             result.push(
               <TransitionSeries.Transition
                 key={`tr_s${s}a${a}`}
-                presentation={slide({ direction: SLIDE_DIRS[s % SLIDE_DIRS.length] })}
-                timing={linearTiming({ durationInFrames: slideTf })}
+                presentation={fade()}
+                timing={linearTiming({ durationInFrames: sceneTf })}
               />
             );
           } else {
@@ -347,13 +691,13 @@ const PodcastSlideshowV2: React.FC<{
     }
 
     return result;
-  }, [sceneSlices, fps, slideTf, fadeTf, scene0VideoPath, sceneTitles, numScenes]);
+  }, [sceneSlices, fps, sceneTf, fadeTf, scene0VideoPath, sceneTitles, numScenes, producerMotionGraphics]);
 
   return <TransitionSeries>{entries}</TransitionSeries>;
 };
 
 // ─── Podcast Slideshow dispatcher ────────────────────────────────────────────
-const PodcastSlideshow: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDurations' | 'sceneTitles' | 'scene0VideoPath' | 'sceneImageCounts' | 'sceneAssetTypes' | 'sceneAssetDurations'>> = (props) => {
+const PodcastSlideshow: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDurations' | 'sceneTitles' | 'scene0VideoPath' | 'sceneImageCounts' | 'sceneAssetTypes' | 'sceneAssetDurations' | 'producerMotionGraphics'>> = (props) => {
   if (props.sceneImageCounts && props.sceneImageCounts.length > 0 && props.sceneAssetTypes) {
     return (
       <PodcastSlideshowV2
@@ -364,6 +708,7 @@ const PodcastSlideshow: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDuratio
         sceneImageCounts={props.sceneImageCounts}
         sceneAssetTypes={props.sceneAssetTypes}
         sceneAssetDurations={props.sceneAssetDurations ?? props.sceneDurations}
+        producerMotionGraphics={props.producerMotionGraphics}
       />
     );
   }
@@ -379,6 +724,8 @@ const PodcastSlideshow: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDuratio
 
 // ─── Root composition ────────────────────────────────────────────────────────
 export const VideoPodcast: React.FC<PodcastProps> = (props) => {
+  useProducerFonts();
+
   return (
     <AbsoluteFill style={{ backgroundColor: "#000", width: 1920, height: 1080 }}>
       <PodcastSlideshow
@@ -389,6 +736,7 @@ export const VideoPodcast: React.FC<PodcastProps> = (props) => {
         sceneImageCounts={props.sceneImageCounts}
         sceneAssetTypes={props.sceneAssetTypes}
         sceneAssetDurations={props.sceneAssetDurations}
+        producerMotionGraphics={props.producerMotionGraphics}
       />
       <GlossaryOverlay entries={props.glossaryEntries} />
       {props.audioPath && <Audio src={staticFile(props.audioPath)} />}

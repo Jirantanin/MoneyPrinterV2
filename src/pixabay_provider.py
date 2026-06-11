@@ -24,6 +24,13 @@ PIXABAY_DOWNLOAD_WALL_TIMEOUT_SECONDS = 75
 PIXABAY_MAX_DOWNLOAD_BYTES = 90 * 1024 * 1024
 PIXABAY_FFMPEG_TIMEOUT_SECONDS = 45
 
+HTTP_SESSION = requests.Session()
+HTTP_SESSION.trust_env = False
+
+
+def _http_get(url: str, **kwargs) -> requests.Response:
+    return HTTP_SESSION.get(url, **kwargs)
+
 
 def _best_pixabay_video_file(hit: dict) -> dict | None:
     videos = hit.get("videos") or {}
@@ -88,7 +95,7 @@ def search_pixabay_video(
             "min_height": 360,
         }
 
-        resp = requests.get(search_url, params=params, timeout=PIXABAY_SEARCH_TIMEOUT)
+        resp = _http_get(search_url, params=params, timeout=PIXABAY_SEARCH_TIMEOUT)
         resp.raise_for_status()
         append_api_usage(
             "pixabay_video",
@@ -127,7 +134,7 @@ def search_pixabay_video(
         try:
             started_at = time.monotonic()
             bytes_written = 0
-            dl_resp = requests.get(chosen_url, stream=True, timeout=PIXABAY_DOWNLOAD_TIMEOUT)
+            dl_resp = _http_get(chosen_url, stream=True, timeout=PIXABAY_DOWNLOAD_TIMEOUT)
             dl_resp.raise_for_status()
             with open(tmp_path, "wb") as f:
                 for chunk in dl_resp.iter_content(chunk_size=1024 * 256):
