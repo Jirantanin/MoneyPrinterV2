@@ -1,42 +1,36 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-- `src/` contains the application code. Use `src/podcast_server.py` as the primary Web UI entrypoint. `src/main.py` remains as a legacy launcher.
-- `src/classes/` holds active runtime components such as `YouTube.py`, `Podcast.py`, and `Tts.py`.
-- `src/legacy/classes/` holds retired modules kept only for reference.
-- Shared utilities and configuration live in modules like `src/config.py`, `src/utils.py`, `src/cache.py`, and `src/constants.py`.
-- `scripts/` contains helper workflows such as setup and preflight checks. Archived scripts live under `scripts/archive/`.
-- `docs/` contains active documentation, while `docs/archive/` contains legacy docs kept for reference.
+## Project Structure
 
-## Build, Test, and Development Commands
-- `bash scripts/setup_local.sh`: bootstrap local development, install dependencies, seed `config.json`, run preflight, and point to the Studio launch command.
-- `source venv/bin/activate && pip install -r requirements.txt`: manual dependency install or update.
-- `python3 scripts/preflight_local.py`: validate local provider and config readiness before running tasks.
-- `python3 -c "from src.podcast_server import launch_podcast_server; launch_podcast_server()"`: start the Studio Web UI.
-- `python3 src/main.py`: start the legacy CLI launcher if needed.
+- `src/producer_*.py`: Producer Mode planning, evidence, asset, narration, review, and render stages.
+- `src/producer_mode.py`: production plan and checkpoint helpers.
+- `src/producer_contract.py`: canonical episode contract.
+- `src/classes/Tts.py`: shared Gemini TTS implementation used by Producer Mode.
+- `src/llm_provider.py`, `src/pexels_provider.py`, `src/pixabay_provider.py`, and `src/runware_provider.py`: provider integrations.
+- `remotion/src/VideoPodcast.tsx`: Producer Mode video composition.
+- `remotion/src/ClipShort.tsx`: composition used by the adjacent Shorts Pack skill.
+- `src/producer_minimal_renderer.py` + `doc_renderer/`: optional minimal documentary renderer, chosen per episode with `render_settings.renderer`.
+- `docs/`: active workflow documentation and retained historical references.
+- `.mp/`: local episode work and generated media; do not remove as part of source cleanup.
 
-## Coding Style & Naming Conventions
-- Target Python 3.12.
-- Use 4-space indentation and standard Python naming:
-  - `snake_case` for functions and variables
-  - `PascalCase` for classes
-  - `UPPER_SNAKE_CASE` for constants
-- Keep new business logic in focused modules under `src/`.
-- Prefer small, explicit functions and preserve the current Web UI-first behavior.
+The old Studio UI/API, automated Podcast and Shorts pipelines, scheduled runner, and APOD automation are retired and must not be reintroduced as the primary workflow.
 
-## Testing Guidelines
-- There is currently no enforced automated test suite or coverage threshold.
-- Minimum validation for changes:
-  - Run `python3 scripts/preflight_local.py`
-  - Smoke-test the Studio root route and impacted API endpoints
-- When adding tests, place them in a top-level `tests/` directory with names like `test_<module>.py`.
+## Development Commands
 
-## Commit & Pull Request Guidelines
-- Follow the existing commit style: imperative summaries like `Fix ...` or `Update ...`, optionally with issue refs.
-- Open PRs against `main`.
-- Link each PR to an issue, keep scope to one feature or fix, and use a clear title and description.
-- Mark not-ready PRs with `WIP` and remove it when ready for review.
+- `bash scripts/setup_local.sh`: create the Python environment, install requirements, and print the Producer Mode entry command.
+- `python scripts/preflight_local.py`: check local Producer Mode configuration without calling provider APIs.
+- `python scripts/producer_mode.py --help`: inspect plan and checkpoint commands.
+- `python scripts/producer_review.py --help`: inspect review and render-preparation commands.
+- For Remotion: run `npm install` in `remotion/`, then use the Producer Mode render command.
 
-## Security & Configuration Tips
-- Treat `config.json` as environment-specific; do not commit real API keys or private paths.
-- Start from `config.example.json` and prefer environment variables where supported, for example `GEMINI_API_KEY`.
+Target Python 3.12. Use four-space indentation, `snake_case` for Python functions and variables, and `PascalCase` for classes.
+
+## Validation and Data Safety
+
+Do not add or run tests unless the user asks. For workflow changes, use static source inspection and `git diff --check`; do not call paid providers or render video without the authorization required by Producer Mode.
+
+Preserve existing working-tree edits, episode folders, local credentials, and generated media unless the user explicitly asks to remove those exact items. Keep config values and secrets out of commits.
+
+## Contributions
+
+Use imperative commit summaries such as `Fix ...` or `Update ...`. Keep changes scoped and describe user-visible behavior and validation in pull requests.

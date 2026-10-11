@@ -1,103 +1,51 @@
-# Configuration
+# Producer Mode Configuration
 
-The active runtime in this repo is the Web UI Studio served by
-`src/podcast_server.py`. Configuration lives in `config.json` at the repo root
-and should be created from `config.example.json`.
+Create local settings by copying `config.example.json` to `config.json`. Keep that file and all API credentials out of version control.
 
-## Core Runtime Settings
+## Text models
 
-- `ollama_base_url`: local Ollama base URL
-- `ollama_model`: default Ollama model for text generation fallback
-- `minimax_api_key`: OpenRouter API key for MiniMax
-- `minimax_api_base_url`: OpenRouter base URL
-- `minimax_model`: MiniMax model name
-- `nanobanana2_api_base_url`: image API base URL
-- `nanobanana2_api_key`: image API key, falls back to `GEMINI_API_KEY`
-- `nanobanana2_model`: image generation model
-- `nanobanana2_aspect_ratio`: image aspect ratio for generated visuals
-- `anthropic_api_key`: Anthropic/Claude key for PodcastV2 script generation
-- `anthropic_model`: Claude model name used through podcast settings, default `claude-sonnet-4-6`
-- `gemini_tts_api_key`: Gemini TTS key, falls back to image/Gemini key paths
-- `pexels_api_key`: Pexels stock video key for PodcastV2 B-roll assets
-- `pixabay_api_key`: Pixabay stock video key used after Pexels misses and before AI image fallback
-- `runware_api_key`: Runware key for low-cost FLUX.1 fallback images after Pexels/Pixabay miss
-- `runware_image_model`: Runware model id, default `runware:101@1` for FLUX.1 dev
-- `runware_image_width` / `runware_image_height`: fallback image size, default `1024x576` for cheap 16:9 assets
-- `runware_image_steps`: fallback image steps, default `28`
-- `runware_image_cfg_scale`: fallback guidance scale, default `3.5`
-- `runware_image_output_format`: fallback format, default `PNG`
-- `runware_image_retry_count`: Runware fallback retries, default `1` to avoid surprise spend
-- `podcast_v2_seconds_per_image`: target seconds per secondary asset in PodcastV2 scenes, default `8`
-- `threads`: worker count for local media processing
-- `imagemagick_path`: path to `magick.exe` on Windows or `convert` on Unix
+- `minimax_api_key`: OpenRouter key for the configured MiniMax model.
+- `minimax_api_base_url`: OpenRouter-compatible API base URL; defaults to `https://openrouter.ai/api/v1`.
+- `minimax_model`: default MiniMax model, for example `minimax/minimax-m2.5:free`.
+- `anthropic_api_key`: Claude API key; `ANTHROPIC_API_KEY` is also supported.
+- `anthropic_model`: Claude model, currently defaulted to `claude-sonnet-4-6`.
+- `podcast_settings.models`: model and voice settings shared with Producer Mode helpers.
 
-## TTS and Subtitle Settings
+An explicit Claude model routes to Anthropic. Calls without an explicit Claude model use MiniMax when its OpenRouter key is configured, then the local Ollama fallback if available.
 
-- `tts_provider`: current TTS engine, default `edge`
-- `tts.edge.voice`: Edge voice name for default narration
-- `tts.edge.rate`: Edge speed adjustment
-- `stt_provider`: subtitle transcription provider
-- `whisper_model`: local Whisper model
-- `whisper_device`: `auto`, `cpu`, or `cuda`
-- `whisper_compute_type`: local Whisper compute type
-- `assembly_ai_api_key`: AssemblyAI key if using third-party transcription
-- `tts_voice`: legacy value kept for backward compatibility
+## Narration and visual assets
 
-## Podcast Settings
+- `gemini_tts_api_key`: Gemini TTS key. It can fall back to `nanobanana2_api_key` or `GEMINI_API_KEY`.
+- `gemini_tts_model`: default `gemini-3.8-flash-tts` (Interactions API; the transcript is spoken verbatim and delivery direction is sent as a `speech_metadata` style annotation). `gemini-3.8-flash-lite-tts` is cheaper but Google does not list Thai for it.
+- `podcast_settings.voices.thai_gemini_voice`: Gemini voice name; default is `Aoede`.
+- `pexels_api_key`, `pixabay_api_key`: stock video b-roll. `expand-broll --allow-stock` fills slots with Pexels/Pixabay clips (free APIs). It needs the episode's `broll_keywords.json` (`official_queries`, `official_markers`, `official_blocked`, `stock_default`, `stock_by_section`, `stock_by_asset_id`) whenever `--allow-stock` or `--fresh-official` is used; `--legacy-keyword-tables` reproduces older episodes with the built-in tables.
+- `runware_api_key`: generated-image provider (paid), also supported as `RUNWARE_API_KEY`. Generated section openers (`codex_imagegen` slots in the plan) are fulfilled by `produce-assets --allow-runware`; without the flag they stay pending tasks.
+- `runware_image_*`: model, dimensions, steps, format, and retry settings for Runware b-roll fallback images. `runware_hero_image_width` / `runware_hero_image_height` (default 1920x1088) size the section-opener images. Runware requires dimensions divisible by 64.
+- `podcast_settings.audio`: background bed path, volume, ducking, and fade settings.
 
-The Studio reads podcast system settings through `src/config.py` and supports
-both nested settings and older flat keys.
+Provider use depends on the selected plan and asset. Missing optional stock or image keys should not be replaced with placeholder credentials.
 
-- `podcast_narrator.name`: narrator name used in prompting
-- `podcast_narrator.persona`: narrator persona used in prompting
-- `podcast_narrator.tts_voice`: narrator voice
-- `podcast_narrator.tts_rate`: narrator speech rate
-- `podcast_style_prompt`: style suffix appended to generated podcast image prompts
-- `elevenlabs_voice_id_th`: Thai ElevenLabs voice id when that path is enabled
-- `podcast_background_bed_enabled`: enable quiet bed under PodcastV2 narration
-- `podcast_background_bed_path`: local bed audio path, relative to repo root when not absolute
-- `podcast_background_bed_volume_db`: bed base volume before ducking
-- `podcast_background_bed_ducking_ratio`: how strongly the bed ducks under narration
-- `podcast_background_bed_fade_seconds`: bed fade in/out duration
+## Local requirements
 
-## Shorts and Upload Settings
+Install Python dependencies from `requirements.txt`. Remotion rendering also requires Node.js and dependencies installed under `remotion/`. The local preflight checks configuration and tool presence only; it does not send API requests or spend credits.
 
-- `is_for_kids`: YouTube audience flag for uploads
-- `font`: subtitle or graphics font file in `fonts/`
-- `client_secrets.json`: local OAuth client config for YouTube upload
-- `token.json`: generated local OAuth token for YouTube upload
+## Renderer selection
 
-## Topic Discovery Settings
+`producer_mode.py init` writes the minimal documentary renderer into new plans:
 
-- `topic_discovery.enabled`: enable scheduled topic discovery
-- `topic_discovery.youtube_api_key`: YouTube Data API key
-- `topic_discovery.news_api_key`: NewsAPI key
-- `topic_discovery.anthropic_api_key`: Anthropic key for scoring if used
-- `topic_discovery.scoring_provider`: `ollama` or `anthropic`
-- `topic_discovery.geo`: region code such as `TH` or `US`
-- `topic_discovery.max_topic_age_hours`: freshness window for candidates
+```json
+"render_settings": {"renderer": "minimal_doc"}
+```
 
-## Legacy Local Values
+The choice is copied into the prepared props, so it is part of the render revision; switching renderer after authorization requires a new prepare and new consent. `minimal_doc` needs `npm install` in `doc_renderer/` and reuses the headless Chrome bundled with `remotion/`. Video b-roll is decoded to frames and played once through its slot (a clip shorter than its slot holds its last frame and is reported as a warning, never looped). Custom graphics recorded to MP4 play like any video slot. Preflight blocks the separate `scene_00.mp4` intro video and warns that Remotion motion-graphic overlay specs and glossary entries are not drawn. Plans without `render_settings` (older episodes) fall back to Remotion `VideoPodcast`; set `"renderer": "remotion"` to choose it explicitly.
 
-`firefox_profile` remains in the example config only for older browser-driven
-helpers. It is not part of the main Studio runtime.
-Modules under `src/legacy/` may still reference older config concepts, but that
-folder is reference-only and not part of the supported runtime path.
+Render preflight also warns when a video clip is shorter than its slot, when several `local_reframe` slots crop the same still, and when assets in `visual_timeline.json` are missing from the render props (repairs must be synced into `asset_manifest.json`). Inspection stills before consent: `python scripts/minimal_doc_stills.py --plan <plan> --times 3,66,570` (same timeline and path handling as the render).
 
-## Environment Variable Fallbacks
+Optional per-episode framing overrides go in `minimal_render_overrides.json` next to the plan (also part of the revision). Keys are asset file names; `kind` (`cover`, `plate`, `figure`, `slide`), `anchor` `[x, y]` (0–1 zoom focus), `zoom` `[start, end]`, `min_zoom` (crops burned-in corner credits) and `caption_title` (display-only). `end_card.sources` / `end_card.note` replace the generated end card. The outro hold (`outro_hold_seconds`) is where the end card appears.
 
-- `GEMINI_API_KEY`: used when `nanobanana2_api_key` is empty
-- `ANTHROPIC_API_KEY`: used when `anthropic_api_key` is empty
-- `PIXABAY_API_KEY`: used when `pixabay_api_key` is empty
-- `RUNWARE_API_KEY`: used when `runware_api_key` is empty
-- `PEXELS_USE_LLM_KEYWORDS`: optional experimental switch for LLM-assisted Pexels keywords
-- `PODCAST_RENDER_IMAGE_ONLY`: set truthy for image-only PodcastV2 render debugging
-- `PODCAST_BACKGROUND_BED_ENABLED`: overrides background bed enablement at render time
-- `PODCAST_BACKGROUND_BED_PATH`: overrides background bed path at render time
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `PRODUCER_MINIMAL_WORKERS` | half the CPU cores, max 8 | Parallel headless Chrome workers |
+| `PRODUCER_MINIMAL_CHROME` | Remotion's bundled chrome-headless-shell | Chrome executable override |
 
-## Recommended Workflow
-
-1. Copy `config.example.json` to `config.json`
-2. Fill in only the providers you actually use
-3. Keep `config.json`, `client_secrets.json`, and `token.json` local only
-4. Launch the Studio from `src/podcast_server.py`
+The ignored local files `config.json`, `client_secrets.json`, and `token.json` contain environment-specific values and must remain local.

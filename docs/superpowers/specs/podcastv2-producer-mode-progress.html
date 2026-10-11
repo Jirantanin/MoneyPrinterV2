@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PodcastV2 Producer Mode Progress</title>
+  <style>
+    :root {
+      --bg: #101318;
+      --panel: #171b22;
+      --ink: #edf2f7;
+      --muted: #aab4c0;
+      --line: #2d3541;
+      --ok: #53d18a;
+      --warn: #f4bd4f;
+      --accent: #7fb7ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      line-height: 1.5;
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+    h1, h2 { margin: 0 0 12px; line-height: 1.2; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 18px; color: var(--accent); }
+    .muted { color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .span-12 { grid-column: span 12; }
+    .span-8 { grid-column: span 8; }
+    .span-6 { grid-column: span 6; }
+    .span-4 { grid-column: span 4; }
+    .metric { font-size: 34px; font-weight: 700; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bar { height: 12px; background: #0b0d11; border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
+    .bar > div { height: 100%; width: 100%; background: linear-gradient(90deg, var(--ok), var(--accent)); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    code { color: #dbeafe; word-break: break-all; }
+    ul { margin: 8px 0 0 20px; padding: 0; }
+    @media (max-width: 900px) {
+      main { padding: 18px; }
+      .span-8, .span-6, .span-4 { grid-column: span 12; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card span-12">
+      <h1>PodcastV2 Producer Mode Progress</h1>
+      <p class="muted">อัปเดตล่าสุด: 2026-05-23 00:52 ICT | Episode: <code>podcast_v2_moon-drifting-away_20260522_121214</code></p>
+      <div class="bar"><div></div></div>
+      <p><span class="metric ok">100%</span> production artifacts complete. เหลือแค่ review gate ที่ไม่ blocking ก่อนอัปโหลดจริง</p>
+    </section>
+
+    <section class="grid">
+      <div class="card span-4">
+        <h2>Final Video</h2>
+        <div class="metric ok">PASS</div>
+        <p><code>.mp\podcast_v2_moon-drifting-away_20260522_121214\final.mp4</code></p>
+        <p class="muted">810.1s, 1920x1080, 25fps, H.264/AAC, 388,586,710 bytes</p>
+      </div>
+      <div class="card span-4">
+        <h2>Visual Assets</h2>
+        <div class="metric ok">125</div>
+        <p class="muted">85 image + 40 video, missing 0, stale 0, exact duplicate 0</p>
+      </div>
+      <div class="card span-4">
+        <h2>Smoke Gate</h2>
+        <div class="metric warn">91</div>
+        <p class="muted">0 blocking gates, 2 review gates: handoff/cost review และ Codex imagegen session proof</p>
+      </div>
+
+      <div class="card span-8">
+        <h2>รอบนี้แก้อะไร</h2>
+        <ul>
+          <li>หยุด render รอบที่ยังใช้ visual set ซ้ำ เพื่อไม่เสียเวลาทำไฟล์สุดท้ายจาก manifest ที่ไม่ผ่านตา</li>
+          <li>แก้ repeat guard จาก URL-only เป็น normalized title/source/stock keyword และใช้กฎ no same scene + no same section + no consecutive reuse</li>
+          <li>เพิ่ม fingerprint guard จากภาพจริง เพื่อกัน official still ที่หน้าตาใกล้กันแม้ URL/title คนละตัว</li>
+          <li>เพิ่ม low-color/grayscale heuristic เพื่อจับภาพ NASA ขาวดำโทนเดียวกันที่คนเห็นว่าซ้ำ แต่ hash รายละเอียดไม่ชน</li>
+          <li>แก้ local graphic renderer ให้มี 5 visual variants แทน motif ดวงจันทร์-โลกแบบเดียววนยาว</li>
+          <li>ย้ายไฟล์ stale ออกจาก root episode folder หลายรอบไปที่ <code>_stale_visual_assets</code> เพื่อให้ Explorer ตรงกับ manifest จริง</li>
+          <li>ซ่อม <code>producer_plan.json</code> หลังเกิด read/write race จากการรัน writer checkpoints ขนานกัน และ rerun upload pack แบบ sequential แล้วผ่าน</li>
+        </ul>
+      </div>
+
+      <div class="card span-4">
+        <h2>Visual Mix</h2>
+        <table>
+          <tr><th>Provider</th><th>Count</th></tr>
+          <tr><td>local_graphic_broll</td><td>66</td></tr>
+          <tr><td>pexels</td><td>20</td></tr>
+          <tr><td>pixabay</td><td>20</td></tr>
+          <tr><td>nasa_images</td><td>10</td></tr>
+          <tr><td>nasa_svs</td><td>3</td></tr>
+          <tr><td>remotion_graphic</td><td>3</td></tr>
+          <tr><td>local_reframe</td><td>2</td></tr>
+          <tr><td>codex_imagegen</td><td>1</td></tr>
+        </table>
+      </div>
+
+      <div class="card span-6">
+        <h2>Checks</h2>
+        <table>
+          <tr><th>Gate</th><th>Status</th><th>Note</th></tr>
+          <tr><td>Research</td><td class="ok">ready</td><td>6 sources, 5 competitor records</td></tr>
+          <tr><td>Script</td><td class="ok">ready</td><td>8,938 Thai chars no spaces, factual QC pass</td></tr>
+          <tr><td>Assets</td><td class="ok">ready</td><td>125 fulfilled local files</td></tr>
+          <tr><td>Audio</td><td class="ok">ready</td><td>16 Gemini TTS entries</td></tr>
+          <tr><td>Render</td><td class="ok">ready</td><td>preflight + final QC pass</td></tr>
+          <tr><td>Handoff</td><td class="warn">review</td><td>cost/final report/upload pack review only</td></tr>
+          <tr><td>Providers</td><td class="warn">review</td><td>Codex imagegen is active-session proof, not config-key proof</td></tr>
+        </table>
+      </div>
+
+      <div class="card span-6">
+        <h2>Artifacts</h2>
+        <ul>
+          <li>Final report: <code>.mp\podcast_v2_moon-drifting-away_20260522_121214\final_report.html</code></li>
+          <li>Contact sheet: <code>.mp\podcast_v2_moon-drifting-away_20260522_121214\visual_contact_sheet_scene00_09.png</code></li>
+          <li>Upload pack: <code>.mp\podcast_v2_moon-drifting-away_20260522_121214\upload_pack</code></li>
+          <li>QC: <code>final_qc.json</code>, <code>smoke_gate.json</code>, <code>cost_report.json</code></li>
+          <li>Current manifest: <code>asset_manifest.json</code></li>
+        </ul>
+      </div>
+
+      <div class="card span-12">
+        <h2>เหลืออะไร</h2>
+        <ul>
+          <li>มนุษย์ review thumbnail/title/description ก่อนอัปโหลดจริง</li>
+          <li>ถ้าต้องการ smoke gate เป็น pass เต็ม ต้อง mark/ยืนยัน cost ของ Codex imagegen session และ review handoff artifacts</li>
+          <li>ถ้าจะทำคลิปถัดไป ห้ามรัน writer checkpoint แบบ parallel อีก ให้ใช้ sequential หรือใส่ file lock ใน runner</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
