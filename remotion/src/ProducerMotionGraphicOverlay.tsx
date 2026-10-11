@@ -24,6 +24,18 @@ const LAVENDER = "#c9bee3";
 const PEACH = "#dfbea6";
 const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
 
+const VOYAGER_BG = "#05070b";
+const VOYAGER_GOLD = "#d6b35a";
+const VOYAGER_CREAM = "#e8e2d4";
+const VOYAGER_BLUE = "#4d6680";
+
+const phase = (frame: number, start: number, end: number) =>
+  interpolate(frame, [start, end], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE_OUT,
+  });
+
 const backgrounds: Record<string, string> = {
   bar_share: PINK,
   orbit_slots: SKY,
@@ -151,6 +163,297 @@ const CaptionPlate: React.FC<{ spec: ProducerMotionGraphic; progress: number }> 
         {spec.metric}
       </div>
     </div>
+  );
+};
+
+const VoyagerLabel: React.FC<{
+  children: React.ReactNode;
+  x: number;
+  y: number;
+  opacity: number;
+  align?: "left" | "right";
+  width?: number;
+}> = ({ children, x, y, opacity, align = "left", width }) => (
+  <div
+    style={{
+      position: "absolute",
+      left: align === "left" ? x : undefined,
+      right: align === "right" ? x : undefined,
+      top: y,
+      color: VOYAGER_CREAM,
+      fontFamily: PRODUCER_FONT_FAMILY,
+      width,
+      fontSize: 28,
+      lineHeight: 1.16,
+      fontWeight: 720,
+      letterSpacing: 0.2,
+      opacity,
+      transform: `translateY(${(1 - opacity) * 12}px)`,
+    }}
+  >
+    {children}
+  </div>
+);
+
+const VoyagerRecordDecode: React.FC<{
+  spec: ProducerMotionGraphic;
+  frame: number;
+  durationInFrames: number;
+}> = ({ spec, frame, durationInFrames }) => {
+  const intro = phase(frame, 0, 20);
+  const playback = phase(frame, 12, 34);
+  const hydrogen = phase(frame, 30, 52);
+  const raster = phase(frame, 48, 70);
+  const pulsars = phase(frame, 66, 92);
+  const fadeOut = interpolate(
+    frame,
+    [Math.max(1, durationInFrames - 18), durationInFrames],
+    [1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const diskRotation = interpolate(frame, [0, Math.max(1, durationInFrames)], [0, 16]);
+
+  return (
+    <AbsoluteFill
+      style={{
+        opacity: fadeOut,
+        background: `radial-gradient(circle at 34% 48%, rgba(214,179,90,0.18), transparent 34%), ${VOYAGER_BG}`,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: 100,
+          top: 72,
+          color: VOYAGER_GOLD,
+          fontFamily: PRODUCER_FONT_FAMILY,
+          fontSize: 23,
+          fontWeight: 720,
+          letterSpacing: 2.4,
+          opacity: intro,
+        }}
+      >
+        VOYAGER GOLDEN RECORD
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 100,
+          top: 112,
+          width: 930,
+          color: VOYAGER_CREAM,
+          fontFamily: PRODUCER_FONT_FAMILY,
+          fontSize: 48,
+          lineHeight: 1.12,
+          fontWeight: 800,
+          opacity: intro,
+        }}
+      >
+        {spec.title || "คู่มือสำหรับผู้ไม่รู้จักเรา"}
+      </div>
+
+      <svg
+        width="1920"
+        height="1080"
+        viewBox="0 0 1920 1080"
+        style={{ position: "absolute", inset: 0 }}
+      >
+        <g
+          opacity={intro}
+          transform={`translate(510 590) rotate(${diskRotation})`}
+        >
+          <circle r="282" fill="#b99743" stroke="#f0d982" strokeWidth="8" />
+          <circle r="230" fill="none" stroke="#7d652e" strokeWidth="2" />
+          <circle r="174" fill="none" stroke="#8f7537" strokeWidth="2" />
+          <circle r="118" fill="none" stroke="#765f2d" strokeWidth="2" />
+          <circle r="62" fill="#0a0d12" stroke="#f0d982" strokeWidth="7" />
+          {Array.from({ length: 56 }).map((_, index) => {
+            const angle = (index / 56) * Math.PI * 2;
+            const r1 = 82;
+            const r2 = 266;
+            return (
+              <line
+                key={index}
+                x1={Math.cos(angle) * r1}
+                y1={Math.sin(angle) * r1}
+                x2={Math.cos(angle) * r2}
+                y2={Math.sin(angle) * r2}
+                stroke="#e2c56f"
+                strokeWidth="1"
+                opacity="0.22"
+              />
+            );
+          })}
+        </g>
+
+        <g opacity={playback}>
+          <line x1="730" y1="315" x2="586" y2="502" stroke={VOYAGER_CREAM} strokeWidth="8" />
+          <circle cx="735" cy="306" r="18" fill={VOYAGER_GOLD} />
+          <path d="M760 300 C890 270 952 286 1012 326" fill="none" stroke={VOYAGER_BLUE} strokeWidth="4" />
+        </g>
+
+        <g opacity={hydrogen} transform="translate(1170 330)">
+          <circle cx="0" cy="0" r="43" fill="none" stroke={VOYAGER_CREAM} strokeWidth="5" />
+          <circle cx="138" cy="0" r="43" fill="none" stroke={VOYAGER_CREAM} strokeWidth="5" />
+          <line x1="48" y1="0" x2="90" y2="0" stroke={VOYAGER_GOLD} strokeWidth="6" />
+          <polygon points="90,-10 112,0 90,10" fill={VOYAGER_GOLD} />
+          <path d="M-18 -16 L18 16 M-18 16 L18 -16" stroke={VOYAGER_BLUE} strokeWidth="4" />
+          <path d="M120 0 L156 0" stroke={VOYAGER_BLUE} strokeWidth="4" />
+        </g>
+
+        <g opacity={raster} transform="translate(1210 510)">
+          <rect width="230" height="180" rx="7" fill="none" stroke={VOYAGER_CREAM} strokeWidth="5" />
+          {Array.from({ length: 9 }).map((_, index) => (
+            <line
+              key={index}
+              x1={18 + index * 24}
+              y1="16"
+              x2={18 + index * 24}
+              y2="164"
+              stroke={index < Math.floor(raster * 9) ? VOYAGER_GOLD : VOYAGER_BLUE}
+              strokeWidth="5"
+              opacity={index < Math.floor(raster * 9) ? 1 : 0.28}
+            />
+          ))}
+          <circle cx="300" cy="90" r="64" fill="none" stroke={VOYAGER_GOLD} strokeWidth="6" />
+        </g>
+
+        <g opacity={pulsars} transform="translate(1488 818)">
+          {Array.from({ length: 14 }).map((_, index) => {
+            const angle = (index / 14) * Math.PI * 2 - Math.PI / 2;
+            const length = 72 + (index % 5) * 20;
+            return (
+              <line
+                key={index}
+                x1="0"
+                y1="0"
+                x2={Math.cos(angle) * length}
+                y2={Math.sin(angle) * length}
+                stroke={index % 3 === 0 ? VOYAGER_GOLD : VOYAGER_CREAM}
+                strokeWidth={index % 3 === 0 ? 5 : 3}
+              />
+            );
+          })}
+          <circle r="13" fill={VOYAGER_GOLD} />
+        </g>
+      </svg>
+
+      <VoyagerLabel x={900} y={248} width={300} opacity={playback}>
+        1&nbsp;&nbsp;วิธีเล่นแผ่นเสียง
+      </VoyagerLabel>
+      <VoyagerLabel x={170} y={286} width={520} opacity={hydrogen} align="right">
+        2&nbsp;&nbsp;ไฮโดรเจนเป็นหน่วยเวลา
+      </VoyagerLabel>
+      <VoyagerLabel x={330} y={714} width={500} opacity={raster} align="right">
+        3&nbsp;&nbsp;สร้างภาพจากเส้นสัญญาณ
+      </VoyagerLabel>
+      <VoyagerLabel x={170} y={914} width={500} opacity={pulsars} align="right">
+        4&nbsp;&nbsp;พัลซาร์บอกตำแหน่งและยุค
+      </VoyagerLabel>
+    </AbsoluteFill>
+  );
+};
+
+const VoyagerDeepTime: React.FC<{
+  spec: ProducerMotionGraphic;
+  frame: number;
+  durationInFrames: number;
+}> = ({ spec, frame, durationInFrames }) => {
+  const intro = phase(frame, 0, 18);
+  const mission = phase(frame, 14, 38);
+  const deepTime = phase(frame, 34, 86);
+  const fadeOut = interpolate(
+    frame,
+    [Math.max(1, durationInFrames - 18), durationInFrames],
+    [1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const xStart = 210;
+  const xMission = 620;
+  const xEnd = 1710;
+  const lineEnd = interpolate(deepTime, [0, 1], [xMission, xEnd]);
+
+  return (
+    <AbsoluteFill
+      style={{
+        opacity: fadeOut,
+        background: `radial-gradient(circle at 80% 54%, rgba(77,102,128,0.2), transparent 35%), ${VOYAGER_BG}`,
+        overflow: "hidden",
+        color: VOYAGER_CREAM,
+        fontFamily: PRODUCER_FONT_FAMILY,
+      }}
+    >
+      <div style={{ position: "absolute", left: 110, top: 84, opacity: intro }}>
+        <div style={{ color: VOYAGER_GOLD, fontSize: 23, fontWeight: 720, letterSpacing: 2.4 }}>
+          VOYAGER / DEEP TIME
+        </div>
+        <div style={{ marginTop: 10, fontSize: 50, lineHeight: 1.1, fontWeight: 820 }}>
+          {spec.title || "เวลาของยาน เทียบกับเวลาระหว่างดวงดาว"}
+        </div>
+      </div>
+
+      <svg width="1920" height="1080" viewBox="0 0 1920 1080" style={{ position: "absolute", inset: 0 }}>
+        <line x1={xStart} y1="570" x2={xEnd} y2="570" stroke="#1d2934" strokeWidth="16" />
+        <line x1={xStart} y1="570" x2={xMission} y2="570" stroke={VOYAGER_GOLD} strokeWidth="10" opacity={mission} />
+        <line x1={xMission} y1="570" x2={lineEnd} y2="570" stroke={VOYAGER_BLUE} strokeWidth="10" opacity={deepTime} />
+        <circle cx={xStart} cy="570" r="18" fill={VOYAGER_CREAM} opacity={intro} />
+        <circle cx={xMission} cy="570" r="22" fill={VOYAGER_GOLD} opacity={mission} />
+        <circle cx={xEnd} cy="570" r="28" fill={VOYAGER_CREAM} opacity={deepTime} />
+        {Array.from({ length: 14 }).map((_, index) => {
+          const x = xMission + ((xEnd - xMission) * (index + 1)) / 15;
+          return <circle key={index} cx={x} cy="570" r="3" fill={VOYAGER_CREAM} opacity={deepTime * 0.55} />;
+        })}
+        <path
+          d="M 655 500 C 930 340, 1310 350, 1670 500"
+          fill="none"
+          stroke={VOYAGER_GOLD}
+          strokeWidth="3"
+          strokeDasharray="10 14"
+          opacity={deepTime * 0.72}
+        />
+      </svg>
+
+      <div style={{ position: "absolute", left: xStart - 42, top: 630, opacity: intro }}>
+        <div style={{ color: VOYAGER_CREAM, fontSize: 30, fontWeight: 760 }}>1977</div>
+        <div style={{ color: "#95a3ad", fontSize: 22, marginTop: 6 }}>ออกจากโลก</div>
+      </div>
+      <div style={{ position: "absolute", left: xMission - 82, top: 630, opacity: mission }}>
+        <div style={{ color: VOYAGER_GOLD, fontSize: 36, fontWeight: 820 }}>เกือบ 49 ปี</div>
+        <div style={{ color: "#aeb8bf", fontSize: 22, marginTop: 6 }}>อายุภารกิจในปี 2026</div>
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          right: 130,
+          top: 402,
+          width: 390,
+          textAlign: "right",
+          opacity: deepTime,
+        }}
+      >
+        <div style={{ color: VOYAGER_CREAM, fontSize: 70, lineHeight: 0.98, fontWeight: 880 }}>
+          ≈ 40,000 ปี
+        </div>
+        <div style={{ color: "#aeb8bf", fontSize: 24, lineHeight: 1.25, marginTop: 14 }}>
+          ก่อนเข้าใกล้ระบบดาวอื่นครั้งหนึ่ง
+        </div>
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 720,
+          right: 110,
+          bottom: 80,
+          color: "#8e9aa4",
+          fontSize: 22,
+          textAlign: "right",
+          opacity: deepTime,
+        }}
+      >
+        ระยะบนเส้นถูกบีบอัดเพื่อให้มองเห็นความต่างของสเกลเวลา ไม่ใช่แผนที่ระยะทางจริง
+      </div>
+    </AbsoluteFill>
   );
 };
 
@@ -461,6 +764,13 @@ export const PremiumProducerMotionGraphicOverlay: React.FC<{
   const { fps } = useVideoConfig();
 
   if (!spec) return null;
+
+  if (spec.kind === "voyager_record_decode") {
+    return <VoyagerRecordDecode spec={spec} frame={frame} durationInFrames={durationInFrames} />;
+  }
+  if (spec.kind === "voyager_deep_time") {
+    return <VoyagerDeepTime spec={spec} frame={frame} durationInFrames={durationInFrames} />;
+  }
 
   const fadeOutStart = Math.max(18, durationInFrames - Math.floor(fps * 0.55));
   const opacity = interpolate(

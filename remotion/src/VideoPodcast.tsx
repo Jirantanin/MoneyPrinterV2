@@ -10,6 +10,63 @@ import { PRODUCER_FONT_FAMILY, useProducerFonts } from "./producerFonts";
 const PODCAST_MOTION_CYCLE = ['zoom-in', 'zoom-out'] as const;
 const MOTION_GRAPHIC_COLORS = ["#f4c85f", "#64d7cb", "#ff8a72", "#9fb7ff"];
 
+const AssetQualificationLabel: React.FC<{ text: string }> = ({ text }) => {
+  if (!text.trim()) return null;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 78,
+        bottom: 66,
+        zIndex: 20,
+        maxWidth: 1420,
+        padding: "12px 18px",
+        borderLeft: "5px solid #f4c85f",
+        borderRadius: 5,
+        background: "rgba(7, 13, 22, 0.88)",
+        boxShadow: "0 8px 26px rgba(0,0,0,0.42)",
+        color: "#fff8e6",
+        fontSize: 30,
+        lineHeight: 1.22,
+        fontWeight: 700,
+        fontFamily: PRODUCER_FONT_FAMILY,
+        pointerEvents: "none",
+      }}
+    >
+      {text}
+    </div>
+  );
+};
+
+const AssetCreditLabel: React.FC<{ text: string }> = ({ text }) => {
+  if (!text.trim()) return null;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        right: 78,
+        bottom: 20,
+        zIndex: 20,
+        maxWidth: 1764,
+        padding: "5px 9px",
+        borderRadius: 3,
+        background: "rgba(7, 13, 22, 0.76)",
+        color: "rgba(255, 255, 255, 0.94)",
+        fontSize: 17,
+        lineHeight: 1.2,
+        fontWeight: 500,
+        fontFamily: PRODUCER_FONT_FAMILY,
+        textAlign: "right",
+        pointerEvents: "none",
+      }}
+    >
+      {text}
+    </div>
+  );
+};
+
 const ProducerMotionGraphicOverlay: React.FC<{
   spec?: ProducerMotionGraphic;
   durationInFrames: number;
@@ -328,7 +385,8 @@ const ChapterTitle: React.FC<{ title: string; durationInFrames: number }> = ({ t
       style={{
         justifyContent: "flex-end",
         alignItems: "flex-start",
-        padding: "64px 72px",
+        // Leave a clear gap above the lower-left asset qualification label.
+        padding: "64px 72px 200px",
         opacity,
         transform: `translateY(${(1 - rise) * 42}px) scale(${scale})`,
       }}
@@ -518,6 +576,9 @@ const PodcastSlideshowV2: React.FC<{
   scene0VideoPath?: string;
   sceneImageCounts: number[];
   sceneAssetTypes: AssetType[];
+  sceneAssetQualifications?: string[];
+  sceneAssetCredits?: string[];
+  sceneAssetFits?: Array<"cover" | "contain">;
   sceneAssetDurations: number[];
   producerMotionGraphics?: ProducerMotionGraphic[];
 }> = ({
@@ -527,6 +588,9 @@ const PodcastSlideshowV2: React.FC<{
   scene0VideoPath,
   sceneImageCounts,
   sceneAssetTypes,
+  sceneAssetQualifications = [],
+  sceneAssetCredits = [],
+  sceneAssetFits = [],
   sceneAssetDurations,
   producerMotionGraphics = [],
 }) => {
@@ -546,24 +610,33 @@ const PodcastSlideshowV2: React.FC<{
     const slices = sceneImageCounts.map(count => {
       const paths = imagePaths.slice(offset, offset + count);
       const types = sceneAssetTypes.slice(offset, offset + count);
+      const qualifications = sceneAssetQualifications.slice(offset, offset + count);
+      const credits = sceneAssetCredits.slice(offset, offset + count);
+      const fits = sceneAssetFits.slice(offset, offset + count);
       const assetDurs = sceneAssetDurations.slice(offset, offset + count);
       offset += count;
 
-      const compacted: Array<{ path: string; type: AssetType; duration: number; assetIndex: number }> = [];
+      const compacted: Array<{ path: string; type: AssetType; qualification: string; credit: string; fit: "cover" | "contain"; duration: number; assetIndex: number }> = [];
       paths.forEach((path, index) => {
         const type = types[index];
+        const qualification = qualifications[index] ?? "";
+        const credit = credits[index] ?? "";
+        const fit = fits[index] === "contain" ? "contain" : "cover";
         const duration = assetDurs[index] ?? 0;
         const previous = compacted[compacted.length - 1];
-        if (previous && previous.path === path && previous.type === type && type === "image") {
+        if (previous && previous.path === path && previous.type === type && previous.qualification === qualification && previous.credit === credit && previous.fit === fit && type === "image") {
           previous.duration += duration;
           return;
         }
-        compacted.push({ path, type, duration, assetIndex: index });
+        compacted.push({ path, type, qualification, credit, fit, duration, assetIndex: index });
       });
 
       return {
         paths: compacted.map((asset) => asset.path),
         types: compacted.map((asset) => asset.type),
+        qualifications: compacted.map((asset) => asset.qualification),
+        credits: compacted.map((asset) => asset.credit),
+        fits: compacted.map((asset) => asset.fit),
         assetDurs: compacted.map((asset) => asset.duration),
         assetIndexes: compacted.map((asset) => asset.assetIndex),
       };
@@ -589,26 +662,32 @@ const PodcastSlideshowV2: React.FC<{
         previousAssetIndex >= 0 &&
         previous.paths[previousAssetIndex] === current.paths[0] &&
         previous.types[previousAssetIndex] === "image" &&
-        current.types[0] === "image";
+        current.types[0] === "image" &&
+        previous.qualifications[previousAssetIndex] === current.qualifications[0] &&
+        previous.credits[previousAssetIndex] === current.credits[0] &&
+        previous.fits[previousAssetIndex] === current.fits[0];
 
       if (sameStillContinues) {
         previous.assetDurs[previousAssetIndex] += current.assetDurs[0];
         current.paths.shift();
         current.types.shift();
+        current.qualifications.shift();
+        current.credits.shift();
+        current.fits.shift();
         current.assetDurs.shift();
         current.assetIndexes.shift();
       }
     }
 
     return slices;
-  }, [imagePaths, sceneImageCounts, sceneAssetTypes, sceneAssetDurations, sceneTitles]);
+  }, [imagePaths, sceneImageCounts, sceneAssetTypes, sceneAssetQualifications, sceneAssetCredits, sceneAssetFits, sceneAssetDurations, sceneTitles]);
 
   const entries = useMemo(() => {
     const result: React.ReactNode[] = [];
     let globalAssetIdx = 0;
 
     for (let s = 0; s < numScenes; s++) {
-      const { paths, types, assetDurs, assetIndexes } = sceneSlices[s];
+      const { paths, types, qualifications, credits, fits, assetDurs, assetIndexes } = sceneSlices[s];
       const numAssets = paths.length;
 
       for (let a = 0; a < numAssets; a++) {
@@ -655,8 +734,11 @@ const PodcastSlideshowV2: React.FC<{
                   variant={PODCAST_MOTION_CYCLE[globalAssetIdx % PODCAST_MOTION_CYCLE.length]}
                   durationInFrames={padded}
                   profile="documentary-readable"
+                  fit={fits[a] ?? "cover"}
                 />
               )}
+              <AssetQualificationLabel text={qualifications[a] ?? ""} />
+              <AssetCreditLabel text={credits[a] ?? ""} />
               <PremiumProducerMotionGraphicOverlay spec={motionGraphic} durationInFrames={padded} />
             </AbsoluteFill>
             {a === 0 && (
@@ -697,7 +779,7 @@ const PodcastSlideshowV2: React.FC<{
 };
 
 // ─── Podcast Slideshow dispatcher ────────────────────────────────────────────
-const PodcastSlideshow: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDurations' | 'sceneTitles' | 'scene0VideoPath' | 'sceneImageCounts' | 'sceneAssetTypes' | 'sceneAssetDurations' | 'producerMotionGraphics'>> = (props) => {
+const PodcastSlideshow: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDurations' | 'sceneTitles' | 'scene0VideoPath' | 'sceneImageCounts' | 'sceneAssetTypes' | 'sceneAssetQualifications' | 'sceneAssetCredits' | 'sceneAssetFits' | 'sceneAssetDurations' | 'producerMotionGraphics'>> = (props) => {
   if (props.sceneImageCounts && props.sceneImageCounts.length > 0 && props.sceneAssetTypes) {
     return (
       <PodcastSlideshowV2
@@ -707,6 +789,9 @@ const PodcastSlideshow: React.FC<Pick<PodcastProps, 'imagePaths' | 'sceneDuratio
         scene0VideoPath={props.scene0VideoPath}
         sceneImageCounts={props.sceneImageCounts}
         sceneAssetTypes={props.sceneAssetTypes}
+        sceneAssetQualifications={props.sceneAssetQualifications}
+        sceneAssetCredits={props.sceneAssetCredits}
+        sceneAssetFits={props.sceneAssetFits}
         sceneAssetDurations={props.sceneAssetDurations ?? props.sceneDurations}
         producerMotionGraphics={props.producerMotionGraphics}
       />
@@ -735,6 +820,9 @@ export const VideoPodcast: React.FC<PodcastProps> = (props) => {
         scene0VideoPath={props.scene0VideoPath}
         sceneImageCounts={props.sceneImageCounts}
         sceneAssetTypes={props.sceneAssetTypes}
+        sceneAssetQualifications={props.sceneAssetQualifications}
+        sceneAssetCredits={props.sceneAssetCredits}
+        sceneAssetFits={props.sceneAssetFits}
         sceneAssetDurations={props.sceneAssetDurations}
         producerMotionGraphics={props.producerMotionGraphics}
       />

@@ -13,7 +13,8 @@ export const KenBurnsFrame: React.FC<{
   variant: KenBurnsVariant;
   durationInFrames: number;
   profile?: 'default' | 'documentary-readable';
-}> = ({ imgPath, variant, durationInFrames, profile = 'default' }) => {
+  fit?: 'cover' | 'contain';
+}> = ({ imgPath, variant, durationInFrames, profile = 'default', fit = 'cover' }) => {
   const frame = useCurrentFrame();
   const progress = frame / Math.max(durationInFrames, 1);
   const readableMotion = profile === 'documentary-readable';
@@ -36,14 +37,14 @@ export const KenBurnsFrame: React.FC<{
   }
 
   return (
-    <AbsoluteFill>
+    <AbsoluteFill style={{ backgroundColor: fit === 'contain' ? '#050910' : undefined }}>
       <img
         src={staticFile(imgPath)}
         style={{
           width: '100%',
           height: '100%',
-          objectFit: 'cover',
-          transform,
+          objectFit: fit,
+          transform: fit === 'contain' ? 'none' : transform,
           transformOrigin: 'center center',
         }}
       />

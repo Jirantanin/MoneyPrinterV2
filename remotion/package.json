@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "studio": "npx remotion studio src/Root.tsx",
-    "render": "npx remotion render src/Root.tsx VideoShort"
+    "render": "npx remotion render src/Root.tsx VideoPodcast"
   },
   "dependencies": {
     "remotion": "4.0.441",

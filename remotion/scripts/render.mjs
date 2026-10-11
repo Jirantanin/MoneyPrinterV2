@@ -43,10 +43,13 @@ function cleanupStaged() {
 }
 
 // ─── Composition selection ────────────────────────────────────────────────────
-const composition = rawProps.composition || "VideoShort";
+const composition = rawProps.composition || "VideoPodcast";
 const isPodcast = composition === "VideoPodcast";
 const isClipShort = composition === "ClipShort";
-const isStillImageShort = composition === "StillImageShort";
+if (!isPodcast && !isClipShort) {
+  console.error(`ERROR: Unsupported composition: ${composition}`);
+  process.exit(1);
+}
 const fps = isPodcast ? 25 : 30;
 const concurrency = Number(process.env.REMOTION_CONCURRENCY || rawProps.concurrency || (isPodcast ? 2 : 8));
 const renderTimeoutMs = Number(process.env.REMOTION_RENDER_TIMEOUT_MS || rawProps.renderTimeoutMs || 7_200_000);
@@ -57,7 +60,7 @@ const imagePaths = (rawProps.imagePaths || [])
   .filter(Boolean);
 
 const audioPath = stageAsset(rawProps.audioPath);
-if (!audioPath && !isClipShort && !isStillImageShort) {
+if (!audioPath && !isClipShort) {
   console.error("ERROR: Audio file not found:", rawProps.audioPath);
   process.exit(1);
 }
@@ -99,7 +102,7 @@ if (isPodcast) {
     ...(rawProps.producerMotionGraphics && { producerMotionGraphics: rawProps.producerMotionGraphics }),
     ...(rawProps.glossaryEntries && { glossaryEntries: rawProps.glossaryEntries }),
   };
-} else if (isClipShort) {
+} else {
   resolvedProps = {
     videoPath,
     title: rawProps.title || "",
@@ -107,27 +110,6 @@ if (isPodcast) {
     srtContent,
     keywordHighlights: rawProps.keywordHighlights || [],
     startAtSeconds: rawProps.startAtSeconds || 0,
-    durationInSeconds,
-  };
-} else if (isStillImageShort) {
-  resolvedProps = {
-    imagePaths,
-    assetTypes: rawProps.assetTypes || [],
-    sceneDurations: rawProps.sceneDurations || [],
-    overlayEvents: rawProps.overlayEvents || [],
-    footerCover: rawProps.footerCover,
-    audioPath,
-    durationInSeconds,
-  };
-} else {
-  resolvedProps = {
-    topic: rawProps.topic,
-    script: rawProps.script,
-    category: rawProps.category || "default",
-    imagePaths,
-    audioPath,
-    srtContent,
-    bgmPath,
     durationInSeconds,
   };
 }
