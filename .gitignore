@@ -24,4 +24,11 @@ fonts/thai_font.ttf
 remotion/public/assets/
 remotion/.render-props*.json
 remotion/node_modules/
+doc_renderer/node_modules/
 space_automation/output/
+token*.json
+tmp/
+remotion/.*props*.json
+remotion/public/final_retry_assets/
+remotion/public/producer_preview/
+/short_*.mp4
