@@ -22,11 +22,15 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import requests
 
+from producer_visual_policy import default_visual_source_policy
+from producer_contract import THAI_MIN, THAI_MAX, default_episode_spec, episode_spec, require_production_review
+
 
 PRODUCER_PLAN_VERSION = 1
 PRODUCER_PLAN_FILENAME = "producer_plan.json"
 CHECKPOINT_FILENAME = "checkpoint.html"
 RESEARCH_BRIEF_FILENAME = "research_brief.json"
+VISUAL_SOURCE_STRATEGY_FILENAME = "visual_source_strategy.json"
 VISUAL_ASSET_PLAN_FILENAME = "visual_asset_plan.json"
 ASSET_QC_FILENAME = "asset_qc.json"
 ASSET_MANIFEST_FILENAME = "asset_manifest.json"
@@ -58,10 +62,10 @@ PRONUNCIATION_GUIDE_FILENAME = "pronunciation_guide.md"
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = ROOT_DIR / ".mp"
 
-THAI_CHARS_NO_SPACE_MIN = 5_000
-THAI_CHARS_NO_SPACE_TARGET_MIN = 8_800
-THAI_CHARS_NO_SPACE_TARGET_MAX = 9_500
-THAI_CHARS_NO_SPACE_MAX = 12_000
+THAI_CHARS_NO_SPACE_MIN = THAI_MIN
+THAI_CHARS_NO_SPACE_TARGET_MIN = THAI_MIN
+THAI_CHARS_NO_SPACE_TARGET_MAX = THAI_MAX
+THAI_CHARS_NO_SPACE_MAX = THAI_MAX
 
 VISUAL_BEAT_SECONDS_MIN = 5
 VISUAL_BEAT_SECONDS_MAX = 8
@@ -415,6 +419,10 @@ def research_brief_path(episode_dir: str | Path) -> Path:
     return Path(episode_dir) / RESEARCH_BRIEF_FILENAME
 
 
+def visual_source_strategy_path(episode_dir: str | Path) -> Path:
+    return Path(episode_dir) / VISUAL_SOURCE_STRATEGY_FILENAME
+
+
 def visual_asset_plan_path(episode_dir: str | Path) -> Path:
     return Path(episode_dir) / VISUAL_ASSET_PLAN_FILENAME
 
@@ -541,12 +549,16 @@ def default_producer_plan(
     episode_path = Path(episode_dir)
     episode_slug = _slugify(slug or clean_topic)
     now = _utc_now()
+    visual_policy = default_visual_source_policy()
     return {
         "schema_version": PRODUCER_PLAN_VERSION,
         "mode": "podcastv2_producer",
         "status": "checkpoint_pending",
         "created_at": now,
         "updated_at": now,
+        "episode_spec": default_episode_spec(),
+        # Documentary look used since the Chariklo episode; Remotion VideoPodcast stays opt-in.
+        "render_settings": {"renderer": "minimal_doc"},
         "episode": {
             "topic": clean_topic,
             "slug": episode_slug,
@@ -555,12 +567,6 @@ def default_producer_plan(
             "output_format": "youtube_16x9",
             "language": "th",
             "renderer": "podcastv2_remotion",
-            "script_length_chars_no_space": {
-                "min": THAI_CHARS_NO_SPACE_MIN,
-                "target_min": THAI_CHARS_NO_SPACE_TARGET_MIN,
-                "target_max": THAI_CHARS_NO_SPACE_TARGET_MAX,
-                "max": THAI_CHARS_NO_SPACE_MAX,
-            },
             "visual_beat_seconds": {
                 "min": VISUAL_BEAT_SECONDS_MIN,
                 "max": VISUAL_BEAT_SECONDS_MAX,
@@ -612,22 +618,30 @@ def default_producer_plan(
         },
         "sections": [],
         "visual_rules": {
+            "source_strategy_artifact": str(visual_source_strategy_path(episode_path)),
+            "source_policy": visual_policy,
             "section_count_default": {"min": 4, "max": 7},
             "section_opener": {
                 "required": True,
-                "provider": "codex_imagegen",
+                "provider": "codex_imagegen_if_within_generated_cap",
                 "variants": 2,
                 "retry_rounds": 1,
                 "embedded_text": False,
                 "style_consistency": True,
             },
             "source_order": [
-                "section_opener_codex_imagegen",
                 "official_verified_real_media_for_specific_beats",
                 "pexels_stock_video",
                 "pixabay_stock_video",
-                "runware_flux1_fallback_or_illustrative",
                 "remotion_graphic_for_diagrams_or_charts",
+                "section_opener_codex_imagegen_if_under_50_percent_generated_cap",
+                "runware_flux1_fallback_or_illustrative_if_under_50_percent_generated_cap",
+                "manual_review_when_caps_would_be_exceeded",
+            ],
+            "source_caps": [
+                "graphics_max_20_percent",
+                "runware_plus_codex_imagegen_max_50_percent",
+                "real_footage_unlimited_when_relevant",
             ],
             "official_provider_registry": {
                 "space": [
@@ -859,6 +873,7 @@ def default_producer_plan(
             "title_options": [],
             "recommended_title": "",
             "recommended_title_rationale": "",
+            "upload_description": "",
             "thumbnail_concepts": 3,
             "thumbnail_concept_options": [],
             "thumbnail_language": "thai_primary",
@@ -884,6 +899,7 @@ def default_producer_plan(
                 "producer_plan.json",
                 "checkpoint.html",
                 "research_brief.json",
+                "visual_source_strategy.json",
                 "visual_asset_plan.json",
                 "asset_qc.json",
                 "asset_manifest.json",
@@ -959,16 +975,12 @@ def validate_producer_plan(plan: dict[str, Any]) -> tuple[list[str], list[str]]:
     if not _clean_text(episode.get("topic")):
         errors.append("episode.topic is required")
 
-    length = episode.get("script_length_chars_no_space")
-    if isinstance(length, dict):
-        min_v = int(length.get("min", 0) or 0)
-        target_min = int(length.get("target_min", 0) or 0)
-        target_max = int(length.get("target_max", 0) or 0)
-        max_v = int(length.get("max", 0) or 0)
-        if not (min_v <= target_min <= target_max <= max_v):
-            errors.append("script length bounds must be min <= target_min <= target_max <= max")
-    else:
-        errors.append("episode.script_length_chars_no_space is required")
+    try:
+        episode_spec(plan)
+    except (ValueError, TypeError, KeyError) as exc:
+        errors.append(f"Invalid episode_spec: {exc}")
+    if "episode_spec" not in plan:
+        warnings.append("Legacy plan: default Thai Unicode bounds apply; explicitly migrate episode_spec before production.")
 
     sections = plan.get("sections")
     if sections is None:
@@ -1838,6 +1850,7 @@ def _producer_research_schema() -> dict[str, Any]:
             },
             "recommended_title": {"type": "string"},
             "recommended_title_rationale": {"type": "string"},
+            "upload_description": {"type": "string"},
             "thumbnail_concept_options": {
                 "type": "array",
                 "items": {
@@ -1862,6 +1875,7 @@ def _producer_research_schema() -> dict[str, Any]:
             "title_options",
             "recommended_title",
             "recommended_title_rationale",
+            "upload_description",
             "thumbnail_concept_options",
             "risks",
         ],
@@ -1916,7 +1930,10 @@ def _build_research_prompt(topic: str, research_inputs: dict[str, Any]) -> str:
         "Use the provided research snippets only. Do not invent facts beyond the snippets.\n"
         "Optimize the angle for clickability first, then substance, factual honesty, and visual feasibility.\n"
         "Write all viewer-facing titles, section titles, and thumbnail text in Thai.\n"
-        "Sections must be 4-7 total. Every section must include an opener beat using codex_imagegen.\n"
+        "Write upload_description as two short Thai public-facing paragraphs (roughly 220-600 characters): "
+        "no title, chapter timestamps, hashtags, links, or internal planning language.\n"
+        "Sections must be 4-7 total. Every section must include an opener beat; use codex_imagegen only "
+        "when the total Runware plus Codex imagegen share stays at or below 50 percent.\n"
         "Official media candidates are visual candidates, not factual citations unless they also appear as sources.\n"
         "Use source IDs in each section. If evidence is thin, call that out in risks.\n\n"
         f"INPUT DATA:\n{json.dumps(compact_payload, ensure_ascii=False, indent=2)}"
@@ -1979,7 +1996,7 @@ def _heuristic_research_plan(topic: str, research_inputs: dict[str, Any]) -> dic
         ("Grounded closing", "Close with a grounded takeaway and light CTA.", "transition"),
     ]
     for idx, (title, goal, role) in enumerate(section_specs, start=1):
-        source_ids = _source_ids_for_section(source_basis, idx - 1)
+        source_ids = []  # Heuristic structure is not evidence mapping.
         sections.append(
             {
                 "section_index": idx,
@@ -1988,7 +2005,8 @@ def _heuristic_research_plan(topic: str, research_inputs: dict[str, Any]) -> dic
                 "source_ids": source_ids,
                 "visual_direction": (
                     "Use a consistent documentary opener, then prefer official/verified media "
-                    "for factual beats and stock video for generic context."
+                    "for factual beats and stock video for generic context. Keep graphics at or "
+                    "below 20 percent and Runware/Codex imagegen at or below 50 percent."
                 ),
                 "beats": [
                     {
@@ -1997,7 +2015,7 @@ def _heuristic_research_plan(topic: str, research_inputs: dict[str, Any]) -> dic
                         "beat_type": "section_opener",
                         "visual_type": "codex_imagegen",
                         "intent": f"Create a clean no-text visual opener for section {idx}.",
-                        "source_preference": "codex_imagegen",
+                        "source_preference": "codex_imagegen_if_within_generated_cap",
                         "duration_seconds": 6,
                     },
                     {
@@ -2061,6 +2079,7 @@ def _heuristic_research_plan(topic: str, research_inputs: dict[str, Any]) -> dic
         ],
         "recommended_title": f"Why Is {title_topic} Still Unresolved?",
         "recommended_title_rationale": "Most clickable fallback title while staying non-sensational.",
+        "upload_description": "",
         "thumbnail_concept_options": [
             {
                 "concept": "curiosity",
@@ -2136,7 +2155,7 @@ def _normalize_synthesized_plan(payload: dict[str, Any]) -> dict[str, Any]:
                     "beat_type": "section_opener",
                     "visual_type": "codex_imagegen",
                     "intent": "Create a clean no-text section opener.",
-                    "source_preference": "codex_imagegen",
+                    "source_preference": "codex_imagegen_if_within_generated_cap",
                     "duration_seconds": 6,
                 },
             )
@@ -2272,7 +2291,9 @@ def apply_research_to_plan(
                 kept_source_ids.append(source_id)
             else:
                 dropped_source_ids.add(source_id)
-        section["source_ids"] = kept_source_ids or _source_ids_for_section(sources, section_idx - 1)
+        section["source_ids"] = kept_source_ids
+        if not kept_source_ids:
+            warnings.append(f"Section {section_idx} has no valid mapped sources; research review required.")
         beats = section.get("beats") if isinstance(section.get("beats"), list) else []
         opener = [beat for beat in beats if isinstance(beat, dict) and str(beat.get("role", "")).lower() == "opener"]
         others = [beat for beat in beats if isinstance(beat, dict) and str(beat.get("role", "")).lower() != "opener"]
@@ -2282,7 +2303,7 @@ def apply_research_to_plan(
                 "beat_type": "section_opener",
                 "visual_type": "codex_imagegen",
                 "intent": "Create a clean no-text section opener.",
-                "source_preference": "codex_imagegen",
+                "source_preference": "codex_imagegen_if_within_generated_cap",
                 "duration_seconds": 6,
             }
         ]) + others
@@ -2333,6 +2354,7 @@ def apply_research_to_plan(
     seo["title_options"] = synthesis.get("title_options", [])
     seo["recommended_title"] = synthesis.get("recommended_title", "")
     seo["recommended_title_rationale"] = synthesis.get("recommended_title_rationale", "")
+    seo["upload_description"] = str(synthesis.get("upload_description") or "").strip()
     seo["thumbnail_concept_options"] = synthesis.get("thumbnail_concept_options", [])
 
     notes = plan.setdefault("notes", [])
@@ -2434,6 +2456,16 @@ def run_asset_planning_checkpoint(plan_path: str | Path) -> dict[str, Path]:
 
     from producer_asset_planner import build_visual_asset_plan
 
+    visual_rules = plan.setdefault("visual_rules", {})
+    source_policy = (
+        visual_rules.get("source_policy")
+        if isinstance(visual_rules.get("source_policy"), dict)
+        else default_visual_source_policy()
+    )
+    visual_rules["source_policy"] = source_policy
+    strategy_path = _write_json_artifact(visual_source_strategy_path(episode_dir), source_policy)
+    visual_rules["source_strategy_artifact"] = str(strategy_path)
+
     visual_asset_plan, asset_qc = build_visual_asset_plan(plan)
     visual_path = _write_json_artifact(visual_asset_plan_path(episode_dir), visual_asset_plan)
     qc_path = _write_json_artifact(asset_qc_path(episode_dir), asset_qc)
@@ -2447,6 +2479,7 @@ def run_asset_planning_checkpoint(plan_path: str | Path) -> dict[str, Path]:
         "beat_count": summary.get("beat_count", 0),
         "provider_counts": summary.get("provider_counts", {}),
         "qc_status_counts": summary.get("qc_status_counts", {}),
+        "visual_policy": summary.get("visual_policy", {}),
         "warnings": summary.get("warnings", []),
         "beat_plan_preview": _visual_asset_preview(visual_asset_plan.get("beat_plans", [])),
     }
@@ -2458,6 +2491,7 @@ def run_asset_planning_checkpoint(plan_path: str | Path) -> dict[str, Path]:
     html_path = write_checkpoint_html(episode_dir, plan)
     return {
         "plan": saved_plan,
+        "visual_source_strategy": strategy_path,
         "visual_asset_plan": visual_path,
         "asset_qc": qc_path,
         "checkpoint": html_path,
@@ -2527,8 +2561,8 @@ def run_script_draft_checkpoint(
 def run_script_expand_checkpoint(
     plan_path: str | Path,
     *,
-    target_min: int = THAI_CHARS_NO_SPACE_TARGET_MIN,
-    target_max: int = THAI_CHARS_NO_SPACE_TARGET_MAX,
+    target_min: int | None = None,
+    target_max: int | None = None,
 ) -> dict[str, Path]:
     plan_file = Path(plan_path)
     plan = load_producer_plan(plan_file)
@@ -2549,6 +2583,7 @@ def run_script_expand_checkpoint(
         target_min=target_min,
         target_max=target_max,
     )
+    plan["episode_spec"] = package["episode_spec"]
     script_file = _write_json_artifact(script_path(episode_dir), package.get("scenes", []))
     script_qc_file = _write_json_artifact(script_qc_path(episode_dir), package.get("script_qc", {}))
     fact_file = _write_json_artifact(
@@ -2629,6 +2664,9 @@ def run_asset_production_checkpoint(
         script = json.load(f)
     if not isinstance(script, list):
         raise ValueError("script.json must be a list of scene objects")
+
+    if not dry_run:
+        require_production_review(plan, script)
 
     from producer_asset_producer import produce_assets
 
@@ -2872,6 +2910,9 @@ def run_tts_production_checkpoint(
     if not isinstance(script, list):
         raise ValueError("script.json must be a list of scene objects")
 
+    if not dry_run:
+        require_production_review(plan, script)
+
     audio_rules = plan.get("audio_rules") if isinstance(plan.get("audio_rules"), dict) else {}
     requested_tone = (
         tone_preset
@@ -3002,6 +3043,7 @@ def run_broll_expansion_checkpoint(
     runware_max_slots: int = 40,
     max_visual_repeats: int = 2,
     force: bool = False,
+    legacy_keyword_tables: bool = False,
 ) -> dict[str, Path]:
     plan_file = Path(plan_path)
     plan = load_producer_plan(plan_file)
@@ -3059,6 +3101,7 @@ def run_broll_expansion_checkpoint(
         runware_max_slots=runware_max_slots,
         max_visual_repeats=max_visual_repeats,
         force=force,
+        legacy_keyword_tables=legacy_keyword_tables,
     )
     updated_manifest = package.get("asset_manifest", {})
     visual_timeline = package.get("broll_timeline", {})
@@ -3109,6 +3152,7 @@ def run_broll_expansion_checkpoint(
             "runware_broll_count": visual_timeline.get("runware_broll_count", 0),
             "runware_broll_fail_count": visual_timeline.get("runware_broll_fail_count", 0),
             "repeat_guard": visual_timeline.get("repeat_guard", {}),
+            "visual_policy": visual_timeline.get("visual_policy", {}),
             "average_slot_seconds": average_slot_seconds,
             "warnings": visual_timeline.get("warnings", []),
             "errors": visual_timeline.get("errors", []),
@@ -3140,6 +3184,7 @@ def run_broll_expansion_checkpoint(
         "runware_broll_count": visual_timeline.get("runware_broll_count", 0),
         "runware_broll_fail_count": visual_timeline.get("runware_broll_fail_count", 0),
         "repeat_guard": visual_timeline.get("repeat_guard", {}),
+        "visual_policy": visual_timeline.get("visual_policy", {}),
         "average_slot_seconds": average_slot_seconds,
         **counts,
         "warnings": visual_timeline.get("warnings", []),
@@ -3599,6 +3644,13 @@ def run_upload_pack_checkpoint(plan_path: str | Path) -> dict[str, Path]:
 
     final_qc = load_producer_plan(final_qc_file) if final_qc_file.exists() else {}
     cost_report = load_producer_plan(cost_file) if cost_file.exists() else {}
+    render_state = plan.get("render") if isinstance(plan.get("render"), dict) else {}
+    render_props_file = Path(
+        str(render_state.get("render_props_artifact") or render_props_path(episode_dir))
+    )
+    if not render_props_file.exists():
+        render_props_file = render_props_path(episode_dir)
+    render_props = load_producer_plan(render_props_file) if render_props_file.exists() else {}
 
     from producer_upload_pack import write_upload_pack
 
@@ -3608,6 +3660,7 @@ def run_upload_pack_checkpoint(plan_path: str | Path) -> dict[str, Path]:
         final_qc=final_qc,
         cost_report=cost_report,
         final_report_path=final_report_file,
+        render_props=render_props,
     )
     manifest_file = upload_pack_manifest_path(episode_dir)
     files = manifest.get("files") if isinstance(manifest.get("files"), dict) else {}
@@ -3619,6 +3672,17 @@ def run_upload_pack_checkpoint(plan_path: str | Path) -> dict[str, Path]:
         "metadata_artifact": files.get("metadata"),
         "root_metadata_artifact": files.get("root_metadata"),
         "thumbnail_brief_artifact": files.get("thumbnail_brief_html"),
+        "timestamps_artifact": files.get("timestamps"),
+        "description_source": (
+            manifest.get("description_review", {}).get("source")
+            if isinstance(manifest.get("description_review"), dict)
+            else None
+        ),
+        "chapter_count": (
+            manifest.get("description_review", {}).get("chapter_count")
+            if isinstance(manifest.get("description_review"), dict)
+            else 0
+        ),
         "warnings": manifest.get("warnings", []),
         "errors": manifest.get("errors", []),
     }
@@ -4139,7 +4203,7 @@ def render_checkpoint_html(plan: dict[str, Any]) -> str:
             "episode_dir": _path_for_display(episode.get("episode_dir")),
             "language": episode.get("language"),
             "renderer": episode.get("renderer"),
-            "script_length": episode.get("script_length_chars_no_space"),
+            "episode_spec": episode_spec(plan),
             "visual_beat_seconds": episode.get("visual_beat_seconds"),
             "subtitles": episode.get("subtitles"),
         })}
@@ -4474,6 +4538,13 @@ def write_checkpoint_html(episode_dir: str | Path, plan: dict[str, Any]) -> Path
 def init_checkpoint(topic: str, episode_dir: str | Path | None = None, slug: str | None = None) -> tuple[Path, Path]:
     target_dir = Path(episode_dir) if episode_dir else make_episode_dir(topic, slug=slug)
     plan = default_producer_plan(topic, target_dir, slug=slug)
+    visual_rules = plan.get("visual_rules") if isinstance(plan.get("visual_rules"), dict) else {}
+    source_policy = (
+        visual_rules.get("source_policy")
+        if isinstance(visual_rules.get("source_policy"), dict)
+        else default_visual_source_policy()
+    )
+    _write_json_artifact(visual_source_strategy_path(target_dir), source_policy)
     plan_path = save_producer_plan(target_dir, plan)
     html_path = write_checkpoint_html(target_dir, plan)
     return plan_path, html_path
@@ -4540,20 +4611,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     expand_script = sub.add_parser(
         "expand-script",
-        help="Expand existing script.json to the preferred Producer Mode length band",
+        help="Review expansion needs without padding narration; revise supported content manually",
     )
     expand_script.add_argument("--plan", required=True, help="Path to producer_plan.json")
     expand_script.add_argument(
         "--target-min",
         type=int,
-        default=THAI_CHARS_NO_SPACE_TARGET_MIN,
-        help="Preferred minimum Thai chars without whitespace",
+        default=None,
+        help="Explicit episode_spec minimum Thai Unicode characters",
     )
     expand_script.add_argument(
         "--target-max",
         type=int,
-        default=THAI_CHARS_NO_SPACE_TARGET_MAX,
-        help="Preferred maximum Thai chars without whitespace",
+        default=None,
+        help="Explicit episode_spec maximum Thai Unicode characters",
     )
 
     produce_assets = sub.add_parser(
@@ -4720,6 +4791,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Regenerate existing derived b-roll reframes",
     )
+    expand_broll.add_argument(
+        "--legacy-keyword-tables",
+        action="store_true",
+        help="Allow the built-in per-episode keyword tables when broll_keywords.json is absent (older episodes only)",
+    )
 
     render_preflight = sub.add_parser(
         "render-preflight",
@@ -4846,6 +4922,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "plan-assets":
         outputs = run_asset_planning_checkpoint(args.plan)
         print(f"[OK] wrote {outputs['plan']}")
+        print(f"[OK] wrote {outputs['visual_source_strategy']}")
         print(f"[OK] wrote {outputs['visual_asset_plan']}")
         print(f"[OK] wrote {outputs['asset_qc']}")
         print(f"[OK] wrote {outputs['checkpoint']}")
@@ -4952,6 +5029,7 @@ def main(argv: list[str] | None = None) -> int:
             runware_max_slots=args.runware_max_slots,
             max_visual_repeats=args.max_visual_repeats,
             force=args.force,
+            legacy_keyword_tables=args.legacy_keyword_tables,
         )
         print(f"[OK] wrote {outputs['plan']}")
         print(f"[OK] wrote {outputs['asset_manifest']}")

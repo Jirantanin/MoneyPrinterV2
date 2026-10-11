@@ -11,7 +11,6 @@ import base64
 import json
 import os
 import re
-import wave
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,9 +19,9 @@ import requests
 
 
 PROVIDER_SMOKE_VERSION = 1
-GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview"
+GEMINI_TTS_MODEL = "gemini-3.8-flash-tts"
 GEMINI_TTS_TEXT_USD_PER_CHAR = 0.00000025
-GEMINI_TTS_AUDIO_USD_PER_SECOND = 0.0005
+GEMINI_TTS_AUDIO_USD_PER_SECOND = 0.00045
 
 
 def _utc_now() -> str:
@@ -147,51 +146,26 @@ def _gemini_tts_sample(
             "detail": "gemini_tts_api_key/nanobanana2_api_key/GEMINI_API_KEY is missing",
         }
 
+    from classes.Tts import (GEMINI_INTERACTIONS_URL, find_audio_b64, build_interaction_payload,
+                             gemini_speech_style, write_wav)
+
     voice = _gemini_voice(cfg)
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_TTS_MODEL}:generateContent?key={api_key}"
-    )
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": (
-                            "Audio Profile: A standard Thai documentary narrator with a clear, calm, neutral voice.\n\n"
-                            "Director's Notes: Speak naturally and clearly. This is a short technical smoke test.\n\n"
-                            f"Transcript:\n{text}"
-                        )
-                    }
-                ]
-            }
-        ],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": {"voiceName": voice}
-                }
-            },
-        },
-    }
+    model = str(cfg.get("gemini_tts_model") or GEMINI_TTS_MODEL)
+    payload = build_interaction_payload(text, model=model, voice=voice,
+                                        style=gemini_speech_style("natural_storyteller"))
     try:
-        response = _session().post(url, json=payload, timeout=timeout_seconds)
+        response = _session().post(GEMINI_INTERACTIONS_URL, json=payload, timeout=timeout_seconds,
+                                   headers={"x-goog-api-key": str(api_key), "Content-Type": "application/json"})
         response.raise_for_status()
-        body = response.json()
-        audio_b64 = body["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
-        pcm_data = base64.b64decode(audio_b64)
+        audio_b64 = find_audio_b64(response.json())
+        if not audio_b64:
+            raise RuntimeError("Gemini TTS response contained no audio")
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with wave.open(str(output_path), "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(24000)
-            wf.writeframes(pcm_data)
-        duration = len(pcm_data) / (2 * 24000)
+        duration = write_wav(base64.b64decode(audio_b64), str(output_path))
         return {
             "provider": "gemini_tts",
             "status": "pass",
-            "model": GEMINI_TTS_MODEL,
+            "model": model,
             "voice": voice,
             "output_path": str(output_path),
             "bytes": output_path.stat().st_size,

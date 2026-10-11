@@ -244,6 +244,7 @@ def build_final_report(
         if isinstance(entry, dict):
             provider = str(entry.get("provider") or "unknown")
             provider_counts[provider] = provider_counts.get(provider, 0) + 1
+    visual_policy = _as_dict(asset_manifest.get("visual_policy") or final_qc.get("visual_policy"))
 
     title = episode.get("topic") or episode_path.name
     html_text = f"""<!doctype html>
@@ -429,6 +430,9 @@ def build_final_report(
             "status": asset_manifest.get("status"),
             "entry_count": len(asset_entries),
             "provider_counts": provider_counts,
+            "visual_policy_status": visual_policy.get("status"),
+            "visual_policy_summary": visual_policy.get("summary"),
+            "visual_policy_review_warnings": visual_policy.get("review_warnings"),
         })}
       </div>
 

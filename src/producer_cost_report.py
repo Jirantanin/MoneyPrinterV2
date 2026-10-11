@@ -19,6 +19,7 @@ FREE_OR_LOCAL_PROVIDERS = {
     "nasa_images",
     "nasa_svs",
     "jpl_photojournal",
+    "official_media",
     "pexels",
     "pixabay",
     "remotion_graphic",

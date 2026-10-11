@@ -207,6 +207,10 @@ def _asset_gate(plan: dict[str, Any], asset_manifest: dict[str, Any], asset_qc: 
     asset_state = _as_dict(plan.get("asset_production"))
     entries = _as_list(asset_manifest.get("entries"))
     status = _status(asset_state.get("status") or asset_manifest.get("status") or asset_qc.get("status"))
+    policy_report = _as_dict(asset_qc.get("visual_policy") or asset_manifest.get("visual_policy"))
+    policy_status = _status(policy_report.get("status"))
+    policy_blocked = policy_status == "blocked"
+    policy_review = policy_status in REVIEW_STATUSES or bool(_as_list(policy_report.get("review_warnings")))
     pending = [
         entry for entry in entries if isinstance(entry, dict) and _status(entry.get("status")) in {"task_pending", "planned", "pending"}
     ]
@@ -220,7 +224,8 @@ def _asset_gate(plan: dict[str, Any], asset_manifest: dict[str, Any], asset_qc: 
         and _status(entry.get("status")) in {"downloaded", "generated"}
         and not Path(str(entry.get("local_path") or "")).exists()
     ]
-    if status not in READY_STATUSES or pending or failed or missing_files:
+    asset_not_ready = status not in READY_STATUSES and status not in REVIEW_STATUSES
+    if asset_not_ready or pending or failed or missing_files or policy_blocked:
         return _gate(
             name="assets",
             status="blocked",
@@ -228,11 +233,27 @@ def _asset_gate(plan: dict[str, Any], asset_manifest: dict[str, Any], asset_qc: 
             blocking=True,
             detail=(
                 f"Asset status={status}; entries={len(entries)}; "
-                f"pending={len(pending)}; failed={len(failed)}; missing_files={len(missing_files)}."
+                f"pending={len(pending)}; failed={len(failed)}; "
+                f"missing_files={len(missing_files)}; visual_policy={_status(policy_report.get('status'))}."
             ),
             next_action=(
                 "Fulfill Codex imagegen opener tasks, download official/stock media, "
-                "apply results, and rerun produce-assets/apply-asset-results."
+                "replace over-cap graphics/generated imagery with real footage or approved reframes, "
+                "and rerun produce-assets/apply-asset-results/expand-broll."
+            ),
+        )
+    if status in REVIEW_STATUSES or policy_review:
+        return _gate(
+            name="assets",
+            status="review",
+            score=82,
+            detail=(
+                f"Asset status={status}; entries={len(entries)}; "
+                f"visual_policy={policy_status}; review_warnings={len(_as_list(policy_report.get('review_warnings')))}."
+            ),
+            next_action=(
+                "Review final visual-source balance, especially low graphic density or excessive "
+                "local reframes, then revise only the affected concept/data beats."
             ),
         )
     return _gate(
@@ -460,6 +481,7 @@ def build_smoke_gate(
         ),
         "gates": gates,
         "provider_readiness": provider_statuses,
+        "visual_policy": _as_dict(asset_qc.get("visual_policy") or asset_manifest.get("visual_policy")),
         "next_actions": next_actions,
         "warnings": warnings,
         "errors": errors,

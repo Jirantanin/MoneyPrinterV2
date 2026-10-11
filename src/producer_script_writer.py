@@ -13,12 +13,15 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
+from producer_contract import THAI_MIN, THAI_MAX, claim_report, episode_spec, narrative_review, thai_count
 
-SCRIPT_MIN_CHARS_NO_SPACE = 5_000
-SCRIPT_TARGET_MIN_CHARS_NO_SPACE = 8_800
-SCRIPT_TARGET_MAX_CHARS_NO_SPACE = 9_500
-SCRIPT_MAX_CHARS_NO_SPACE = 12_000
-SCRIPT_SOFT_MAX_CHARS_NO_SPACE = 10_000
+
+# Compatibility names only; production gates use episode_spec and Thai Unicode counts.
+SCRIPT_MIN_CHARS_NO_SPACE = THAI_MIN
+SCRIPT_TARGET_MIN_CHARS_NO_SPACE = THAI_MIN
+SCRIPT_TARGET_MAX_CHARS_NO_SPACE = THAI_MAX
+SCRIPT_MAX_CHARS_NO_SPACE = THAI_MAX
+SCRIPT_SOFT_MAX_CHARS_NO_SPACE = THAI_MAX
 
 ASCII_TERM_STOPWORDS = {
     "and",
@@ -173,51 +176,8 @@ def _beat_targets(plan: dict[str, Any]) -> list[dict[str, Any]]:
     return targets
 
 
-def _script_length_qc(text: str) -> dict[str, Any]:
-    chars_no_space = _chars_no_space(text)
-    chars_with_space = len(str(text or ""))
-    status = "pass"
-    blocking = False
-    notes: list[str] = []
-    if chars_no_space < SCRIPT_MIN_CHARS_NO_SPACE:
-        status = "blocked"
-        blocking = True
-        notes.append(
-            f"Script is below the minimum long-form band "
-            f"({chars_no_space} < {SCRIPT_MIN_CHARS_NO_SPACE} chars without whitespace)."
-        )
-    elif chars_no_space > SCRIPT_MAX_CHARS_NO_SPACE:
-        status = "blocked"
-        blocking = True
-        notes.append(
-            f"Script exceeds the hard maximum "
-            f"({chars_no_space} > {SCRIPT_MAX_CHARS_NO_SPACE} chars without whitespace)."
-        )
-    elif chars_no_space > SCRIPT_SOFT_MAX_CHARS_NO_SPACE:
-        status = "review"
-        notes.append(
-            f"Script is above the soft cap "
-            f"({chars_no_space} > {SCRIPT_SOFT_MAX_CHARS_NO_SPACE} chars without whitespace)."
-        )
-    elif chars_no_space < SCRIPT_TARGET_MIN_CHARS_NO_SPACE:
-        status = "review"
-        notes.append("Script is usable but below the preferred 8,800-9,500 char band.")
-    elif chars_no_space > SCRIPT_TARGET_MAX_CHARS_NO_SPACE:
-        status = "review"
-        notes.append("Script is usable but a little above the preferred 8,800-9,500 char band.")
-    else:
-        notes.append("Script length is in the preferred 8,800-9,500 char band.")
-    return {
-        "status": status,
-        "blocking": blocking,
-        "chars_no_space": chars_no_space,
-        "chars_with_space": chars_with_space,
-        "minimum_chars_no_space": SCRIPT_MIN_CHARS_NO_SPACE,
-        "target_min_chars_no_space": SCRIPT_TARGET_MIN_CHARS_NO_SPACE,
-        "target_max_chars_no_space": SCRIPT_TARGET_MAX_CHARS_NO_SPACE,
-        "maximum_chars_no_space": SCRIPT_MAX_CHARS_NO_SPACE,
-        "notes": notes,
-    }
+def _script_length_qc(text: str, plan: dict[str, Any] | None = None) -> dict[str, Any]:
+    return narrative_review(text, plan or {})
 
 
 def _script_schema() -> dict[str, Any]:
@@ -267,19 +227,22 @@ def _section_prompt(
             "source_ids": section.get("source_ids"),
         },
         "previous_summary": previous_summary,
-        "target_chars_no_space_for_section": target_chars,
+        "target_thai_unicode_chars_for_section": target_chars,
+        "editorial_core": plan.get("editorial_core", {}),
         "beat_targets": targets,
     }
     return (
         "Draft one section of a Thai documentary YouTube narration.\n"
         "Return JSON only. Write all narration and scene_title values in Thai script.\n"
         "Hard requirements:\n"
-        f"- The section narration total must be close to {target_chars} Thai characters without whitespace.\n"
+        f"- Aim for {target_chars} Thai Unicode characters (U+0E00-U+0E7F); never pad to meet a count.\n"
         f"- There are {len(targets)} beat targets, so each scene should be a full spoken paragraph, not a short summary.\n"
         "- Do not write English narration. Use English only for necessary acronyms or parenthesized technical terms.\n"
         "- Translate technical terms into Thai first, for example Lunar Laser Ranging = การวัดระยะดวงจันทร์ด้วยเลเซอร์.\n"
         "- Keep claims tied to supplied source IDs; do not invent unsourced numbers or future certainty.\n"
         "Keep it spoken, calm, factual, and continuous.\n"
+        "Advance one new idea per section; earn the opening promise and ending payoff. "
+        "Remove repeated explanations. Source summaries support drafting only, not final verification.\n"
         "Use only the provided source summaries for factual claims. If evidence is thin, use qualified wording.\n"
         "Do not include section labels inside narration. Do not add subtitles. Do not overclaim.\n"
         "Create exactly one scene for each beat target, preserving asset_plan_id.\n"
@@ -389,10 +352,8 @@ def _draft_with_llm(plan: dict[str, Any], targets: list[dict[str, Any]]) -> tupl
         targets_by_section.setdefault(section_index, []).append(target)
 
     section_count = max(1, len([section for section in sections if isinstance(section, dict)]))
-    section_target_chars = max(
-        900,
-        int((SCRIPT_TARGET_MIN_CHARS_NO_SPACE + SCRIPT_TARGET_MAX_CHARS_NO_SPACE) / 2 / section_count),
-    )
+    bounds = episode_spec(plan)["narrative"]
+    section_target_chars = max(1, int((bounds["minimum"] + bounds["maximum"]) / 2 / section_count))
     scenes: list[dict[str, Any]] = []
     warnings: list[str] = []
     previous_summary = ""
@@ -442,7 +403,7 @@ def _draft_with_llm(plan: dict[str, Any], targets: list[dict[str, Any]]) -> tupl
                     section_scenes.append(_normalize_scene(item, target, "llm_section_draft"))
 
                 section_text = "\n".join(str(scene.get("narration") or "") for scene in section_scenes)
-                section_chars = _chars_no_space(section_text)
+                section_chars = thai_count(section_text)
                 section_thai_ratio = _language_ratio(section_text)
                 if (
                     attempt == 0
@@ -450,7 +411,7 @@ def _draft_with_llm(plan: dict[str, Any], targets: list[dict[str, Any]]) -> tupl
                 ):
                     retry_note = (
                         "RETRY BECAUSE THE PRIOR DRAFT FAILED QC: rewrite this section in Thai only, "
-                        f"with at least {int(section_target_chars * 0.85)} characters without whitespace. "
+                        f"with about {section_target_chars} Thai Unicode characters, adding only supported substance. "
                         "No English narration paragraphs."
                     )
                     continue
@@ -488,50 +449,7 @@ def _draft_without_llm(targets: list[dict[str, Any]]) -> tuple[list[dict[str, An
 
 
 def _fact_check_report(plan: dict[str, Any], scenes: list[dict[str, Any]]) -> dict[str, Any]:
-    lookup = _source_lookup(plan)
-    claims: list[dict[str, Any]] = []
-    unsupported_count = 0
-    for index, scene in enumerate(scenes, start=1):
-        source_ids = [str(item) for item in (scene.get("source_ids") or []) if str(item).strip()]
-        scene_claims = scene.get("key_claims") or []
-        if not scene_claims:
-            scene_claims = [_compact(scene.get("narration"), 220)]
-        for claim in scene_claims:
-            status = "mapped" if source_ids else "needs_review"
-            if status != "mapped":
-                unsupported_count += 1
-            claims.append(
-                {
-                    "scene": index,
-                    "asset_plan_id": scene.get("producer_asset_plan_id"),
-                    "claim": _compact(claim, 420),
-                    "source_ids": source_ids,
-                    "source_urls": [lookup.get(source_id, {}).get("url") for source_id in source_ids],
-                    "status": status,
-                }
-            )
-    sources = [
-        {
-            "id": source.get("id"),
-            "title": source.get("title"),
-            "publisher": source.get("publisher") or _domain(str(source.get("url") or "")),
-            "url": source.get("url"),
-            "source_type": source.get("source_type"),
-        }
-        for source in lookup.values()
-    ]
-    return {
-        "status": "needs_review" if unsupported_count else "pass",
-        "created_at": _utc_now(),
-        "claim_count": len(claims),
-        "unsupported_count": unsupported_count,
-        "policy": (
-            "Claims are mapped to available checkpoint sources. This is not a final external "
-            "fact-check; high-risk claims still need manual/source review before production."
-        ),
-        "sources": sources,
-        "claims": claims,
-    }
+    return claim_report(plan, scenes)
 
 
 def _extract_terms(plan: dict[str, Any], scenes: list[dict[str, Any]]) -> list[str]:
@@ -587,187 +505,37 @@ def _pronunciation_guide(plan: dict[str, Any], scenes: list[dict[str, Any]]) -> 
     return "\n".join(lines)
 
 
-def _repair_known_science_phrasing(text: Any) -> str:
-    repaired = str(text or "")
-    replacements = {
-        "ดาวเคราะห์ขนาดใหญ่": "บริวารธรรมชาติขนาดใหญ่",
-        "ดาวเคราะห์ที่อยู่": "บริวารธรรมชาติที่อยู่",
-        "ดวงจันทร์เป็นดาวเคราะห์": "ดวงจันทร์เป็นบริวารธรรมชาติ",
-        "แรงดูดดูด": "แรงดึงดูด",
-        "คลื่นความถี่ของมหาสมุทร": "จังหวะน้ำขึ้นน้ำลงของมหาสมุทร",
-        "คลื่นความดัน": "น้ำขึ้นน้ำลง",
-        "แรงดันน้ำขึ้นน้ำลง": "แรงน้ำขึ้นน้ำลง",
-        "สะพานหินบนดวงจันทร์": "แผ่นสะท้อนแสงที่นักบินอวกาศทิ้งไว้บนดวงจันทร์",
-        "อาจใช้เวลาประมาณ 50 พันล้าน": "ในแบบจำลองระยะไกลมาก อาจกินเวลาหลายหมื่นล้าน",
-        "จะส่งผลต่อโครงสร้างของโลกและระบบดาวเคราะห์ของเราอย่างมาก": (
-            "ช่วยให้เราเห็นว่าโลกกับดวงจันทร์เป็นระบบเดียวกันที่ค่อย ๆ เปลี่ยนไป"
-        ),
-    }
-    for old, new in replacements.items():
-        repaired = repaired.replace(old, new)
-    return repaired
-
-
-def _expansion_paragraph(scene: dict[str, Any]) -> str:
-    asset_id = str(scene.get("producer_asset_plan_id") or "")
-    source_ids = ", ".join(str(item) for item in scene.get("source_ids", []) if str(item).strip())
-    source_text = f" แหล่งที่ใช้ยึดคือ {source_ids}." if source_ids else ""
-    expansions = {
-        "S01B00": (
-            "จุดสำคัญคือคำว่าไกลขึ้นในที่นี้ไม่ได้หมายถึงดวงจันทร์กำลังหนีหายไปต่อหน้าต่อตา "
-            "แต่เป็นการเปลี่ยนแปลงเล็กมากที่ต้องใช้การวัดละเอียดและเวลายาวนานจึงจะเห็นภาพ "
-            "ถ้าเล่าให้เป็นภาษาคนดู มันคือการขยับเท่าความยาวปลายนิ้วต่อปี บนระบบที่มีระยะห่างระดับหลายแสนกิโลเมตร."
-        ),
-        "S01B01": (
-            "ภาพระยะทางจึงควรถูกใช้เพื่อทำให้ผู้ชมรู้สึกถึงสเกล ไม่ใช่เพื่อทำให้ตกใจ "
-            "เพราะแม้ดวงจันทร์จะเป็นวัตถุที่สว่างและใกล้ที่สุดบนท้องฟ้ายามค่ำคืน แต่ในเชิงดาราศาสตร์มันยังอยู่ไกลมาก "
-            "และความไกลนี้เองทำให้การเปลี่ยนปีละไม่กี่เซนติเมตรแทบไม่มีผลในชีวิตประจำวัน."
-        ),
-        "S01B02": (
-            "การวัดระยะด้วยเลเซอร์ทำให้เรื่องนี้ไม่ใช่แค่การคาดเดาจากทฤษฎี "
-            "นักวิทยาศาสตร์ยิงแสงจากโลกไปสะท้อนอุปกรณ์บนดวงจันทร์ แล้วจับเวลาที่แสงเดินทางกลับมา "
-            "เมื่อทำซ้ำเป็นเวลานาน รูปแบบของระยะทางจึงเผยให้เห็นว่าดวงจันทร์ค่อย ๆ ถอยห่างจริง."
-        ),
-        "S01B03": (
-            "ดังนั้นคำตอบที่ซื่อสัตย์คือ ใช่ มันเกิดขึ้นจริง แต่ความหมายของมันอยู่ที่ความเข้าใจเรื่องเวลา "
-            "โลก ดวงจันทร์ และมหาสมุทรกำลังแลกเปลี่ยนพลังงานกันอย่างช้า ๆ "
-            "นี่เป็นเรื่องของวิวัฒนาการของระบบโลก ไม่ใช่สัญญาณวิกฤตที่ต้องตีความแบบพรุ่งนี้จะเปลี่ยนทันที."
-        ),
-        "S02B00": (
-            "หัวใจของกลไกคือแรงน้ำขึ้นน้ำลง ดวงจันทร์ดึงน้ำทะเลและเนื้อโลกจนเกิดปูดนูนเล็ก ๆ "
-            "แต่โลกหมุนเร็วกว่าที่ดวงจันทร์โคจร ทำให้ปูดนูนนั้นไม่ได้ชี้ตรงไปที่ดวงจันทร์พอดี "
-            "ความคลาดเล็ก ๆ นี้สร้างแรงบิดที่ค่อย ๆ ส่งพลังงานออกไปสู่วงโคจรของดวงจันทร์."
-        ),
-        "S02B01": (
-            "เมื่อพลังงานบางส่วนจากการหมุนของโลกถูกส่งให้ดวงจันทร์ ผลลัพธ์สองอย่างจึงเกิดพร้อมกัน "
-            "โลกหมุนช้าลงทีละนิด และดวงจันทร์ได้วงโคจรที่สูงขึ้นทีละนิด "
-            "นี่คือเหตุผลว่าทำไมการถอยห่างของดวงจันทร์จึงเชื่อมกับความยาวของวันบนโลกด้วย."
-        ),
-        "S02B02": (
-            "ตัวเลขระดับมิลลิวินาทีอาจฟังดูเล็กจนไม่มีความหมาย แต่ในธรณีกาลมันสะสมได้ "
-            "อดีตของโลกเคยมีวันที่สั้นกว่านี้ และเมื่อระบบยังคงถ่ายโอนโมเมนตัมต่อไป วันบนโลกก็มีแนวโน้มยาวขึ้นช้ามาก "
-            "นี่คือความเปลี่ยนแปลงชนิดที่มนุษย์คนหนึ่งไม่รู้สึก แต่เครื่องมือและแบบจำลองจับได้."
-        ),
-        "S02B03": (
-            "ข้อควรระวังคืออย่าเอาอัตราปัจจุบันไปลากเส้นตรงแบบง่ายเกินไป "
-            "เพราะตำแหน่งทวีป ความลึกมหาสมุทร และการกระจายพลังงานน้ำขึ้นน้ำลงเปลี่ยนไปตามยุค "
-            "อัตราที่วัดได้วันนี้จึงเป็นหน้าต่างของระบบปัจจุบัน ไม่ใช่ตัวเลขเดียวที่จะใช้แทนทั้งอดีตและอนาคตได้ทั้งหมด."
-        ),
-        "S03B00": (
-            "เมื่อพูดถึงอนาคตของดวงจันทร์ สิ่งที่ควรเน้นคือสเกลเวลายาวมาก "
-            "การถอยห่างปีละไม่กี่เซนติเมตรต้องใช้เวลานับล้านถึงพันล้านปีจึงจะเปลี่ยนภาพใหญ่ได้ชัด "
-            "เพราะฉะนั้นประเด็นที่น่าสนใจไม่ใช่ความกลัวระยะสั้น แต่คือการเห็นว่าระบบฟ้าไม่ได้หยุดนิ่ง."
-        ),
-        "S03B01": (
-            "หลักฐานทางธรณีวิทยาและแบบจำลองน้ำขึ้นน้ำลงช่วยให้เราอ่านอดีตของระบบโลก-ดวงจันทร์ได้ "
-            "พื้นผิวดวงจันทร์เก็บร่องรอยการชนและประวัติยุคแรกของระบบสุริยะไว้จำนวนมาก "
-            "ส่วนโลกเก็บสัญญาณผ่านมหาสมุทร วันเวลา และชั้นหินบางชนิดที่บอกว่ารอบน้ำขึ้นน้ำลงเคยต่างจากปัจจุบัน."
-        ),
-        "S03B02": (
-            "ผลกระทบระยะยาวจึงควรเล่าแบบมีขอบเขต "
-            "ถ้าดวงจันทร์ไกลขึ้นมาก แรงน้ำขึ้นน้ำลงจากดวงจันทร์จะอ่อนลง และสมดุลบางอย่างของระบบโลกอาจเปลี่ยน "
-            "แต่ทั้งหมดนี้เป็นเรื่องของอนาคตไกลจนบริบทของโลกในตอนนั้นอาจต่างจากโลกที่เรารู้จักอย่างสิ้นเชิง."
-        ),
-        "S03B03": (
-            "มุมที่ทำให้เรื่องนี้น่าจดจำคือ ความเปลี่ยนแปลงเล็กมากสามารถเป็นหลักฐานของแรงที่ยิ่งใหญ่ได้ "
-            "เราไม่ได้เห็นดวงจันทร์ขยับด้วยตาเปล่า แต่เราวัดผลรวมของแรงโน้มถ่วง น้ำขึ้นน้ำลง และการหมุนของโลกได้ "
-            "นั่นทำให้เรื่องนี้เป็นตัวอย่างที่ดีของวิทยาศาสตร์ที่ต่อภาพใหญ่จากสัญญาณเล็ก ๆ."
-        ),
-        "S04B00": (
-            "ในเชิงหลักฐาน การวัดระยะดวงจันทร์ด้วยเลเซอร์เป็นจุดแข็งของเรื่องนี้ "
-            "มันเชื่อมระหว่างภารกิจอวกาศเก่า เครื่องมือบนโลก และฟิสิกส์พื้นฐานในระบบเดียวกัน "
-            "ทุกครั้งที่ลำแสงเดินทางไปกลับ เราได้ข้อมูลอีกหนึ่งจุดเพื่อยืนยันว่าระยะทางไม่ได้คงที่."
-        ),
-        "S04B01": (
-            "คำว่าน้ำขึ้นน้ำลงในที่นี้ไม่ได้หมายถึงน้ำทะเลอย่างเดียว "
-            "โลกทั้งใบตอบสนองต่อแรงโน้มถ่วง แม้จะเล็กมากจนเราไม่รู้สึกในชีวิตประจำวัน "
-            "พลังงานที่สูญเสียไปกับแรงเสียดทานของมหาสมุทรและเปลือกโลกคือส่วนหนึ่งที่ทำให้การหมุนช้าลง."
-        ),
-        "S04B02": (
-            "เมื่อหลายวิธีให้ภาพไปในทิศทางเดียวกัน ความมั่นใจของนักวิทยาศาสตร์จึงเพิ่มขึ้น "
-            "อัตราประมาณ 3.8 เซนติเมตรต่อปีไม่ใช่ตัวเลขเดี่ยวที่โดดออกมาลอย ๆ "
-            "แต่มันวางอยู่บนฐานของการวัดระยะ แบบจำลองแรงน้ำขึ้นน้ำลง และความเข้าใจเรื่องโมเมนตัมเชิงมุม."
-        ),
-        "S04B03": (
-            "สรุปให้ชัดที่สุดคือ ดวงจันทร์กำลังถอยห่างจริง แต่ไม่ได้แปลว่าโลกกำลังเสียดวงจันทร์ในเวลาของมนุษย์ "
-            "สิ่งที่เปลี่ยนคือความเข้าใจของเรา ว่าท้องฟ้าที่ดูนิ่งทุกคืนกำลังเคลื่อนไหวด้วยจังหวะที่ช้ามาก "
-            "และบางครั้ง วิทยาศาสตร์ที่ดีที่สุดก็คือการมองเห็นความเปลี่ยนแปลงที่สายตาเราไม่มีทางเห็นเอง."
-        ),
-    }
-    return expansions.get(
-        asset_id,
-        (
-            "เพื่อให้ฉากนี้สมบูรณ์ขึ้น ให้ย้ำกับผู้ชมว่านี่เป็นคำอธิบายเชิงวิทยาศาสตร์ที่ต้องอาศัยทั้งการวัดและเวลา "
-            "ไม่ใช่ภาพเหตุการณ์ฉับพลัน ภาพประกอบควรช่วยแยกสิ่งที่เป็นหลักฐานจริงออกจากภาพอธิบาย "
-            "และคงน้ำเสียงตรงไปตรงมา ไม่ทำให้เรื่องช้าระดับดาราศาสตร์กลายเป็นภัยใกล้ตัวเกินจริง."
-        )
-        + source_text,
-    )
-
-
-def _normalize_existing_scenes(scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
-    for index, scene in enumerate(scenes, start=1):
-        if not isinstance(scene, dict):
-            continue
-        item = dict(scene)
-        item["visual_beat"] = int(item.get("visual_beat") or index)
-        item["narration"] = _repair_known_science_phrasing(item.get("narration"))
-        item["scene_title"] = _repair_known_science_phrasing(item.get("scene_title"))
-        item["chars_no_space"] = _chars_no_space(item.get("narration"))
-        normalized.append(item)
-    return normalized
-
-
 def expand_script_package(
     plan: dict[str, Any],
     scenes: list[dict[str, Any]],
     *,
-    target_min: int = SCRIPT_TARGET_MIN_CHARS_NO_SPACE,
-    target_max: int = SCRIPT_TARGET_MAX_CHARS_NO_SPACE,
+    target_min: int | None = None,
+    target_max: int | None = None,
 ) -> dict[str, Any]:
-    expanded = _normalize_existing_scenes(scenes)
-    warnings: list[str] = []
-    if not expanded:
-        warnings.append("No existing scenes were available to expand.")
-
-    def total_chars() -> int:
-        return _chars_no_space("\n\n".join(str(scene.get("narration") or "") for scene in expanded))
-
-    cursor = 0
-    while expanded and total_chars() < target_min and cursor < len(expanded) * 3:
-        scene = expanded[cursor % len(expanded)]
-        paragraph = _expansion_paragraph(scene)
-        proposed = _repair_known_science_phrasing(
-            f"{str(scene.get('narration') or '').rstrip()} {paragraph}"
-        )
-        projected = total_chars() - _chars_no_space(scene.get("narration")) + _chars_no_space(proposed)
-        if projected <= SCRIPT_MAX_CHARS_NO_SPACE:
-            scene["narration"] = proposed
-            scene["draft_source"] = "producer_mode_expanded"
-            scene["chars_no_space"] = _chars_no_space(proposed)
-        cursor += 1
-
-    if total_chars() > target_max:
-        warnings.append(
-            f"Expanded script is above preferred band ({total_chars()} > {target_max}) but under hard maximum."
-        )
-    fact_report = _fact_check_report(plan, expanded)
-    script_qc = _script_qc(plan, expanded, warnings, fact_report)
-    guide = _pronunciation_guide(plan, expanded)
+    # Expansion is an editorial task. Never append topic-specific boilerplate by beat ID.
+    from copy import deepcopy
+    effective_plan = deepcopy(plan)
+    spec = episode_spec(effective_plan)
+    if target_min is not None:
+        spec["narrative"]["minimum"] = target_min
+    if target_max is not None:
+        spec["narrative"]["maximum"] = target_max
+    effective_plan["episode_spec"] = spec
+    episode_spec(effective_plan)
+    revised = deepcopy(scenes)
+    warnings = ["No automatic padding performed. Revise the script using supported new evidence, then rerun review."]
+    facts = _fact_check_report(effective_plan, revised)
     return {
-        "created_at": _utc_now(),
-        "scenes": expanded,
-        "script_qc": script_qc,
-        "fact_check_report": fact_report,
-        "pronunciation_guide_md": guide,
-        "warnings": warnings,
+        "created_at": _utc_now(), "scenes": revised,
+        "script_qc": _script_qc(effective_plan, revised, warnings, facts),
+        "fact_check_report": facts, "pronunciation_guide_md": _pronunciation_guide(effective_plan, revised),
+        "episode_spec": spec, "warnings": warnings,
     }
 
 
 def _script_qc(plan: dict[str, Any], scenes: list[dict[str, Any]], warnings: list[str], fact_report: dict[str, Any]) -> dict[str, Any]:
     text = "\n\n".join(str(scene.get("narration") or "") for scene in scenes)
-    length_qc = _script_length_qc(text)
+    length_qc = _script_length_qc(text, plan)
     missing_fields: list[dict[str, Any]] = []
     issues: list[dict[str, Any]] = []
     for index, scene in enumerate(scenes, start=1):
@@ -808,8 +576,8 @@ def _script_qc(plan: dict[str, Any], scenes: list[dict[str, Any]], warnings: lis
             {
                 "severity": "medium",
                 "scene": 0,
-                "issue": f"{fact_report.get('unsupported_count', 0)} claims need source review.",
-                "suggestion": "Map or rewrite unsupported claims before final production.",
+                "issue": f"{fact_report.get('unverified_count', 0)} claims need source review.",
+                "suggestion": "Verify claims against source passages; record current evidence reviews before production.",
             }
         )
     for warning in warnings:
