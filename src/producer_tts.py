@@ -15,11 +15,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from config import get_gemini_tts_model
+
 
 TTS_MANIFEST_VERSION = 1
 DEFAULT_TONE_PRESET = "natural_storyteller"
+# Gemini 3.8 Flash TTS standard rates ($1/1M text, $18/1M audio tokens at 25 tokens/s). Google's
+# launch pricing halves these through 2026-12-31; estimates stay at the standard rate.
 GEMINI_TTS_TEXT_USD_PER_CHAR = 0.00000025
-GEMINI_TTS_AUDIO_USD_PER_SECOND = 0.0005
+GEMINI_TTS_AUDIO_USD_PER_SECOND = 0.00045
 ESTIMATED_THAI_CHARS_PER_SECOND = 13.0
 
 
@@ -34,6 +38,26 @@ def _clean_text(value: Any, fallback: str = "") -> str:
 
 def _count_chars_no_space(value: str) -> int:
     return len(re.sub(r"\s+", "", str(value or "")))
+
+
+def _narration_encoding_issue(value: str) -> str:
+    """Return a safe-to-report issue when narration is not valid prose text.
+
+    Thai mojibake can still contain many characters from the Thai Unicode block,
+    so character-count checks alone are not sufficient.  C1 control characters
+    are never appropriate in narration and are a reliable signal that text was
+    decoded with the wrong Windows code page before reaching TTS.
+    """
+    text = str(value or "")
+    c1_controls = sum(0x80 <= ord(char) <= 0x9F for char in text)
+    if c1_controls:
+        return (
+            f"narration contains {c1_controls} C1 control characters; "
+            "likely mojibake. Restore the source text as UTF-8 before TTS."
+        )
+    if "\ufffd" in text:
+        return "narration contains Unicode replacement characters; restore the source text before TTS."
+    return ""
 
 
 def _scene_audio_path(episode_dir: Path, scene_index: int) -> Path:
@@ -97,7 +121,7 @@ def _entry_base(
         "section_index": scene.get("section_index"),
         "section_title": scene.get("section_title", ""),
         "provider": "gemini_tts",
-        "model": "gemini-3.1-flash-tts-preview",
+        "model": get_gemini_tts_model(),
         "tone_preset": tone_preset,
         "local_path": str(output_path),
         "chars_no_space": chars_no_space,
@@ -241,6 +265,14 @@ def produce_tts(
             entries.append(entry)
             continue
 
+        encoding_issue = _narration_encoding_issue(narration)
+        if encoding_issue:
+            entry["status"] = "failed"
+            entry["issue"] = encoding_issue
+            warnings.append(f"scene {scene_index}: {encoding_issue}")
+            entries.append(entry)
+            continue
+
         if dry_run:
             entry["status"] = "planned"
             entry["issue"] = "dry run; Gemini TTS call skipped"
@@ -312,7 +344,7 @@ def produce_tts(
         "status": status,
         "dry_run": dry_run,
         "provider": "gemini_tts",
-        "model": "gemini-3.1-flash-tts-preview",
+        "model": get_gemini_tts_model(),
         "tone_preset": normalized_tone,
         "pronunciation_guide_path": str(pronunciation_guide_path or ""),
         "scene_count": len(entries),
