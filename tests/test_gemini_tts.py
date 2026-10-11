@@ -40,6 +40,13 @@ class PayloadTests(unittest.TestCase):
         self.assertIn("ominous", gemini_speech_style("classic", 3, 20))
         self.assertNotIn("Director", gemini_speech_style("natural", 3, 20))
 
+    def test_host_dry_style_is_short_and_constant_across_scenes(self):
+        self.assertEqual(Tts.normalize_gemini_tts_tone_preset("host"), "host_dry")
+        self.assertEqual(Tts.normalize_gemini_tts_tone_preset("host-dry"), "host_dry")
+        styles = {gemini_speech_style("host_dry", i, 28) for i in (-1, 0, 13, 27)}
+        self.assertEqual(styles, {Tts.HOST_DRY_STYLE})
+        self.assertIn("dry humor", Tts.HOST_DRY_STYLE)
+
 
 class AudioTests(unittest.TestCase):
     def test_find_audio_in_steps(self):

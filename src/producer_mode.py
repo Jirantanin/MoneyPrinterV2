@@ -845,7 +845,8 @@ def default_producer_plan(
             "tts_provider": "gemini_tts",
             "language": "th",
             "narrator": "single",
-            "tone": "standard_documentary_neutral",
+            "tone": "host_led_dry",
+            "tone_preset": "host_dry",
             "music": "use_existing_podcastv2_behavior",
             "sfx": "optional_experimental",
             "required_artifacts": [
@@ -4703,7 +4704,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     produce_tts.add_argument(
         "--tone-preset",
         default=None,
-        help="Gemini TTS tone preset, defaulting to natural_storyteller",
+        help="Gemini TTS tone preset; defaults to the plan's audio_rules.tone_preset (host_dry for new plans), else natural_storyteller",
     )
     produce_tts.add_argument(
         "--limit",

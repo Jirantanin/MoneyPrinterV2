@@ -17,7 +17,8 @@ An explicit Claude model routes to Anthropic. Calls without an explicit Claude m
 
 - `gemini_tts_api_key`: Gemini TTS key. It can fall back to `nanobanana2_api_key` or `GEMINI_API_KEY`.
 - `gemini_tts_model`: default `gemini-3.8-flash-tts` (Interactions API; the transcript is spoken verbatim and delivery direction is sent as a `speech_metadata` style annotation). `gemini-3.8-flash-lite-tts` is cheaper but Google does not list Thai for it.
-- `podcast_settings.voices.thai_gemini_voice`: Gemini voice name; default is `Aoede`.
+- `podcast_settings.voices.thai_gemini_voice`: Gemini voice name; default is `en-us-knox` (Extended Library voice chosen in the 2026-10-11 audition; it reads Thai cleanly). Prebuilt names such as `Enceladus` also work.
+- TTS tone preset: new plans record `audio_rules.tone_preset = "host_dry"`, one short constant style for host-led narration. Plans without it fall back to `natural_storyteller`; `produce-tts --tone-preset` overrides both.
 - `pexels_api_key`, `pixabay_api_key`: stock video b-roll. `expand-broll --allow-stock` fills slots with Pexels/Pixabay clips (free APIs). It needs the episode's `broll_keywords.json` (`official_queries`, `official_markers`, `official_blocked`, `stock_default`, `stock_by_section`, `stock_by_asset_id`) whenever `--allow-stock` or `--fresh-official` is used; `--legacy-keyword-tables` reproduces older episodes with the built-in tables.
 - `runware_api_key`: generated-image provider (paid), also supported as `RUNWARE_API_KEY`. Generated section openers (`codex_imagegen` slots in the plan) are fulfilled by `produce-assets --allow-runware`; without the flag they stay pending tasks.
 - `runware_image_*`: model, dimensions, steps, format, and retry settings for Runware b-roll fallback images. `runware_hero_image_width` / `runware_hero_image_height` (default 1920x1088) size the section-opener images. Runware requires dimensions divisible by 64.

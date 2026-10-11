@@ -24,7 +24,7 @@
   "runware_hero_image_model": "bfl:5@1",
   "podcast_settings": {
     "voices": {
-      "thai_gemini_voice": "Aoede"
+      "thai_gemini_voice": "en-us-knox"
     },
     "models": {
       "ollama_model": "",

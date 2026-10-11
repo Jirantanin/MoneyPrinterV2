@@ -62,7 +62,7 @@ def _normalize_bool(value, fallback: bool = False) -> bool:
 def _default_podcast_settings() -> dict:
     return {
         "voices": {
-            "thai_gemini_voice": "Aoede",
+            "thai_gemini_voice": "en-us-knox",
         },
         "models": {
             "ollama_model": "",
@@ -182,7 +182,7 @@ def get_gemini_tts_model() -> str:
 
 def get_tts_gemini_thai_voice() -> str:
     """Gets the Gemini TTS voice name for Thai podcast narration."""
-    return get_podcast_settings().get("voices", {}).get("thai_gemini_voice", "Aoede")
+    return get_podcast_settings().get("voices", {}).get("thai_gemini_voice", "en-us-knox")
 
 def get_ollama_base_url() -> str:
     """

@@ -17,6 +17,9 @@ from runtime_trace import append_api_usage
 DEFAULT_GEMINI_TTS_TONE_PRESET = "natural_storyteller"
 GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 PCM_SAMPLE_RATE = 24000
+# Host-led narration (2026-10-11 audition): one short style for every scene. Long per-scene
+# Director's Notes are the deprecated structure that drove voice drift.
+HOST_DRY_STYLE = "dry humor, wry, storytelling like chatting with an old friend"
 HTTP_SESSION = requests.Session()
 HTTP_SESSION.trust_env = False
 
@@ -32,6 +35,9 @@ def normalize_gemini_tts_tone_preset(value: str | None) -> str:
         "documentary": "classic_documentary",
         "documentary_dread": "classic_documentary",
         "classic_documentary": "classic_documentary",
+        "host": "host_dry",
+        "dry": "host_dry",
+        "host_dry": "host_dry",
     }
     return aliases.get(preset, DEFAULT_GEMINI_TTS_TONE_PRESET)
 
@@ -69,6 +75,8 @@ def _gemini_audio_profile(preset: str) -> str:
 def gemini_speech_style(preset: str, scene_index: int = -1, total_scenes: int = 20) -> str:
     """Delivery direction for the ``speech_metadata`` annotation (never spoken)."""
     preset = normalize_gemini_tts_tone_preset(preset)
+    if preset == "host_dry":
+        return HOST_DRY_STYLE
     return f"{_gemini_audio_profile(preset)} {_gemini_directors_notes(preset, scene_index, total_scenes)}"
 
 
