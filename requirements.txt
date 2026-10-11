@@ -1,24 +1,12 @@
 wheel
 termcolor
-google-api-python-client
-google-auth-oauthlib
-schedule
-kittentts @ https://github.com/KittenML/KittenTTS/releases/download/0.8.1/kittentts-0.8.1-py3-none-any.whl
-soundfile
-prettytable
-webdriver_manager
-selenium_firefox
-selenium
+typesafe-sdk>=0.7.0,<0.8.0
 ollama
-moviepy
 Pillow>=10.0.0
-yagmail
-assemblyai
-faster-whisper
-srt_equalizer
-undetected_chromedriver
-platformdirs
-pytrends
-newsapi-python
-fastapi
-uvicorn[standard]
+requests
+
+# User-directed YouTube upload (scripts/youtube_upload.py)
+google-api-python-client>=2.193
+google-auth>=2.49
+google-auth-httplib2>=0.3
+google-auth-oauthlib>=1.3

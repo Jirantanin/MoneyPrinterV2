@@ -1,122 +1,86 @@
 #!/usr/bin/env python3
+"""Offline preflight for the local Producer Mode workflow."""
+
 import json
 import os
+import shutil
 import sys
-from typing import Tuple
-
-import requests
-
-
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_PATH = os.path.join(ROOT_DIR, "config.json")
+from pathlib import Path
+from typing import Any
 
 
-def ok(msg: str) -> None:
-    print(f"[OK] {msg}")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+CONFIG_PATH = ROOT_DIR / "config.json"
 
 
-def warn(msg: str) -> None:
-    print(f"[WARN] {msg}")
-
-
-def fail(msg: str) -> None:
-    print(f"[FAIL] {msg}")
-
-
-def check_url(url: str, timeout: int = 3) -> Tuple[bool, str]:
-    try:
-        response = requests.get(url, timeout=timeout)
-        return True, f"HTTP {response.status_code}"
-    except Exception as exc:
-        return False, str(exc)
+def configured(value: Any) -> bool:
+    return bool(str(value or "").strip())
 
 
 def main() -> int:
-    if not os.path.exists(CONFIG_PATH):
-        fail(f"Missing config file: {CONFIG_PATH}")
+    if not CONFIG_PATH.is_file():
+        print(f"[FAIL] Missing local config: {CONFIG_PATH}")
+        print("[HINT] Copy config.example.json to config.json and add the keys for your providers.")
         return 1
 
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
+    try:
+        config = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[FAIL] config.json could not be read: {exc}")
+        return 1
 
-    failures = 0
+    settings = config.get("podcast_settings", {})
+    models = settings.get("models", {}) if isinstance(settings, dict) else {}
+    if not isinstance(models, dict):
+        models = {}
 
-    stt_provider = str(cfg.get("stt_provider", "local_whisper")).lower()
-
-    ok(f"stt_provider={stt_provider}")
-
-    imagemagick_path = cfg.get("imagemagick_path", "")
-    if imagemagick_path and os.path.exists(imagemagick_path):
-        ok(f"imagemagick_path exists: {imagemagick_path}")
-    else:
-        warn(
-            "imagemagick_path is not set to a valid executable path. "
-            "MoviePy subtitle rendering may fail."
+    llm_ready = any(
+        (
+            configured(config.get("minimax_api_key")),
+            configured(config.get("anthropic_api_key")) or configured(os.environ.get("ANTHROPIC_API_KEY")),
+            configured(models.get("ollama_model")) or configured(config.get("ollama_model")),
         )
+    )
+    if llm_ready:
+        print("[OK] At least one Producer Mode text model is configured")
+    else:
+        print("[FAIL] Configure MiniMax/OpenRouter, Claude/Anthropic, or a local Ollama model")
 
-    firefox_profile = cfg.get("firefox_profile", "")
-    if firefox_profile:
-        if os.path.isdir(firefox_profile):
-            ok(f"firefox_profile exists: {firefox_profile}")
+    gemini_key = (
+        config.get("gemini_tts_api_key")
+        or config.get("nanobanana2_api_key")
+        or os.environ.get("GEMINI_API_KEY", "")
+    )
+    if configured(gemini_key):
+        print("[OK] Gemini TTS credential is configured")
+    else:
+        print("[FAIL] Configure gemini_tts_api_key or GEMINI_API_KEY for Producer Mode narration")
+
+    required_paths = (
+        ROOT_DIR / "scripts" / "producer_mode.py",
+        ROOT_DIR / "scripts" / "producer_review.py",
+        ROOT_DIR / "src" / "producer_contract.py",
+        ROOT_DIR / "remotion" / "src" / "Root.tsx",
+        ROOT_DIR / "remotion" / "src" / "VideoPodcast.tsx",
+    )
+    missing = [path for path in required_paths if not path.is_file()]
+    if missing:
+        for path in missing:
+            print(f"[FAIL] Missing Producer Mode file: {path.relative_to(ROOT_DIR)}")
+    else:
+        print("[OK] Producer Mode and Remotion entry files are present")
+
+    for executable in ("ffmpeg", "node", "npm"):
+        if shutil.which(executable):
+            print(f"[OK] {executable} is available")
         else:
-            warn(f"firefox_profile does not exist: {firefox_profile}")
-    else:
-        warn("firefox_profile is empty. Only legacy browser automation paths use this.")
+            print(f"[WARN] {executable} is not on PATH; some production or rendering steps may be unavailable")
 
-    # Ollama (LLM)
-    base = str(cfg.get("ollama_base_url", "http://127.0.0.1:11434")).rstrip("/")
-    reachable, detail = check_url(f"{base}/api/tags")
-    if not reachable:
-        fail(f"Ollama is not reachable at {base}: {detail}")
-        failures += 1
-    else:
-        ok(f"Ollama reachable at {base}")
-        try:
-            tags = requests.get(f"{base}/api/tags", timeout=5).json()
-            models = [m.get("name") for m in tags.get("models", [])]
-            if models:
-                ok(f"Ollama models available: {', '.join(models[:10])}")
-            else:
-                warn("No models found on Ollama. Pull a model first (e.g. 'ollama pull llama3.2:3b').")
-        except Exception as exc:
-            warn(f"Could not validate Ollama model list: {exc}")
-
-    # Nano Banana 2 (image generation)
-    api_key = cfg.get("nanobanana2_api_key", "") or os.environ.get("GEMINI_API_KEY", "")
-    nb2_base = str(
-        cfg.get(
-            "nanobanana2_api_base_url",
-            "https://generativelanguage.googleapis.com/v1beta",
-        )
-    ).rstrip("/")
-    if api_key:
-        ok("nanobanana2_api_key is set")
-    else:
-        fail("nanobanana2_api_key is empty (and GEMINI_API_KEY is not set)")
-        failures += 1
-
-    reachable, detail = check_url(nb2_base, timeout=8)
-    if not reachable:
-        warn(f"Nano Banana 2 base URL could not be reached: {detail}")
-    else:
-        ok(f"Nano Banana 2 base URL reachable: {nb2_base}")
-
-    if stt_provider == "local_whisper":
-        try:
-            import faster_whisper  # noqa: F401
-
-            ok("faster-whisper is installed")
-        except Exception as exc:
-            fail(f"faster-whisper is not importable: {exc}")
-            failures += 1
-
-    if failures:
-        print("")
-        print(f"Preflight completed with {failures} blocking issue(s).")
+    if not llm_ready or not configured(gemini_key) or missing:
+        print("[FAIL] Producer Mode preflight found blocking setup issues.")
         return 1
 
-    print("")
-    print("Preflight passed. Local setup looks ready.")
+    print("[OK] Local configuration is ready for Producer Mode. Provider credentials were not tested.")
     return 0
 
 

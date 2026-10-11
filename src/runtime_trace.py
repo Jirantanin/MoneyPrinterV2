@@ -19,8 +19,6 @@ _DEFAULT_RATE_CARD = {
         "cache_write_1h_per_mtok": 6.0,
         "cache_read_per_mtok": 0.30,
     },
-    "gemini_image": {"per_request_usd": 0.039},
-    "kling_image2video": {"per_request_usd": 0.0},
     "pexels_video": {"per_request_usd": 0.0},
     "pixabay_video": {"per_request_usd": 0.0},
     "runware_flux1_image": {"per_request_usd": 0.0038},
