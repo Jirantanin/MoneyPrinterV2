@@ -12,6 +12,13 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
+from producer_visual_policy import (
+    default_visual_source_policy,
+    policy_review_warnings,
+    policy_warnings,
+    visual_policy_report,
+)
+
 
 VISUAL_ASSET_PLAN_VERSION = 1
 QC_CRITERIA = [
@@ -419,7 +426,10 @@ def _beat_plan(
                     provider="codex_imagegen",
                     media_type="image",
                     title=f"{plan_id} opener variant {variant}",
-                    reason="Section opener must use Codex imagegen and contain no embedded text.",
+                    reason=(
+                        "Section opener candidate from Codex imagegen; use only while the "
+                        "combined Runware/Codex generated-image share stays within policy."
+                    ),
                     prompt=_imagegen_prompt(topic, section, beat, variant),
                     score=6 - variant,
                     generated_or_illustrative=True,
@@ -543,6 +553,12 @@ def build_visual_asset_plan(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[
     episode = plan.get("episode") if isinstance(plan.get("episode"), dict) else {}
     research = plan.get("research") if isinstance(plan.get("research"), dict) else {}
     topic = _clean_text(episode.get("topic"), "Untitled topic")
+    visual_rules = plan.get("visual_rules") if isinstance(plan.get("visual_rules"), dict) else {}
+    visual_policy = (
+        visual_rules.get("source_policy")
+        if isinstance(visual_rules.get("source_policy"), dict)
+        else default_visual_source_policy()
+    )
     sections = plan.get("sections") if isinstance(plan.get("sections"), list) else []
     official_media = (
         research.get("official_media_results")
@@ -588,7 +604,18 @@ def build_visual_asset_plan(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[
             )
 
     needs_review = status_counts.get("needs_review", 0)
-    status = "needs_review" if needs_review else "ready"
+    policy_report = visual_policy_report(beat_plans, policy=visual_policy)
+    warnings.extend(policy_warnings(policy_report))
+    warnings.extend(policy_review_warnings(policy_report))
+
+    if policy_report.get("status") == "blocked":
+        status = "blocked"
+    elif policy_report.get("status") == "review":
+        status = "needs_review"
+    elif needs_review:
+        status = "needs_review"
+    else:
+        status = "ready"
     if not beat_plans:
         status = "blocked"
         warnings.append("No visual beats were available for asset planning.")
@@ -599,6 +626,7 @@ def build_visual_asset_plan(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[
         "beat_count": len(beat_plans),
         "provider_counts": provider_counts,
         "qc_status_counts": status_counts,
+        "visual_policy": policy_report,
         "warnings": warnings[:20],
     }
     visual_asset_plan = {
@@ -621,6 +649,7 @@ def build_visual_asset_plan(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[
             f"{needs_review} need review before production."
         ),
         "criteria": QC_CRITERIA,
+        "visual_policy": policy_report,
         "provider_counts": provider_counts,
         "status_counts": status_counts,
         "beat_results": [

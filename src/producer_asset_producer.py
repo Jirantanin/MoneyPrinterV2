@@ -20,6 +20,12 @@ from urllib.parse import urlparse
 
 import requests
 
+from producer_visual_policy import (
+    policy_review_warnings,
+    policy_warnings,
+    visual_policy_report,
+)
+
 
 ASSET_MANIFEST_VERSION = 1
 DEFAULT_MAX_DOWNLOAD_MB = 80
@@ -32,7 +38,7 @@ HTTP_SESSION.trust_env = False
 def _http_get(url: str, **kwargs: Any) -> requests.Response:
     return HTTP_SESSION.get(url, **kwargs)
 
-OFFICIAL_PROVIDERS = {"nasa_images", "nasa_svs", "jpl_photojournal"}
+OFFICIAL_PROVIDERS = {"nasa_images", "nasa_svs", "jpl_photojournal", "official_media"}
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "tif", "tiff"}
 VIDEO_EXTENSIONS = {"mp4", "webm", "mov", "m4v"}
 RESULT_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
@@ -165,7 +171,7 @@ def _manifest_entry_base(
     scene_index: int,
     output_path: Path,
 ) -> dict[str, Any]:
-    return {
+    entry = {
         "asset_plan_id": beat_plan.get("asset_plan_id"),
         "scene_index": scene_index,
         "scene_title": scene.get("scene_title", ""),
@@ -180,9 +186,18 @@ def _manifest_entry_base(
         "prompt": beat_plan.get("selected_prompt"),
         "keyword": beat_plan.get("selected_keyword"),
         "selected_reason": beat_plan.get("selected_reason"),
-        "generated_or_illustrative": bool(beat_plan.get("selected_provider") in {"codex_imagegen", "runware_flux1"}),
+        "generated_or_illustrative": bool(
+            beat_plan.get("selected_generated_or_illustrative")
+            or beat_plan.get("selected_provider") in {"codex_imagegen", "runware_flux1"}
+        ),
         "accessed_date": _utc_now()[:10],
     }
+    # Curated on-screen wording/framing decided at planning time travels with the asset.
+    for plan_key, entry_key in (("selected_visual_qualification", "visual_qualification"),
+                                ("selected_presentation_fit", "presentation_fit")):
+        if beat_plan.get(plan_key):
+            entry[entry_key] = beat_plan[plan_key]
+    return entry
 
 
 def _stock_context(scene: dict[str, Any], beat_plan: dict[str, Any]) -> str:
@@ -206,6 +221,7 @@ def _try_stock_download(
     output_path: Path,
     duration: float,
     allow_stock: bool,
+    selection: dict | None = None,
 ) -> tuple[str, str, int]:
     if not allow_stock:
         return "task_pending", "stock providers require --allow-stock", 0
@@ -217,7 +233,8 @@ def _try_stock_download(
             return "task_pending", "pexels_api_key is not configured", 0
         from pexels_provider import search_pexels_video
 
-        result = search_pexels_video(context, api_key, str(output_path), duration, keyword=keyword)
+        result = search_pexels_video(context, api_key, str(output_path), duration, keyword=keyword,
+                                     selection=selection)
     else:
         api_key = _config_value("pixabay_api_key")
         if not api_key:
@@ -235,12 +252,18 @@ def _try_runware(
     beat_plan: dict[str, Any],
     output_path: Path,
     allow_runware: bool,
+    hero: bool = False,
 ) -> tuple[str, str, int]:
     if not allow_runware:
         return "task_pending", "runware fallback requires --allow-runware", 0
+    from config import get_runware_image_settings
     from runware_provider import generate_flux1_image
 
-    result = generate_flux1_image(str(beat_plan.get("selected_prompt") or ""), str(output_path))
+    size = {}
+    if hero:
+        settings = get_runware_image_settings()
+        size = {"width": settings["hero_width"], "height": settings["hero_height"], "model": settings["hero_model"]}
+    result = generate_flux1_image(str(beat_plan.get("selected_prompt") or ""), str(output_path), **size)
     if result and Path(result).exists():
         return "generated", result, Path(result).stat().st_size
     return "failed", "Runware FLUX.1 did not return a usable image", 0
@@ -263,10 +286,24 @@ def _asset_qc(entries: list[dict[str, Any]], warnings: list[str]) -> dict[str, A
             failed += 1
         if status in {"downloaded", "generated"} and not Path(str(entry.get("local_path") or "")).exists():
             missing_local += 1
+    policy_report = visual_policy_report(entries)
+    all_warnings = list(
+        dict.fromkeys(
+            [
+                *warnings,
+                *policy_warnings(policy_report),
+                *policy_review_warnings(policy_report),
+            ]
+        )
+    )
     if failed or missing_local:
+        status = "blocked"
+    elif policy_report.get("status") == "blocked":
         status = "blocked"
     elif task_pending:
         status = "needs_tasks"
+    elif policy_report.get("status") == "review":
+        status = "review"
     else:
         status = "pass"
     return {
@@ -276,11 +313,13 @@ def _asset_qc(entries: list[dict[str, Any]], warnings: list[str]) -> dict[str, A
         "status": status,
         "summary": (
             f"Checked {len(entries)} asset manifest entries; "
-            f"{task_pending} pending tasks, {failed} failed, {missing_local} missing local files."
+            f"{task_pending} pending tasks, {failed} failed, {missing_local} missing local files. "
+            f"{policy_report.get('summary')}"
         ),
+        "visual_policy": policy_report,
         "provider_counts": provider_counts,
         "status_counts": status_counts,
-        "warnings": warnings,
+        "warnings": all_warnings,
         "entries": [
             {
                 "asset_plan_id": entry.get("asset_plan_id"),
@@ -416,6 +455,15 @@ def apply_asset_results(
     elif any(entry.get("status") == "planned" for entry in updated_entries):
         status = "planned"
 
+    if missing:
+        warnings.append(f"{missing} asset task result files were still missing")
+    policy_report = visual_policy_report(updated_entries)
+    warnings.extend(policy_warnings(policy_report))
+    warnings.extend(policy_review_warnings(policy_report))
+    if policy_report.get("status") == "blocked":
+        status = "blocked"
+    elif policy_report.get("status") == "review" and status == "complete":
+        status = "review"
     manifest = dict(asset_manifest)
     manifest["status"] = status
     manifest["updated_at"] = _utc_now()
@@ -427,9 +475,8 @@ def apply_asset_results(
         "missing_count": missing,
         "force": force,
     }
-    if missing:
-        warnings.append(f"{missing} asset task result files were still missing")
     manifest["warnings"] = warnings
+    manifest["visual_policy"] = policy_report
     return {
         "asset_manifest": manifest,
         "asset_qc": _asset_qc(updated_entries, warnings),
@@ -475,9 +522,24 @@ def produce_assets(
             output_path=output_path,
         )
 
-        if provider == "codex_imagegen":
+        if provider == "codex_imagegen" and allow_runware and not dry_run:
+            # Generated hero/section-opener image, fulfilled by Runware instead of an in-session image tool.
+            status, detail, size = _try_runware(
+                beat_plan=beat_plan,
+                output_path=output_path.with_suffix(".png"),
+                allow_runware=True,
+                hero=True,
+            )
+            entry.update({"status": status, "bytes": size, "fulfilled_by": "runware"})
+            if status == "generated":
+                entry["local_path"] = detail
+            else:
+                entry["issue"] = detail
+                warnings.append(f"{asset_id}: Runware hero image failed: {detail}")
+        elif provider == "codex_imagegen":
             entry["status"] = "task_pending"
-            entry["issue"] = "Codex imagegen must be run in-session for this section opener."
+            entry["issue"] = ("Generated section opener: rerun produce-assets with --allow-runware "
+                              "or place a reviewed image at the task output_path.")
             imagegen_tasks.append(
                 {
                     "asset_plan_id": asset_id,
@@ -546,6 +608,7 @@ def produce_assets(
                 entry["status"] = "planned"
                 entry["issue"] = "dry run; stock download skipped"
             else:
+                selection: dict[str, Any] = {}
                 status, detail, size = _try_stock_download(
                     provider=provider,
                     scene=scene,
@@ -553,11 +616,15 @@ def produce_assets(
                     output_path=output_path.with_suffix(".mp4"),
                     duration=float(beat_plan.get("duration_seconds") or 7),
                     allow_stock=allow_stock,
+                    selection=selection,
                 )
                 entry["status"] = status
                 entry["bytes"] = size
                 if status == "downloaded":
                     entry["local_path"] = detail
+                    if selection.get("source_url"):
+                        entry.update(source_url=selection["source_url"], download_url=selection["download_url"],
+                                     credit=selection["credit"], license_note="Pexels License")
                 else:
                     entry["issue"] = detail
                     if status == "failed":
@@ -593,6 +660,13 @@ def produce_assets(
         manifest_status = "needs_tasks"
     elif any(entry.get("status") == "planned" for entry in entries):
         manifest_status = "planned"
+    policy_report = visual_policy_report(entries)
+    warnings.extend(policy_warnings(policy_report))
+    warnings.extend(policy_review_warnings(policy_report))
+    if policy_report.get("status") == "blocked":
+        manifest_status = "blocked"
+    elif policy_report.get("status") == "review" and manifest_status == "complete":
+        manifest_status = "review"
 
     manifest = {
         "schema_version": ASSET_MANIFEST_VERSION,
@@ -604,6 +678,7 @@ def produce_assets(
         "entries": entries,
         "imagegen_tasks": imagegen_tasks,
         "remotion_graphic_tasks": remotion_tasks,
+        "visual_policy": policy_report,
         "warnings": warnings,
     }
     asset_qc = _asset_qc(entries, warnings)

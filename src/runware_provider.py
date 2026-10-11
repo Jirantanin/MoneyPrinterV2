@@ -119,7 +119,15 @@ def _record_usage(result: dict, settings: dict) -> None:
     )
 
 
-def generate_flux1_image(prompt: str, output_path: str, api_key: str | None = None) -> str | None:
+def generate_flux1_image(
+    prompt: str,
+    output_path: str,
+    api_key: str | None = None,
+    *,
+    width: int | None = None,
+    height: int | None = None,
+    model: str | None = None,
+) -> str | None:
     """
     Generate one budget-conscious FLUX.1 image via Runware and write it locally.
 
@@ -143,6 +151,10 @@ def generate_flux1_image(prompt: str, output_path: str, api_key: str | None = No
     _last_runware_image_time = time.time()
 
     settings = get_runware_image_settings()
+    if width and height:
+        settings = {**settings, "width": int(width), "height": int(height)}
+    if model:
+        settings = {**settings, "model": str(model)}
     endpoint = settings["api_base_url"].rstrip("/")
     task = {
         "taskType": "imageInference",
@@ -153,13 +165,14 @@ def generate_flux1_image(prompt: str, output_path: str, api_key: str | None = No
         "outputFormat": settings["output_format"],
         "numberResults": 1,
         "positivePrompt": prompt[:3000],
-        "negativePrompt": RUNWARE_NEGATIVE_PROMPT,
         "model": settings["model"],
         "width": settings["width"],
         "height": settings["height"],
-        "steps": settings["steps"],
-        "CFGScale": settings["cfg_scale"],
     }
+    # Provider-hosted models (bfl:*, e.g. FLUX.2 [pro] bfl:5@1) reject sampler controls and negative prompts.
+    if not str(settings["model"]).startswith("bfl:"):
+        task.update({"negativePrompt": RUNWARE_NEGATIVE_PROMPT, "steps": settings["steps"],
+                     "CFGScale": settings["cfg_scale"]})
     if settings["output_format"] in {"JPG", "WEBP"}:
         task["outputQuality"] = settings["output_quality"]
 
@@ -171,18 +184,22 @@ def generate_flux1_image(prompt: str, output_path: str, api_key: str | None = No
     try:
         if get_verbose():
             info(
-                "Generating fallback image with Runware FLUX.1 "
-                f"({settings['width']}x{settings['height']}, {settings['steps']} steps)"
+                f"Generating image with Runware {settings['model']} "
+                f"({settings['width']}x{settings['height']})"
             )
         response = _http_post(endpoint, headers=headers, json=[task], timeout=RUNWARE_REQUEST_TIMEOUT)
-        response.raise_for_status()
-        body = response.json()
+        try:
+            body = response.json()
+        except ValueError:
+            response.raise_for_status()
+            raise
 
         errors = body.get("errors") or []
         if errors:
             message = errors[0].get("message") if isinstance(errors[0], dict) else str(errors[0])
-            warning(f"Runware image generation returned an error: {message}")
+            warning(f"Runware image generation returned an error ({settings['model']}): {message}")
             return None
+        response.raise_for_status()
 
         results = body.get("data") or []
         if not results:

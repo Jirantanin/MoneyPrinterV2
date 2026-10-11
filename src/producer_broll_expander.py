@@ -7,8 +7,10 @@ reframed stills from the existing verified/generated source assets.
 
 from __future__ import annotations
 
+import json
 import math
 import re
+import subprocess
 import tempfile
 import wave
 from datetime import datetime, timezone
@@ -19,11 +21,19 @@ from urllib.parse import quote_plus, urlparse
 import requests
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
+from producer_visual_policy import (
+    can_add_visual_entry,
+    policy_review_warnings,
+    policy_warnings,
+    visual_policy_report,
+)
+
 
 BROLL_TIMELINE_VERSION = 1
 TARGET_WIDTH = 1920
 TARGET_HEIGHT = 1080
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".m4v"}
 LOCAL_REFRAME_PROVIDER = "local_reframe"
 LOCAL_GRAPHIC_PROVIDER = "local_graphic_broll"
 RUNWARE_BROLL_PROVIDER = "runware_flux1"
@@ -33,6 +43,8 @@ GENERATED_IMAGE_ROLE = "generated_image_broll"
 FRESH_OFFICIAL_MAX_BYTES = 25 * 1024 * 1024
 MAX_FRESH_OFFICIAL_PER_SCENE = 2
 MAX_FRESH_OFFICIAL_PER_SECTION = 5
+VOYAGER_MAX_FRESH_OFFICIAL_PER_SCENE = 8
+VOYAGER_MAX_FRESH_OFFICIAL_PER_SECTION = 16
 DOWNLOAD_TIMEOUT = (10, 60)
 HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0",
@@ -83,10 +95,120 @@ OFFICIAL_BLOCKED_MARKERS = {
     "exoplanet",
 }
 
+VOYAGER_OFFICIAL_RELEVANCE_MARKERS = {
+    "voyager",
+    "golden record",
+    "pale blue dot",
+    "interstellar mission",
+    "titan-centaur",
+    "titan centaur",
+    "carl sagan",
+    "ann druyan",
+}
+VOYAGER_OFFICIAL_BLOCKED_MARKERS = {
+    "budget request",
+    "this week @nasa",
+    "festival",
+    "commemorative",
+    "artemis",
+    "apollo program",
+    "mars perseverance",
+    "mars curiosity",
+    "international space station",
+    "space station",
+    "psyche mission",
+}
+VOYAGER_OFFICIAL_QUERIES = (
+    "Voyager 1 interstellar space",
+    "Voyager 1 spacecraft",
+    "Voyager 2 spacecraft",
+    "Voyager mission control",
+    "Voyager Deep Space Network",
+    "Voyager Golden Record",
+    "Voyager launch 1977 Titan Centaur",
+    "Voyager Jupiter encounter",
+    "Voyager Saturn encounter",
+    "Voyager Uranus encounter",
+    "Voyager Neptune encounter",
+    "Voyager Golden Record preparation",
+    "Voyager Golden Record cover",
+    "Voyager Pale Blue Dot",
+    "Voyager trajectory",
+    "Voyager Carter message",
+)
+VOYAGER_OFFICIAL_QUERY_HINTS_BY_ASSET_ID = {
+    "VGR-01": ("interstellar", "mission control", "deep space network", "golden record"),
+    "VGR-02": ("golden record", "spacecraft", "interstellar"),
+    "VGR-03": ("launch 1977", "jupiter encounter", "saturn encounter", "uranus encounter", "neptune encounter"),
+    "VGR-04": ("golden record preparation", "golden record"),
+    "VGR-05": ("golden record",),
+    "VGR-06": ("golden record", "pale blue dot"),
+    "VGR-07": ("golden record preparation", "golden record cover", "golden record"),
+    "VGR-08": ("golden record cover", "golden record"),
+    "VGR-09": ("golden record cover", "golden record"),
+    "VGR-10": ("trajectory", "interstellar", "spacecraft"),
+    "VGR-11": ("carter message", "golden record"),
+    "VGR-12": ("interstellar", "mission control", "deep space network", "pale blue dot", "spacecraft"),
+}
+DENISOVAN_OFFICIAL_RELEVANCE_MARKERS = {
+    "denisovan",
+    "denisova cave",
+    "penghu",
+    "baishiya",
+    "xiahe",
+    "archaic hominin",
+    "ancient protein",
+    "paleoproteomic",
+    "paleoprotein",
+}
+DENISOVAN_OFFICIAL_BLOCKED_MARKERS = {
+    "mars",
+    "moon",
+    "lunar",
+    "apollo",
+    "artemis",
+    "international space station",
+    "space station",
+}
+DENISOVAN_OFFICIAL_QUERIES = (
+    "Denisova Cave archaeological excavation",
+    "Denisovan ancient protein research",
+    "Penghu Taiwan archaeology fossil",
+    "Baishiya Karst Cave archaeology",
+    "Tibetan Plateau archaeological cave",
+)
+VOYAGER_STOCK_KEYWORDS_BY_ASSET_ID = {
+    "VGR-01": ["deep space star field", "space mission control", "radio telescope control room", "deep space antenna", "satellite signal screen", "space probe silhouette", "gold record disc", "earth horizon space", "vintage rocket launch"],
+    "VGR-02": ["small satellite stars", "record player close up", "radio telescope night", "deep space stars", "space antenna", "space probe animation", "vinyl record macro", "earth from space", "night sky telescope"],
+    "VGR-03": ["rocket launch night", "spacecraft engineering", "solar system planets", "jupiter planet", "saturn planet", "uranus planet", "neptune planet", "space mission control", "rocket preparation", "space probe animation"],
+    "VGR-04": ["vinyl record archive", "1970s typewriter", "research team archive", "team selecting photos", "photo contact sheet", "old documents table", "record pressing", "world map table", "people discussion table", "archive filing cabinet"],
+    "VGR-05": ["ocean waves", "wind through trees", "thunderstorm clouds", "birds flying", "whale underwater", "heartbeat monitor", "train moving landscape", "diverse children", "people greeting camera", "world culture people"],
+    "VGR-06": ["diverse people portraits", "earth from space", "family together", "people working", "world map close up", "people looking at stars", "crowd city", "ocean earth", "mountain landscape", "team selecting photos"],
+    "VGR-07": ["vinyl record macro", "record player stylus", "metal workshop hands", "copper sheet metal", "record pressing", "engraving metal hands", "audio record grooves", "laboratory metal work", "aluminum sheet", "gold vinyl record"],
+    "VGR-08": ["record player stylus", "vinyl record groove", "hydrogen atom animation", "audio waveform screen", "calibration circle", "binary code close up", "scientific diagram hand", "record needle macro"],
+    "VGR-09": ["radio telescope stars", "observatory night sky", "pulsar astronomy", "star map astronomy", "radio telescope night", "deep space star field", "atomic clock laboratory", "scientist astronomy screen", "solar system stars"],
+    "VGR-10": ["deep space stars", "star field timelapse", "radio telescope night", "tiny satellite space", "ocean bottle message", "calendar pages time", "earth horizon space", "night sky long exposure", "space probe animation"],
+    "VGR-11": ["1970s typewriter letter", "paper document close up", "earth horizon space", "hands writing letter", "vintage office desk", "peaceful crowd 1970s", "planet earth space", "old paper archive"],
+    "VGR-12": ["earth from deep space", "stars deep space", "people looking at night sky", "ocean waves sunrise", "weather clouds timelapse", "diverse people portraits", "children playing earth", "radio telescope night", "space mission control", "blue planet darkness", "city people life", "night sky stars"],
+}
+VOYAGER_RUNWARE_PROMPTS_BY_ASSET_ID = {
+    "VGR-01": "A faint radio signal dissolving into deep interstellar darkness, symbolic documentary illustration, no identifiable spacecraft, no real people.",
+    "VGR-02": "A tiny anonymous human-made probe silhouette crossing a vast dark star field, symbolic scale image, no alien beings, no readable markings.",
+    "VGR-03": "A restrained solar-system journey illustration with distant giant planets and a small unlabeled probe path, no mission logos, not presented as archival footage.",
+    "VGR-04": "An archival-style tabletop with an unlabeled blank vinyl record, photographic contact sheets, and selection notes with no readable text, no identifiable historical people.",
+    "VGR-05": "A poetic but realistic natural-sound tableau of ocean surf, a whale beneath water, wind through leaves, and distant rail motion, no text, no fantasy creatures.",
+    "VGR-06": "Anonymous diverse human silhouettes reflected in a view of Earth, symbolic representation and self-portrait theme, no identifiable real people.",
+    "VGR-07": "Extreme macro photograph of a gold-plated copper disc and record grooves under restrained laboratory light, no label, no readable engraving.",
+    "VGR-08": "Macro view of abstract etched playback symbols and a record groove, clearly illustrative, no readable language, no invented NASA markings.",
+    "VGR-09": "A clean scientific illustration of radial pulsar beams around a central point in deep space, no labels, no decorative clutter.",
+    "VGR-10": "A solitary sealed bottle-like object drifting through an immense dark cosmic ocean, visual metaphor only, no aliens, no destination planet.",
+    "VGR-11": "An unsigned paper letter beside the blue glow of Earth seen from darkness, no readable text, no portrait of any president.",
+    "VGR-12": "A single tiny blue point suspended in immense black space, symbolic closing image, restrained and contemplative, no added spacecraft or text.",
+}
+
 NO_FIRE_MARKERS = (
     "homo raw",
     "wonderwerk",
-    "\u0e44\u0e1f",
     "\u0e01\u0e2d\u0e07\u0e44\u0e1f",
     "\u0e21\u0e32\u0e21\u0e48\u0e32",
     "\u0e2b\u0e21\u0e39\u0e01\u0e23\u0e30\u0e17\u0e30",
@@ -148,6 +270,93 @@ NO_FIRE_THEMES_BY_ASSET_ID = {
     "S06B03": "future",
 }
 
+VOLCANO_MARKERS = (
+    "volcano",
+    "volcanic",
+    "mayon",
+    "villarrica",
+    "sakurajima",
+    "rainier",
+    "popocatepetl",
+    "mount fuji",
+    "merapi",
+    "\u0e20\u0e39\u0e40\u0e02\u0e32\u0e44\u0e1f",
+    "\u0e40\u0e21\u0e22\u0e2d\u0e19",
+    "\u0e27\u0e34\u0e25\u0e25\u0e32\u0e23\u0e4c\u0e23\u0e34\u0e01\u0e32",
+    "\u0e0b\u0e32\u0e01\u0e38\u0e23\u0e30\u0e08\u0e34\u0e21\u0e30",
+    "\u0e40\u0e23\u0e19\u0e40\u0e19\u0e35\u0e22\u0e23\u0e4c",
+    "\u0e42\u0e1b\u0e42\u0e1b\u0e01\u0e32\u0e40\u0e15\u0e40\u0e1b\u0e15\u0e25\u0e4c",
+    "\u0e1f\u0e39\u0e08\u0e34",
+    "\u0e40\u0e21\u0e23\u0e32\u0e1b\u0e35",
+)
+
+VOLCANO_STOCK_KEYWORDS_BY_ASSET_ID = {
+    "S01B01": ["Mayon volcano Philippines", "Philippines volcano evacuation", "volcano monitoring Philippines"],
+    "S02B01": ["Villarrica volcano Chile", "Pucon Chile volcano", "snow volcano Chile"],
+    "S03B01": ["Sakurajima volcano Japan", "Kagoshima volcano ash", "Japan volcano eruption"],
+    "S04B01": ["Mount Rainier Washington", "volcano evacuation drill", "mudflow river valley"],
+    "S05B01": ["Popocatepetl volcano Mexico", "volcanic ash Mexico", "Mexico City airport runway"],
+    "S06B01": ["Mount Fuji Japan", "Tokyo train station", "volcanic ash city"],
+    "S07B01": ["Merapi volcano Indonesia", "volcano evacuation Indonesia", "pyroclastic flow volcano"],
+    "S07B02": ["volcano observatory monitoring", "volcano evacuation drill", "seismograph monitoring"],
+}
+
+VOLCANO_RUNWARE_PROMPTS_BY_ASSET_ID = {
+    "S01B01": "Mayon Volcano in the Philippines above nearby communities, steep symmetrical cone with an active ash plume, real-world documentary reconstruction, no exaggerated disaster.",
+    "S02B01": "Villarrica Volcano in Chile above Pucon, snow and glacier on the cone with a restrained lava glow at the crater, realistic geography, documentary reconstruction.",
+    "S03B01": "Sakurajima Volcano across the bay from Kagoshima, Japan, a modest ash plume near a lived-in city, grounded news-documentary reconstruction.",
+    "S04B01": "Mount Rainier in Washington with glacier-covered slopes and populated river valleys below, emphasizing realistic lahar exposure, documentary reconstruction.",
+    "S05B01": "Popocatepetl Volcano in Mexico with a gray ash plume and dense settlements in the wider region, grounded scale, documentary reconstruction.",
+    "S06B01": "Mount Fuji above the Tokyo region as a calm hazard-planning scene, subtle volcanic ash affecting transport infrastructure, not an imminent apocalypse, documentary reconstruction.",
+    "S07B01": "Mount Merapi in Indonesia with a collapsing lava dome and a ground-hugging pyroclastic flow kept distant from a village, realistic volcanology, documentary reconstruction.",
+    "S07B02": "A modern volcano observatory combining seismic monitoring, hazard maps, and an organized evacuation drill, realistic public-safety documentary scene.",
+}
+
+HIROSHIMA_STOCK_KEYWORDS_BY_SECTION = {
+    "S01": [
+        "scientist microscope laboratory", "materials science laboratory", "research paper close up",
+        "microscope metal sample", "x ray laboratory equipment", "scientist analyzing sample",
+        "laboratory glass slide macro", "metal particle macro", "forensic science laboratory",
+        "researcher writing notes laboratory",
+    ],
+    "S02": [
+        "beach sand macro", "coastal sand grains", "mineral microscope laboratory",
+        "scientist sorting mineral samples", "mass spectrometer laboratory", "laboratory sample tray",
+        "glass fragments macro", "coastal field research", "isotope laboratory equipment",
+        "sand sample microscope",
+    ],
+    "S03": [
+        "molten metal foundry", "metal casting sparks", "industrial smoke particles",
+        "hot metal cooling", "foundry furnace close up", "metal droplets slow motion",
+        "industrial vapor steam", "molten glass workshop", "scanning electron microscope",
+        "laboratory thermal experiment",
+    ],
+    "S04": [
+        "electron microscope laboratory", "scientist analyzing microscope image", "x ray crystallography laboratory",
+        "microprobe laboratory", "metal sample tweezers", "laboratory monitor microscopy",
+        "scientist measuring tiny sample", "materials characterization laboratory", "crystal sample microscope",
+        "laboratory instrument close up",
+    ],
+    "S05": [
+        "crystal materials laboratory", "metal tensile testing", "scientist reviewing research paper",
+        "microscopic crystal close up", "materials scientist laboratory", "metal alloy sample macro",
+        "laboratory data analysis", "scientist peer review desk", "crystal growth laboratory",
+        "precision metal testing",
+    ],
+    "S06": [
+        "desert storm clouds", "lightning over landscape", "molten glass cooling",
+        "desert sand glass", "archive conservation gloves", "historical artifact archive",
+        "memorial flowers", "museum object conservation", "storm lightning slow motion",
+        "glass sample laboratory",
+    ],
+    "S07": [
+        "forensic microscope laboratory", "evidence sample laboratory", "scientist examining particles",
+        "3d printer machine", "metal additive manufacturing", "museum archive conservation",
+        "laboratory sample catalog", "peace memorial flowers", "scientist documenting evidence",
+        "microscope slide forensic",
+    ],
+}
+
 RUNWARE_CAMERA_VARIANTS = (
     "wide establishing frame",
     "medium observational frame",
@@ -177,7 +386,7 @@ def _scene_asset_id(scene: dict[str, Any] | None, source: dict[str, Any] | None 
             continue
         for key in ("producer_asset_plan_id", "asset_plan_id"):
             value = str(container.get(key) or "").strip().upper()
-            match = re.match(r"^(S\d+B\d+)", value)
+            match = re.match(r"^((?:S\d+B\d+)|(?:VGR-\d+))", value)
             if match:
                 return match.group(1)
     return ""
@@ -196,6 +405,11 @@ def _scene_context_text(scene: dict[str, Any] | None, source: dict[str, Any] | N
 def _is_no_fire_scene(scene: dict[str, Any] | None, source: dict[str, Any] | None = None) -> bool:
     text = _scene_context_text(scene, source)
     return any(marker in text for marker in NO_FIRE_MARKERS)
+
+
+def _is_volcano_scene(scene: dict[str, Any] | None, source: dict[str, Any] | None = None) -> bool:
+    text = _scene_context_text(scene, source)
+    return any(marker in text for marker in VOLCANO_MARKERS)
 
 
 def _no_fire_theme(scene: dict[str, Any] | None, source: dict[str, Any] | None = None) -> str:
@@ -222,12 +436,28 @@ def _runware_broll_prompt(
     slot_index: int,
 ) -> str:
     asset_id = _scene_asset_id(scene, source)
-    base = NO_FIRE_RUNWARE_PROMPTS_BY_ASSET_ID.get(asset_id, "")
+    base = ""
+    if asset_id.startswith("VGR-"):
+        base = VOYAGER_RUNWARE_PROMPTS_BY_ASSET_ID.get(asset_id, "")
+    if _is_volcano_scene(scene, source):
+        base = VOLCANO_RUNWARE_PROMPTS_BY_ASSET_ID.get(asset_id, "")
+    # The asset-plan IDs are reused across episodes (S01B01, S02B01, ...).
+    # Only use the legacy no-fire prompt table when this scene actually belongs
+    # to that topic; otherwise an unrelated episode can leak into Runware b-roll.
+    if not base and _is_no_fire_scene(scene, source):
+        base = NO_FIRE_RUNWARE_PROMPTS_BY_ASSET_ID.get(asset_id, "")
     if not base:
         scene_title = _clean_text(scene.get("scene_title") or source.get("scene_title"))
+        scene_prompt = _clean_text(
+            scene.get("image_prompt")
+            or scene.get("prompt")
+            or source.get("selected_prompt")
+            or source.get("prompt")
+        )
         narration = _clean_text(scene.get("narration"))[:360]
         base = (
             f"Documentary b-roll still for scene {scene_index + 1}: {scene_title}. "
+            f"Visual direction: {scene_prompt}. "
             f"Visualize the narration faithfully without embedded text: {narration}"
         )
     camera = RUNWARE_CAMERA_VARIANTS[slot_index % len(RUNWARE_CAMERA_VARIANTS)]
@@ -343,7 +573,7 @@ def _is_source_entry(entry: dict[str, Any]) -> bool:
     if asset_index != 0:
         return False
     path = Path(str(entry.get("local_path") or ""))
-    return path.suffix.lower() in IMAGE_EXTENSIONS and path.exists() and path.stat().st_size > 1024
+    return path.suffix.lower() in (IMAGE_EXTENSIONS | VIDEO_EXTENSIONS) and path.exists() and path.stat().st_size > 1024
 
 
 def _base_sources(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -385,10 +615,23 @@ def _select_source(
 
 
 def _source_visual_key(entry: dict[str, Any]) -> str:
+    provider = str(entry.get("provider") or "").strip().lower()
+    # Generated scene anchors can legitimately cite the same research URL.
+    # Their identity is the approved beat, not that shared evidence page;
+    # otherwise the repeat guard replaces every later graphic/imagegen anchor
+    # with a generic fallback even though the rendered files are different.
+    if provider in {"codex_imagegen", "remotion_graphic", "runware_flux1"}:
+        asset_plan_id = str(entry.get("asset_plan_id") or "").strip().lower()
+        if asset_plan_id:
+            return f"{provider}:{asset_plan_id}"
     title_key = _normalized_visual_title(entry.get("title"))
     if title_key:
         return title_key
-    for key in ("source_url", "download_url", "preview_url", "prompt", "local_path", "asset_plan_id"):
+    # A locally rendered explanatory graphic often has no external source URL
+    # and shares a generic prompt with neighbouring graphics.  Its beat ID is
+    # therefore a safer identity than that generic prompt; otherwise distinct
+    # graphics are incorrectly treated as one repeated visual.
+    for key in ("source_url", "download_url", "preview_url", "asset_plan_id", "prompt", "local_path"):
         value = str(entry.get(key) or "").strip().lower()
         if value:
             return value
@@ -646,8 +889,35 @@ def _vignette(image: Image.Image, strength: float) -> Image.Image:
 
 
 def _render_reframe(source_path: Path, output_path: Path, *, scene_index: int, slot_index: int) -> int:
-    with Image.open(source_path) as src:
-        image = src.convert("RGB")
+    frame_path: Path | None = None
+    image_source = source_path
+    if source_path.suffix.lower() in VIDEO_EXTENSIONS:
+        frame_path = output_path.with_name(f".{output_path.stem}_source_frame.jpg")
+        frame_path.parent.mkdir(parents=True, exist_ok=True)
+        extracted = False
+        for seek_seconds in (max(0.5, slot_index * 1.7), 0.5, 0.0):
+            frame_path.unlink(missing_ok=True)
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                    "-ss", str(seek_seconds), "-i", str(source_path),
+                    "-frames:v", "1", str(frame_path),
+                ],
+                capture_output=True,
+                timeout=45,
+            )
+            if result.returncode == 0 and frame_path.exists() and frame_path.stat().st_size > 1024:
+                extracted = True
+                break
+        if not extracted:
+            raise RuntimeError(f"failed to extract b-roll frame from {source_path}")
+        image_source = frame_path
+    try:
+        with Image.open(image_source) as src:
+            image = src.convert("RGB")
+    finally:
+        if frame_path is not None:
+            frame_path.unlink(missing_ok=True)
     width, height = image.size
     target_ratio = TARGET_WIDTH / TARGET_HEIGHT
     phase = (scene_index * 17 + slot_index * 31) % 100
@@ -976,17 +1246,68 @@ def _official_relevance_text(result: dict[str, Any]) -> str:
     ).lower()
 
 
-def _is_relevant_official_result(result: dict[str, Any]) -> bool:
+def _is_voyager_official_profile(scenes: list[dict[str, Any]]) -> bool:
+    text = " ".join(_scene_context_text(scene) for scene in scenes)
+    return any(
+        marker in text
+        for marker in (
+            "voyager",
+            "วอยเอเจอร์",
+            "golden record",
+            "โกลเดนเรคคอร์ด",
+        )
+    )
+
+
+def _is_denisovan_profile(scenes: list[dict[str, Any]]) -> bool:
+    """Identify the archaeological-human-evolution cut before applying defaults.
+
+    The original b-roll fallback was deliberately lunar-specific.  Returning a
+    positive profile here prevents unrelated Moon imagery from entering a
+    Denisovan timeline when no stock provider has been configured.
+    """
+    text = " ".join(_scene_context_text(scene) for scene in scenes).lower()
+    return any(
+        marker in text
+        for marker in (
+            "denisovan",
+            "denisova",
+            "penghu",
+            "ไต้หวัน",
+            "ถ้ำเดนิโซวา",
+            "โปรตีนโบราณ",
+        )
+    )
+
+
+def _is_relevant_official_result(
+    result: dict[str, Any],
+    *,
+    relevance_markers: set[str] | None = None,
+    blocked_markers: set[str] | None = None,
+) -> bool:
     text = _official_relevance_text(result)
-    if not any(marker in text for marker in OFFICIAL_RELEVANCE_MARKERS):
+    required = relevance_markers or OFFICIAL_RELEVANCE_MARKERS
+    blocked = blocked_markers or OFFICIAL_BLOCKED_MARKERS
+    if not any(marker in text for marker in required):
         return False
-    if any(marker in text for marker in OFFICIAL_BLOCKED_MARKERS):
+    if any(marker in text for marker in blocked):
         return False
     return True
 
 
 def _build_official_queries(scenes: list[dict[str, Any]]) -> list[str]:
-    queries = [
+    episode_queries = next((s["_episode_official_queries"] for s in scenes if s.get("_episode_official_queries")), None)
+    if episode_queries:
+        queries = list(episode_queries)
+    elif _is_voyager_official_profile(scenes):
+        queries = list(VOYAGER_OFFICIAL_QUERIES)
+    elif _is_denisovan_profile(scenes):
+        # The provider may have no matching archive, but it must never fall
+        # through to the generic lunar query set for this science topic.
+        queries = list(DENISOVAN_OFFICIAL_QUERIES)
+    else:
+        queries = [
         "Moon",
         "lunar surface",
         "Moon craters",
@@ -1001,23 +1322,23 @@ def _build_official_queries(scenes: list[dict[str, Any]]) -> list[str]:
         "Earth Moon tides NASA visualization",
         "Moon orbit Earth NASA visualization",
         "Earth from Moon NASA",
-    ]
-    for scene in scenes:
-        section_title = _clean_text(scene.get("section_title"))
-        scene_title = _clean_text(scene.get("scene_title"))
-        narration = _clean_text(scene.get("narration"))[:260]
-        if section_title:
-            queries.append(f"{section_title} NASA Moon")
-        haystack = f"{section_title} {scene_title} {narration}".lower()
-        if any(token in haystack for token in ("laser", "retroreflector", "apollo", "วัดระยะ")):
-            queries.append("Apollo lunar laser ranging retroreflector NASA")
-        if any(token in haystack for token in ("tidal", "tide", "น้ำขึ้น", "แรงดึง")):
-            queries.append("Earth Moon tides NASA")
-            queries.append("tidal bulge Moon Earth NASA visualization")
-        if any(token in haystack for token in ("geolog", "ธรณี", "past", "อดีต")):
-            queries.append("Moon geology lunar samples NASA")
-        if any(token in haystack for token in ("reconnaissance", "lro", "evidence", "ข้อมูล")):
-            queries.append("Lunar Reconnaissance Orbiter Moon surface NASA")
+        ]
+        for scene in scenes:
+            section_title = _clean_text(scene.get("section_title"))
+            scene_title = _clean_text(scene.get("scene_title"))
+            narration = _clean_text(scene.get("narration"))[:260]
+            if section_title:
+                queries.append(f"{section_title} NASA Moon")
+            haystack = f"{section_title} {scene_title} {narration}".lower()
+            if any(token in haystack for token in ("laser", "retroreflector", "apollo", "วัดระยะ")):
+                queries.append("Apollo lunar laser ranging retroreflector NASA")
+            if any(token in haystack for token in ("tidal", "tide", "น้ำขึ้น", "แรงดึง")):
+                queries.append("Earth Moon tides NASA")
+                queries.append("tidal bulge Moon Earth NASA visualization")
+            if any(token in haystack for token in ("geolog", "ธรณี", "past", "อดีต")):
+                queries.append("Moon geology lunar samples NASA")
+            if any(token in haystack for token in ("reconnaissance", "lro", "evidence", "ข้อมูล")):
+                queries.append("Lunar Reconnaissance Orbiter Moon surface NASA")
 
     deduped: list[str] = []
     seen: set[str] = set()
@@ -1046,6 +1367,26 @@ def _fresh_official_candidates(
     except Exception as exc:  # noqa: BLE001
         return [], [f"official media provider unavailable: {exc}"]
 
+    voyager_profile = _is_voyager_official_profile(scenes)
+    denisovan_profile = _is_denisovan_profile(scenes)
+    relevance_markers = (
+        VOYAGER_OFFICIAL_RELEVANCE_MARKERS
+        if voyager_profile
+        else DENISOVAN_OFFICIAL_RELEVANCE_MARKERS
+        if denisovan_profile
+        else OFFICIAL_RELEVANCE_MARKERS
+    )
+    blocked_markers = (
+        VOYAGER_OFFICIAL_BLOCKED_MARKERS
+        if voyager_profile
+        else DENISOVAN_OFFICIAL_BLOCKED_MARKERS
+        if denisovan_profile
+        else OFFICIAL_BLOCKED_MARKERS
+    )
+    episode_scene = next((s for s in scenes if s.get("_episode_official_queries")), None)
+    if episode_scene is not None:
+        relevance_markers = set(episode_scene.get("_episode_official_markers") or [])
+        blocked_markers = set(episode_scene.get("_episode_official_blocked") or [])
     queries = _build_official_queries(scenes)
     per_query_limit = 15
     for query in queries:
@@ -1074,7 +1415,11 @@ def _fresh_official_candidates(
             item = dict(result)
             item["fresh_image_url"] = image_url
             item["fresh_query"] = query
-            if not _is_relevant_official_result(item):
+            if not _is_relevant_official_result(
+                item,
+                relevance_markers=relevance_markers,
+                blocked_markers=blocked_markers,
+            ):
                 continue
             seen.add(key)
             candidates.append(item)
@@ -1118,6 +1463,7 @@ def _existing_fresh_candidates(entries: list[dict[str, Any]]) -> list[dict[str, 
 
 def _select_fresh_official(
     *,
+    scene: dict[str, Any],
     scene_index: int,
     slot_index: int,
     section_number: int,
@@ -1132,8 +1478,22 @@ def _select_fresh_official(
     if not candidates:
         return None
     excluded = exclude_keys or set()
-    offset = (scene_index * 11 + slot_index * 3) % len(candidates)
-    ordered = candidates[offset:] + candidates[:offset]
+    asset_id = _scene_asset_id(scene)
+    ordered_candidates = candidates
+    if asset_id.startswith("VGR-"):
+        query_hints = VOYAGER_OFFICIAL_QUERY_HINTS_BY_ASSET_ID.get(asset_id, ())
+        ordered_candidates = [
+            candidate
+            for candidate in candidates
+            if any(
+                hint in _clean_text(candidate.get("fresh_query")).lower()
+                for hint in query_hints
+            )
+        ]
+    if not ordered_candidates:
+        return None
+    offset = (scene_index * 11 + slot_index * 3) % len(ordered_candidates)
+    ordered = ordered_candidates[offset:] + ordered_candidates[:offset]
     for candidate in ordered:
         visual_key = _fresh_visual_key(candidate)
         if visual_key in excluded:
@@ -1322,6 +1682,50 @@ def _entry_for_runware_broll(
     }
 
 
+def _entry_for_policy_blocked(
+    *,
+    source: dict[str, Any],
+    scene: dict[str, Any] | None,
+    scene_index: int,
+    slot_index: int,
+    slot_duration: float,
+    provider: str,
+    category: str,
+    planned_total_count: int,
+) -> dict[str, Any]:
+    asset_id = _scene_asset_id(scene, source) or f"SC{scene_index:02d}"
+    return {
+        "asset_plan_id": f"{asset_id}P{slot_index:02d}",
+        "scene_index": scene_index,
+        "asset_index": slot_index,
+        "scene_title": source.get("scene_title", "") or (scene or {}).get("scene_title", ""),
+        "provider": provider,
+        "media_type": "none",
+        "local_path": "",
+        "bytes": 0,
+        "status": "failed",
+        "timeline_role": "policy_blocked",
+        "slot_duration_seconds": slot_duration,
+        "source_url": source.get("source_url"),
+        "credit": "",
+        "license_note": "",
+        "prompt": source.get("prompt"),
+        "keyword": source.get("keyword"),
+        "selected_reason": (
+            f"Visual source policy blocked {category} fallback before generation; "
+            f"planned timeline slots={planned_total_count}."
+        ),
+        "generated_or_illustrative": category in {"graphic", "generated_image"},
+        "derived_from_asset_plan_id": source.get("asset_plan_id"),
+        "derived_from_provider": source.get("provider"),
+        "issue": (
+            f"visual source policy blocked {category} fallback; replace with real footage, "
+            "approved reframe, or revise the timeline."
+        ),
+        "accessed_date": _utc_now()[:10],
+    }
+
+
 def _try_runware_broll(
     *,
     episode_path: Path,
@@ -1361,15 +1765,151 @@ def _try_runware_broll(
     return None
 
 
+EPISODE_BROLL_KEYWORDS_FILE = "broll_keywords.json"
+
+
+def _apply_episode_broll_keywords(episode_path: Path, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach producer-written search terms from ``broll_keywords.json`` to scene copies.
+
+    The built-in keyword/query tables were written for earlier episodes and are
+    picked by matching Thai words in the narration, so a new topic can silently
+    inherit another episode's footage (or the lunar default). An episode file
+    takes precedence over those tables::
+
+        {"official_queries": [...], "official_markers": [...], "official_blocked": [...],
+         "stock_default": [...], "stock_by_section": {"1": [...]}, "stock_by_asset_id": {"S01B00": [...]}}
+    """
+    path = episode_path / EPISODE_BROLL_KEYWORDS_FILE
+    if not path.exists():
+        return scenes
+    config = json.loads(path.read_text(encoding="utf-8"))
+    by_asset = config.get("stock_by_asset_id") or {}
+    by_section = config.get("stock_by_section") or {}
+    patched: list[dict[str, Any]] = []
+    for scene in scenes:
+        scene = dict(scene)
+        keywords = (
+            by_asset.get(_scene_asset_id(scene))
+            or by_section.get(str(scene.get("section_index") or ""))
+            or config.get("stock_default")
+        )
+        if keywords:
+            scene["_episode_stock_keywords"] = [str(item) for item in keywords if str(item).strip()]
+        if config.get("official_queries"):
+            scene["_episode_official_queries"] = list(config["official_queries"])
+            scene["_episode_official_markers"] = [str(m).lower() for m in config.get("official_markers") or []]
+            scene["_episode_official_blocked"] = [str(m).lower() for m in config.get("official_blocked") or []]
+        patched.append(scene)
+    return patched
+
+
 def _stock_keyword_pool(scene: dict[str, Any]) -> list[str]:
+    if scene.get("_episode_stock_keywords"):
+        return list(scene["_episode_stock_keywords"])
     text = " ".join(
         _clean_text(value)
         for value in (scene.get("section_title"), scene.get("scene_title"), scene.get("narration"))
     ).lower()
     asset_id = _scene_asset_id(scene)
+    if any(
+        token in text
+        for token in (
+            "hiroshimaite", "hiroshima", "ฮิโรชิมา", "atomic blast", "atomic airburst",
+            "multicomponent alloy", "alau4", "p2₁3", "p213",
+            "หลักฐานหนึ่งเม็ด", "ทรายที่ไม่ธรรมดา", "ไม่กี่วินาทีใน fireball",
+            "อ่านอะตอมจากเกรนจิ๋ว", "ใหม่แค่ไหน", "ญาติไกลจาก trinity",
+            "สิ่งที่เศษซากจำได้",
+        )
+    ):
+        section_key = asset_id[:3]
+        return list(HIROSHIMA_STOCK_KEYWORDS_BY_SECTION.get(section_key, []))
+    if asset_id.startswith("VGR-"):
+        return list(VOYAGER_STOCK_KEYWORDS_BY_ASSET_ID.get(asset_id, []))
+    if any(token in text for token in ("denisovan", "denisova", "penghu", "โปรตีนโบราณ")):
+        # These are atmospheres and real research contexts, never a synthetic
+        # reconstruction standing in for an identified Denisovan individual.
+        if any(token in text for token in ("dna", "โปรตีน", "peptide", "proteomics", "จีโนม")):
+            return [
+                "ancient DNA laboratory hands gloves",
+                "archaeology laboratory bone analysis",
+                "mass spectrometry laboratory close up",
+                "scientist measuring fossil bone calipers",
+            ]
+        if any(token in text for token in ("penghu", "ไต้หวัน", "ชายฝั่ง", "ทะเล")):
+            return [
+                "Taiwan rocky coastline aerial",
+                "coastal archaeology fieldwork",
+                "Taiwan sea cliffs landscape",
+                "fossil collection laboratory tray",
+            ]
+        if any(token in text for token in ("ทิเบต", "สูง", "epas1", "ออกซิเจน", "baishiya")):
+            return [
+                "Tibetan plateau mountain landscape",
+                "high altitude mountain valley clouds",
+                "mountain cave archaeology",
+                "scientific fieldwork plateau",
+            ]
+        if any(token in text for token in ("อาหาร", "เนื้อ", "สัตว์", "ไขกระดูก", "หนัง")):
+            return [
+                "archaeological animal bones museum",
+                "stone tool archaeology close up",
+                "ice age steppe landscape",
+                "mountain cave excavation",
+            ]
+        return [
+            "archaeology cave excavation",
+            "fossil bone laboratory tray",
+            "scientist measuring fossil bone calipers",
+            "ancient cave entrance mountain",
+        ]
+    if _is_volcano_scene(scene):
+        return list(VOLCANO_STOCK_KEYWORDS_BY_ASSET_ID.get(asset_id, ["active volcano", "volcano monitoring"]))
     if _is_no_fire_scene(scene):
         return list(NO_FIRE_STOCK_KEYWORDS_BY_ASSET_ID.get(asset_id, []))
     contextual: list[str] = []
+    if any(
+        token in text
+        for token in (
+            "นอน",
+            "หลับ",
+            "ตื่น",
+            "ห้องนอน",
+            "เตียง",
+            "ความทรงจำ",
+            "ตัวตน",
+            "ตัวคุณ",
+            "สิบปีก่อน",
+            "วัยเด็ก",
+            "อดีต",
+            "เมื่อวาน",
+            "ร่างกาย",
+            "พยาน",
+            "เช้า",
+            "คืน",
+            "เงา",
+            "ประตู",
+            "เส้นด้าย",
+            "sleep",
+            "wake",
+            "bed",
+            "memory",
+            "identity",
+            "shadow",
+            "room",
+        )
+    ):
+        return [
+            "person sleeping bedroom night",
+            "person waking up bed morning",
+            "empty bedroom night window",
+            "alarm clock bedroom night",
+            "old photographs table memory",
+            "person writing journal night",
+            "silhouette bedroom window",
+            "person sitting on bed dawn",
+            "empty room doorway night",
+            "bedroom window rain night",
+        ]
     if any(token in text for token in ("กรุงเทพ", "เมือง", "ไฟฟ้า", "แสงนีออน", "ป่าร้อนชื้น")):
         contextual.extend(["abandoned city jungle", "jungle ruins", "tropical urban jungle"])
     if any(token in text for token in ("กลางคืน", "พระอาทิตย์ตก", "สัตว์นักล่า", "ซ่อน", "เงียบ")):
@@ -1478,6 +2018,7 @@ def _try_stock_video(
                 continue
             output_path = episode_path / f"scene_{scene_index:02d}_{slot_index}.mp4"
             asset_index = scene_index * 17 + slot_index * 3
+            selection: dict[str, Any] = {}
             try:
                 if provider == "pexels":
                     api_key = _config_value("pexels_api_key")
@@ -1492,6 +2033,7 @@ def _try_stock_video(
                         max(5.0, slot_duration),
                         asset_index=asset_index,
                         keyword=keyword,
+                        selection=selection,
                     )
                 else:
                     api_key = _config_value("pixabay_api_key")
@@ -1523,12 +2065,13 @@ def _try_stock_video(
                     "status": "downloaded",
                     "timeline_role": STOCK_VIDEO_ROLE,
                     "slot_duration_seconds": slot_duration,
-                    "source_url": (
+                    "source_url": selection.get("source_url") or (
                         f"https://www.pexels.com/search/videos/{quote_plus(keyword)}/"
                         if provider == "pexels"
                         else f"https://pixabay.com/videos/search/{quote_plus(keyword)}/"
                     ),
-                    "download_url": str(path),
+                    "download_url": selection.get("download_url") or str(path),
+                    **({"credit": selection["credit"], "license_note": "Pexels License"} if selection.get("credit") else {}),
                     "prompt": f"{context} {keyword}",
                     "keyword": keyword,
                     "selected_reason": "Stock video b-roll added to avoid repeated still-image pacing.",
@@ -1560,9 +2103,35 @@ def expand_broll_timeline(
     runware_max_slots: int = 40,
     max_visual_repeats: int = 2,
     force: bool = False,
+    legacy_keyword_tables: bool = False,
 ) -> dict[str, Any]:
     episode_path = Path(episode_dir)
-    scenes = [scene for scene in script if isinstance(scene, dict)]
+    if (allow_stock or fresh_official) and not legacy_keyword_tables             and not (episode_path / EPISODE_BROLL_KEYWORDS_FILE).exists():
+        raise ValueError(
+            f"{EPISODE_BROLL_KEYWORDS_FILE} is missing in {episode_path}; write episode search terms first "
+            "(the built-in keyword tables belong to past episodes), or pass --legacy-keyword-tables "
+            "to reproduce an older episode."
+        )
+    # Keep derived pacing assets away from approved scene anchors.  Earlier
+    # versions wrote both to ``scene_XX_N.*`` in the episode root, so a slot-0
+    # fallback could silently overwrite ``scene_XX_0.png`` and corrupt the
+    # source manifest for every subsequent expansion.
+    expanded_path = episode_path / "expanded_broll"
+    expanded_path.mkdir(parents=True, exist_ok=True)
+    scenes = _apply_episode_broll_keywords(
+        episode_path, [scene for scene in script if isinstance(scene, dict)]
+    )
+    voyager_profile = _is_voyager_official_profile(scenes)
+    fresh_official_per_scene_cap = (
+        VOYAGER_MAX_FRESH_OFFICIAL_PER_SCENE
+        if voyager_profile
+        else MAX_FRESH_OFFICIAL_PER_SCENE
+    )
+    fresh_official_per_section_cap = (
+        VOYAGER_MAX_FRESH_OFFICIAL_PER_SECTION
+        if voyager_profile
+        else MAX_FRESH_OFFICIAL_PER_SECTION
+    )
     original_entries = [
         entry
         for entry in (
@@ -1580,6 +2149,10 @@ def expand_broll_timeline(
     )
     if durations and last_scene_extra_seconds > 0:
         durations[-1] = round(durations[-1] + last_scene_extra_seconds, 3)
+    planned_slot_count = sum(
+        _slot_count(duration, target_seconds, min_seconds, max_seconds)
+        for duration in durations[: len(scenes)]
+    )
     warnings: list[str] = [
         str(warning)
         for warning in (asset_manifest.get("warnings", []) or [])
@@ -1624,6 +2197,41 @@ def expand_broll_timeline(
     runware_slot_cap = max(0, int(runware_max_slots))
     last_visual_key = ""
     section_visual_keys_by_section: dict[int, set[str]] = {}
+    policy_entries: list[dict[str, Any]] = []
+
+    def policy_can_add(provider: str, *, timeline_role: str = "", media_type: str = "image") -> bool:
+        return can_add_visual_entry(
+            policy_entries,
+            {
+                "provider": provider,
+                "timeline_role": timeline_role,
+                "media_type": media_type,
+            },
+            planned_total_count=planned_slot_count,
+        )
+
+    def policy_blocked_entry(
+        *,
+        source: dict[str, Any],
+        scene: dict[str, Any],
+        scene_index: int,
+        slot_index: int,
+        slot_duration: float,
+        provider: str,
+        category: str,
+    ) -> dict[str, Any]:
+        entry = _entry_for_policy_blocked(
+            source=source,
+            scene=scene,
+            scene_index=scene_index,
+            slot_index=slot_index,
+            slot_duration=slot_duration,
+            provider=provider,
+            category=category,
+            planned_total_count=planned_slot_count,
+        )
+        errors.append(str(entry.get("issue") or "visual source policy blocked fallback"))
+        return entry
 
     for scene_index, scene in enumerate(scenes):
         duration = durations[scene_index] if scene_index < len(durations) else 0.0
@@ -1639,29 +2247,23 @@ def expand_broll_timeline(
             section_number, []
         )
         scene_fresh_count = 0
+        # Every narration beat has an approved anchor asset.  When no *other*
+        # source survives the repeat guard, keep using that anchor as a distinct
+        # crop/reframe candidate instead of falling through to an unrelated
+        # local graphic.  The derived entry retains the original provenance.
+        anchor_source = _select_source(
+            scene_index=scene_index,
+            slot_index=0,
+            scene_key=scene_key,
+            source_entries=sources,
+        )
 
         for slot_index, slot_duration in enumerate(slot_durations):
-            source = (
-                _select_source(
-                    scene_index=scene_index,
-                    slot_index=slot_index,
-                    scene_key=scene_key,
-                    source_entries=sources,
-                )
-                if slot_index == 0
-                else _select_allowed_source(
-                    scene_index=scene_index,
-                    slot_index=slot_index,
-                    scene_key=scene_key,
-                    section_number=section_number,
-                    source_entries=sources,
-                    visual_usage=visual_usage,
-                    max_repeats=max_repeats,
-                    scene_visual_keys=scene_visual_keys,
-                    section_visual_keys=section_visual_keys,
-                    last_visual_key=last_visual_key,
-                )
-            )
+            # A beat's approved anchor remains the relevant source for its
+            # pacing crops.  Borrowing a past beat's asset here is both less
+            # relevant and makes fingerprint matching turn valid reframes into
+            # arbitrary local-graphic fallbacks.
+            source = anchor_source
             if not source:
                 source = {
                     "asset_plan_id": scene_asset_id or f"SC{scene_index:02d}",
@@ -1677,7 +2279,10 @@ def expand_broll_timeline(
                 if not output_path.is_absolute():
                     output_path = Path.cwd() / output_path
                 candidate_fingerprint = _image_fingerprint(output_path)
-                if _can_use_visual_key(
+                if (
+                    output_path.is_file()
+                    and output_path.stat().st_size > 1024
+                    and _can_use_visual_key(
                     visual_key,
                     section_number=section_number,
                     visual_usage=visual_usage,
@@ -1685,6 +2290,7 @@ def expand_broll_timeline(
                     scene_visual_keys=scene_visual_keys,
                     section_visual_keys=section_visual_keys,
                     last_visual_key=last_visual_key,
+                    )
                 ):
                     entry = _entry_for_original(
                         source=source,
@@ -1712,9 +2318,13 @@ def expand_broll_timeline(
                         allow_runware
                         and runware_image_count < runware_slot_cap
                         and _allow_runware_for_scene(scene, source)
+                        and policy_can_add(
+                            RUNWARE_BROLL_PROVIDER,
+                            timeline_role=GENERATED_IMAGE_ROLE,
+                        )
                     ):
                         entry = _try_runware_broll(
-                            episode_path=episode_path,
+                            episode_path=expanded_path,
                             scene=scene,
                             source=source,
                             scene_index=scene_index,
@@ -1734,26 +2344,43 @@ def expand_broll_timeline(
                         output_path = (
                             source_path
                             if source_path.suffix.lower() in IMAGE_EXTENSIONS
-                            else episode_path / f"scene_{scene_index:02d}_0.jpg"
+                            else expanded_path / f"scene_{scene_index:02d}_0.jpg"
                         )
-                        bytes_written = _render_local_graphic(
-                            output_path,
-                            scene_index=scene_index,
-                            slot_index=slot_index,
-                            scene=scene,
-                            source=source,
-                        )
-                        entry = _entry_for_local_graphic(
-                            source=source,
-                            scene=scene,
-                            scene_index=scene_index,
-                            slot_index=slot_index,
-                            slot_duration=slot_duration,
-                            output_path=output_path,
-                            bytes_written=bytes_written,
-                        )
-                        replacement_key = f"{LOCAL_GRAPHIC_PROVIDER}:{output_path.name.lower()}"
-                        local_graphic_count += 1
+                        if policy_can_add(
+                            LOCAL_GRAPHIC_PROVIDER,
+                            timeline_role=LOCAL_GRAPHIC_PROVIDER,
+                        ):
+                            bytes_written = _render_local_graphic(
+                                output_path,
+                                scene_index=scene_index,
+                                slot_index=slot_index,
+                                scene=scene,
+                                source=source,
+                            )
+                            entry = _entry_for_local_graphic(
+                                source=source,
+                                scene=scene,
+                                scene_index=scene_index,
+                                slot_index=slot_index,
+                                slot_duration=slot_duration,
+                                output_path=output_path,
+                                bytes_written=bytes_written,
+                            )
+                            replacement_key = f"{LOCAL_GRAPHIC_PROVIDER}:{output_path.name.lower()}"
+                            local_graphic_count += 1
+                        else:
+                            output_path = expanded_path / f"scene_{scene_index:02d}_{slot_index}_policy_blocked.png"
+                            bytes_written = 0
+                            entry = policy_blocked_entry(
+                                source=source,
+                                scene=scene,
+                                scene_index=scene_index,
+                                slot_index=slot_index,
+                                slot_duration=slot_duration,
+                                provider=LOCAL_GRAPHIC_PROVIDER,
+                                category="graphic",
+                            )
+                            replacement_key = f"policy_blocked:{entry.get('asset_plan_id')}"
                     entry["visual_repeat_key"] = replacement_key
                     entry["visual_repeat_count"] = _record_visual_key(
                         replacement_key,
@@ -1769,15 +2396,16 @@ def expand_broll_timeline(
                     last_visual_key = replacement_key
                     repeat_guard_fallback_count += 1
             else:
-                output_path = episode_path / f"scene_{scene_index:02d}_{slot_index}.jpg"
+                output_path = expanded_path / f"scene_{scene_index:02d}_{slot_index}.jpg"
                 entry = None
                 bytes_written = 0
                 rejected_fresh: set[str] = set()
                 while (
-                    scene_fresh_count < MAX_FRESH_OFFICIAL_PER_SCENE
-                    and section_fresh_counts.get(section_number, 0) < MAX_FRESH_OFFICIAL_PER_SECTION
+                    scene_fresh_count < fresh_official_per_scene_cap
+                    and section_fresh_counts.get(section_number, 0) < fresh_official_per_section_cap
                 ):
                     fresh_candidate = _select_fresh_official(
+                        scene=scene,
                         scene_index=scene_index,
                         slot_index=slot_index,
                         section_number=section_number,
@@ -1814,7 +2442,11 @@ def expand_broll_timeline(
                             slot_index=slot_index,
                         )
                         candidate_fingerprint = _image_fingerprint(output_path)
-                        if _is_similar_image_fingerprint(
+                        is_anchor_reframe = (
+                            str(source.get("asset_plan_id") or "")
+                            == str(anchor_source.get("asset_plan_id") or "")
+                        )
+                        if not is_anchor_reframe and _is_similar_image_fingerprint(
                             candidate_fingerprint,
                             global_image_fingerprints,
                         ):
@@ -1859,7 +2491,7 @@ def expand_broll_timeline(
                     stock_entry = None
                     if allow_stock and stock_video_count < stock_slot_cap:
                         stock_entry = _try_stock_video(
-                            episode_path=episode_path,
+                            episode_path=expanded_path,
                             scene=scene,
                             source=source,
                             scene_index=scene_index,
@@ -1901,10 +2533,14 @@ def expand_broll_timeline(
                                 output_path,
                                 scene_index=scene_index,
                                 slot_index=slot_index,
-                            )
+                        )
                         visual_key = _source_visual_key(source)
                         candidate_fingerprint = _image_fingerprint(output_path)
-                        if _is_similar_image_fingerprint(
+                        is_anchor_reframe = (
+                            str(source.get("asset_plan_id") or "")
+                            == str(anchor_source.get("asset_plan_id") or "")
+                        )
+                        if not is_anchor_reframe and _is_similar_image_fingerprint(
                             candidate_fingerprint,
                             global_image_fingerprints,
                         ):
@@ -1913,9 +2549,13 @@ def expand_broll_timeline(
                                 allow_runware
                                 and runware_image_count < runware_slot_cap
                                 and _allow_runware_for_scene(scene, source)
+                                and policy_can_add(
+                                    RUNWARE_BROLL_PROVIDER,
+                                    timeline_role=GENERATED_IMAGE_ROLE,
+                                )
                             ):
                                 entry = _try_runware_broll(
-                                    episode_path=episode_path,
+                                    episode_path=expanded_path,
                                     scene=scene,
                                     source=source,
                                     scene_index=scene_index,
@@ -1931,24 +2571,41 @@ def expand_broll_timeline(
                                 else:
                                     runware_image_fail_count += 1
                             if entry is None:
-                                bytes_written = _render_local_graphic(
-                                    output_path,
-                                    scene_index=scene_index,
-                                    slot_index=slot_index,
-                                    scene=scene,
-                                    source=source,
-                                )
-                                entry = _entry_for_local_graphic(
-                                    source=source,
-                                    scene=scene,
-                                    scene_index=scene_index,
-                                    slot_index=slot_index,
-                                    slot_duration=slot_duration,
-                                    output_path=output_path,
-                                    bytes_written=bytes_written,
-                                )
-                                visual_key = f"{LOCAL_GRAPHIC_PROVIDER}:{output_path.name.lower()}"
-                                local_graphic_count += 1
+                                if policy_can_add(
+                                    LOCAL_GRAPHIC_PROVIDER,
+                                    timeline_role=LOCAL_GRAPHIC_PROVIDER,
+                                ):
+                                    bytes_written = _render_local_graphic(
+                                        output_path,
+                                        scene_index=scene_index,
+                                        slot_index=slot_index,
+                                        scene=scene,
+                                        source=source,
+                                    )
+                                    entry = _entry_for_local_graphic(
+                                        source=source,
+                                        scene=scene,
+                                        scene_index=scene_index,
+                                        slot_index=slot_index,
+                                        slot_duration=slot_duration,
+                                        output_path=output_path,
+                                        bytes_written=bytes_written,
+                                    )
+                                    visual_key = f"{LOCAL_GRAPHIC_PROVIDER}:{output_path.name.lower()}"
+                                    local_graphic_count += 1
+                                else:
+                                    output_path = expanded_path / f"scene_{scene_index:02d}_{slot_index}_policy_blocked.png"
+                                    bytes_written = 0
+                                    entry = policy_blocked_entry(
+                                        source=source,
+                                        scene=scene,
+                                        scene_index=scene_index,
+                                        slot_index=slot_index,
+                                        slot_duration=slot_duration,
+                                        provider=LOCAL_GRAPHIC_PROVIDER,
+                                        category="graphic",
+                                    )
+                                    visual_key = f"policy_blocked:{entry.get('asset_plan_id')}"
                         else:
                             entry = _entry_for_reframe(
                                 source=source,
@@ -1958,6 +2615,11 @@ def expand_broll_timeline(
                                 output_path=output_path,
                                 bytes_written=bytes_written,
                             )
+                            if is_anchor_reframe:
+                                visual_key = (
+                                    f"reframe:{_source_visual_key(source)}:"
+                                    f"{scene_index}:{slot_index}"
+                                )
                         entry["visual_repeat_key"] = visual_key
                         entry["visual_repeat_count"] = _record_visual_key(
                             visual_key,
@@ -1977,7 +2639,7 @@ def expand_broll_timeline(
                     stock_entry = None
                     if allow_stock and stock_video_count < stock_slot_cap:
                         stock_entry = _try_stock_video(
-                            episode_path=episode_path,
+                            episode_path=expanded_path,
                             scene=scene,
                             source=source,
                             scene_index=scene_index,
@@ -2015,9 +2677,13 @@ def expand_broll_timeline(
                             allow_runware
                             and runware_image_count < runware_slot_cap
                             and _allow_runware_for_scene(scene, source)
+                            and policy_can_add(
+                                RUNWARE_BROLL_PROVIDER,
+                                timeline_role=GENERATED_IMAGE_ROLE,
+                            )
                         ):
                             entry = _try_runware_broll(
-                                episode_path=episode_path,
+                                episode_path=expanded_path,
                                 scene=scene,
                                 source=source,
                                 scene_index=scene_index,
@@ -2033,24 +2699,41 @@ def expand_broll_timeline(
                             else:
                                 runware_image_fail_count += 1
                         if entry is None:
-                            bytes_written = _render_local_graphic(
-                                output_path,
-                                scene_index=scene_index,
-                                slot_index=slot_index,
-                                scene=scene,
-                                source=source,
-                            )
-                            entry = _entry_for_local_graphic(
-                                source=source,
-                                scene=scene,
-                                scene_index=scene_index,
-                                slot_index=slot_index,
-                                slot_duration=slot_duration,
-                                output_path=output_path,
-                                bytes_written=bytes_written,
-                            )
-                            visual_key = f"{LOCAL_GRAPHIC_PROVIDER}:{output_path.name.lower()}"
-                            local_graphic_count += 1
+                            if policy_can_add(
+                                LOCAL_GRAPHIC_PROVIDER,
+                                timeline_role=LOCAL_GRAPHIC_PROVIDER,
+                            ):
+                                bytes_written = _render_local_graphic(
+                                    output_path,
+                                    scene_index=scene_index,
+                                    slot_index=slot_index,
+                                    scene=scene,
+                                    source=source,
+                                )
+                                entry = _entry_for_local_graphic(
+                                    source=source,
+                                    scene=scene,
+                                    scene_index=scene_index,
+                                    slot_index=slot_index,
+                                    slot_duration=slot_duration,
+                                    output_path=output_path,
+                                    bytes_written=bytes_written,
+                                )
+                                visual_key = f"{LOCAL_GRAPHIC_PROVIDER}:{output_path.name.lower()}"
+                                local_graphic_count += 1
+                            else:
+                                output_path = expanded_path / f"scene_{scene_index:02d}_{slot_index}_policy_blocked.png"
+                                bytes_written = 0
+                                entry = policy_blocked_entry(
+                                    source=source,
+                                    scene=scene,
+                                    scene_index=scene_index,
+                                    slot_index=slot_index,
+                                    slot_duration=slot_duration,
+                                    provider=LOCAL_GRAPHIC_PROVIDER,
+                                    category="graphic",
+                                )
+                                visual_key = f"policy_blocked:{entry.get('asset_plan_id')}"
                         entry["visual_repeat_key"] = visual_key
                         entry["visual_repeat_count"] = _record_visual_key(
                             visual_key,
@@ -2065,6 +2748,7 @@ def expand_broll_timeline(
                             global_image_fingerprints.append(local_fingerprint)
                         last_visual_key = visual_key
                         repeat_guard_fallback_count += 1
+            policy_entries.append(entry)
             expanded_entries.append(entry)
             slots.append(
                 {
@@ -2094,11 +2778,23 @@ def expand_broll_timeline(
             }
         )
 
-    status = "blocked" if errors else "complete"
     provider_counts: dict[str, int] = {}
     for entry in expanded_entries:
         provider = str(entry.get("provider") or "unknown")
         provider_counts[provider] = provider_counts.get(provider, 0) + 1
+    policy_report = visual_policy_report(expanded_entries)
+    policy_messages = policy_warnings(policy_report)
+    policy_review_messages = policy_review_warnings(policy_report)
+    warnings.extend(policy_messages)
+    warnings.extend(policy_review_messages)
+    if policy_report.get("status") == "blocked":
+        errors.extend(policy_messages)
+    elif policy_report.get("status") == "review":
+        status = "review"
+    else:
+        status = "complete"
+    if errors:
+        status = "blocked"
     repeat_violations = []
     for visual_key, state in visual_usage.items():
         count = int(state.get("count", 0) or 0)
@@ -2163,9 +2859,10 @@ def expand_broll_timeline(
         "fresh_official_candidate_count": len(fresh_candidates),
         "fresh_official_download_count": fresh_download_count,
         "fresh_official_download_fail_count": fresh_download_fail_count,
-        "fresh_official_per_scene_cap": MAX_FRESH_OFFICIAL_PER_SCENE,
-        "fresh_official_per_section_cap": MAX_FRESH_OFFICIAL_PER_SECTION,
+        "fresh_official_per_scene_cap": fresh_official_per_scene_cap,
+        "fresh_official_per_section_cap": fresh_official_per_section_cap,
         "repeat_guard": repeat_guard,
+        "visual_policy": policy_report,
         "provider_counts": provider_counts,
     }
 
@@ -2197,9 +2894,10 @@ def expand_broll_timeline(
         "fresh_official_candidate_count": len(fresh_candidates),
         "fresh_official_download_count": fresh_download_count,
         "fresh_official_download_fail_count": fresh_download_fail_count,
-        "fresh_official_per_scene_cap": MAX_FRESH_OFFICIAL_PER_SCENE,
-        "fresh_official_per_section_cap": MAX_FRESH_OFFICIAL_PER_SECTION,
+        "fresh_official_per_scene_cap": fresh_official_per_scene_cap,
+        "fresh_official_per_section_cap": fresh_official_per_section_cap,
         "repeat_guard": repeat_guard,
+        "visual_policy": policy_report,
         "provider_counts": provider_counts,
         "scenes": timeline_scenes,
         "warnings": warnings,

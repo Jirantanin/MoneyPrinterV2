@@ -109,6 +109,7 @@ def search_pexels_video(
     time_per_asset: float,
     asset_index: int = 0,
     keyword: str | None = None,
+    selection: dict | None = None,
 ) -> str | None:
     """Search Pexels for a B-roll video clip, download and trim it.
 
@@ -175,17 +176,31 @@ def search_pexels_video(
 
         hd_files = [f for f in landscape if f.get("quality") == "hd"]
         sd_files = [f for f in landscape if f.get("quality") == "sd"]
-        candidates = hd_files or sd_files
+        # Pexels stopped filling "quality" (null for every rendition); fall back to the
+        # landscape files and prefer the largest one that is not above 1080p.
+        candidates = hd_files or sd_files or landscape
         if not candidates:
             return None
 
         candidates.sort(
-            key=lambda f: (f.get("width") or 0) * (f.get("height") or 0),
+            key=lambda f: (
+                (f.get("width") or 0) <= 1920,
+                (f.get("width") or 0) * (f.get("height") or 0),
+            ),
             reverse=True,
         )
         chosen_url = candidates[0].get("link")
         if not chosen_url:
             return None
+        if selection is not None:
+            # Lets callers record the exact clip page and author, not just the search keyword.
+            user = video.get("user") or {}
+            selection.update({
+                "id": video.get("id"),
+                "source_url": video.get("url") or "",
+                "download_url": chosen_url,
+                "credit": f"{user.get('name')} / Pexels" if user.get("name") else "Pexels",
+            })
 
         # Download to a temp file, then trim to output_path
         parent = os.path.dirname(output_path)
