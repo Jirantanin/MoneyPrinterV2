@@ -1,6 +1,7 @@
 """Render orchestration for PodcastV2 Producer Mode.
 
 This module renders through the existing Remotion ``VideoPodcast`` composition
+(default) or the minimal documentary renderer (``props["renderer"] == "minimal_doc"``)
 without calling ``PodcastV2.render()`` directly. It keeps Producer Mode render
 props and logs episode-local so concurrent Studio/PodcastV2 runs are less likely
 to collide with this workflow.
@@ -276,6 +277,66 @@ def _mix_background_bed(
     return output_path, {"enabled": True, "status": "mixed", "bed_path": bed_path}
 
 
+def _sfx_filter_complex(cues: list[dict[str, Any]], *, sample_rate: int, channel_layout: str) -> str:
+    """Build the ffmpeg graph mixing input 0 (prepared audio) with one input per cue (inputs 1..n)."""
+    fmt = f"aformat=sample_rates={sample_rate}:channel_layouts={channel_layout}"
+    parts = [f"[0:a]{fmt}[base]"]
+    labels = ["[base]"]
+    for index, cue in enumerate(cues, start=1):
+        filters = [fmt]
+        duration = float(cue.get("duration_seconds") or 0.0)
+        if duration > 0:
+            filters.append(f"atrim=0:{duration:.3f}")
+        filters.append("asetpts=PTS-STARTPTS")
+        fade_in = float(cue.get("fade_in_seconds") or 0.0)
+        fade_out = float(cue.get("fade_out_seconds") or 0.0)
+        if fade_in > 0:
+            filters.append(f"afade=t=in:st=0:d={fade_in:.3f}")
+        if fade_out > 0 and duration > fade_out:
+            filters.append(f"afade=t=out:st={duration - fade_out:.3f}:d={fade_out:.3f}")
+        filters.append(f"volume={float(cue.get('gain_db', -12.0)):.1f}dB")
+        delay_ms = int(round(float(cue["start_seconds"]) * 1000))
+        filters.append(f"adelay={delay_ms}:all=1")
+        parts.append(f"[{index}:a]{','.join(filters)}[sfx{index}]")
+        labels.append(f"[sfx{index}]")
+    parts.append(
+        f"{''.join(labels)}amix=inputs={len(labels)}:duration=first:normalize=0,alimiter=limit=0.95:level=disabled[out]"
+    )
+    return ";".join(parts)
+
+
+def _mix_sfx_cues(*, episode_dir: Path, audio_path: Path, log_path: Path) -> tuple[Path, dict[str, Any]]:
+    """Mix optional episode-local sound effects from sfx_cues.json over the prepared audio."""
+    cues_path = episode_dir / "sfx_cues.json"
+    if not cues_path.is_file():
+        return audio_path, {"status": "none"}
+    cues = json.loads(cues_path.read_text(encoding="utf-8")).get("cues") or []
+    missing = [str(cue.get("path")) for cue in cues if not (episode_dir / str(cue.get("path"))).is_file()]
+    if missing:
+        raise RuntimeError(f"sfx_cues.json references missing files: {missing}")
+    if not cues:
+        return audio_path, {"status": "none"}
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate,channel_layout,channels",
+         "-of", "json", str(audio_path)],
+        check=True, capture_output=True, text=True,
+    )
+    stream = json.loads(probe.stdout)["streams"][0]
+    layout = stream.get("channel_layout") or ("stereo" if int(stream.get("channels", 1)) > 1 else "mono")
+    output_path = episode_dir / "merged_audio_with_sfx.wav"
+    command = ["ffmpeg", "-y", "-i", str(audio_path)]
+    for cue in cues:
+        command += ["-i", str(episode_dir / str(cue["path"]))]
+    command += [
+        "-filter_complex", _sfx_filter_complex(cues, sample_rate=int(stream["sample_rate"]), channel_layout=layout),
+        "-map", "[out]", "-c:a", "pcm_s16le", str(output_path),
+    ]
+    _run_subprocess(command, log_path=log_path)
+    if not output_path.exists() or output_path.stat().st_size <= 100_000:
+        raise RuntimeError("merged_audio_with_sfx.wav was not created or is too small")
+    return output_path, {"status": "mixed", "cue_count": len(cues), "cues_path": str(cues_path)}
+
+
 def _normalize_rendered_audio(
     input_path: Path,
     output_path: Path,
@@ -340,6 +401,9 @@ def _stage_podcast_props(
         "durationInSeconds": int(float(raw_props.get("durationInSeconds") or 0) + 0.999),
         "sceneImageCounts": raw_props.get("sceneImageCounts", []),
         "sceneAssetTypes": raw_props.get("sceneAssetTypes", []),
+        "sceneAssetQualifications": raw_props.get("sceneAssetQualifications", []),
+        "sceneAssetCredits": raw_props.get("sceneAssetCredits", []),
+        "sceneAssetFits": raw_props.get("sceneAssetFits", []),
         "sceneAssetDurations": raw_props.get("sceneAssetDurations", []),
         "producerMotionGraphics": raw_props.get("producerMotionGraphics", []),
         "glossaryEntries": raw_props.get("glossaryEntries", []),
@@ -370,6 +434,11 @@ def _render_remotion(
     log_path: Path,
 ) -> dict[str, Any]:
     remotion_dir = root_dir / "remotion"
+    output_candidate = Path(str(raw_props.get("outputPath") or ""))
+    if not output_candidate.is_absolute():
+        output_candidate = root_dir / output_candidate
+    render_tmp_dir = output_candidate.resolve().parent / "remotion_tmp"
+    _ensure_dir(render_tmp_dir)
     resolved_props, staged_files = _stage_podcast_props(raw_props=raw_props, remotion_dir=remotion_dir)
     resolved_props_path = remotion_dir / f".producer-render-props-{uuid.uuid4().hex}.json"
     _write_json(resolved_props_path, resolved_props)
@@ -392,12 +461,19 @@ def _render_remotion(
         "--overwrite",
     )
     try:
+        # Long podcast renders can leave Remotion's initially-empty temp
+        # subdirectories idle long enough for Windows temp cleanup to remove
+        # them before the final audio preprocessing step. Keep this render's
+        # temp tree episode-local and stable for the whole subprocess lifetime.
+        render_env = remotion_subprocess_env(command[0])
+        render_env["TEMP"] = str(render_tmp_dir.resolve())
+        render_env["TMP"] = str(render_tmp_dir.resolve())
         _run_subprocess(
             command,
             cwd=remotion_dir,
             timeout_seconds=timeout_seconds,
             log_path=log_path,
-            env=remotion_subprocess_env(command[0]),
+            env=render_env,
         )
     finally:
         _cleanup(staged_files + [resolved_props_path])
@@ -405,6 +481,7 @@ def _render_remotion(
         "command": " ".join(command),
         "output_path": output_path,
         "props_path": props_path,
+        "temp_dir": str(render_tmp_dir.resolve()),
     }
 
 
@@ -437,13 +514,25 @@ def orchestrate_render(
             "warnings": warnings,
         }
 
-    if final_path.exists() and final_path.stat().st_size > _minimum_render_bytes(0) and not force:
+    authorization_attempt = None
+    if not no_render:
+        from producer_contract import validate_render_authorization, read_json
+        try:
+            authorization_attempt = validate_render_authorization(episode_path, preflight, root_path)
+        except (ValueError, TypeError, KeyError) as exc:
+            return {"stage": "render", "status": "blocked", "no_render": False, "errors": [str(exc)], "warnings": []}
+    if not no_render and final_path.exists() and final_path.stat().st_size > _minimum_render_bytes(0) and not force:
+        previous = read_json(episode_path / "render_manifest.json", {})
+        if previous.get("revision") != authorization_attempt["revision"]:
+            return {"stage": "render", "status": "blocked", "errors": ["Existing final belongs to another or unknown revision; use a separate output folder or explicitly replace it."], "warnings": []}
         return {
+            **previous,
             "schema_version": RENDER_MANIFEST_VERSION,
             "stage": "render",
             "created_at": _utc_now(),
             "status": "complete",
             "result": "skipped_existing_final",
+            "revision": authorization_attempt["revision"],
             "final_video_path": str(final_path),
             "final_video_bytes": final_path.stat().st_size,
             "no_render": no_render,
@@ -471,26 +560,32 @@ def orchestrate_render(
             "warnings": warnings,
         }
 
-    if raw_final_path.exists() and force:
+    if not no_render and not Path(str(raw_props.get("audioPath") or "")).is_file():
+        return {"stage": "render", "status": "blocked", "errors": ["Prepare the final audio mix before authorization"], "warnings": []}
+    if not no_render and raw_final_path.exists() and force:
         raw_final_path.unlink()
-    if final_path.exists() and force:
+    if not no_render and final_path.exists() and force:
         final_path.unlink()
 
-    merged_audio = _concat_scene_audio(
-        episode_dir=episode_path,
-        scene_count=scene_count,
-        force=force,
-        log_path=log_path,
-    )
-    render_audio, bed_result = _mix_background_bed(
-        root_dir=root_path,
-        episode_dir=episode_path,
-        narration_audio=merged_audio,
-        total_duration=render_duration,
-        narration_pad_seconds=outro_hold_seconds,
-        force=force,
-        log_path=log_path,
-    )
+    if no_render:
+        merged_audio = _concat_scene_audio(
+            episode_dir=episode_path, scene_count=scene_count, force=True, log_path=log_path,
+        )
+        render_audio, bed_result = _mix_background_bed(
+            root_dir=root_path, episode_dir=episode_path, narration_audio=merged_audio,
+            total_duration=render_duration, narration_pad_seconds=outro_hold_seconds,
+            force=True, log_path=log_path,
+        )
+        render_audio, bed_result["sfx"] = _mix_sfx_cues(
+            episode_dir=episode_path, audio_path=render_audio, log_path=log_path,
+        )
+    else:
+        # Execute the prepared and approved audio, never silently rebuild the mix.
+        merged_audio = episode_path / "merged_audio.wav"
+        render_audio = Path(str(raw_props.get("audioPath") or ""))
+        if not render_audio.is_file():
+            return {"stage": "render", "status": "blocked", "errors": ["Prepare the final audio mix with --no-render before authorization"], "warnings": []}
+        bed_result = {"status": "approved_prepared_audio"}
     raw_props["audioPath"] = str(render_audio.resolve())
     raw_props["outputPath"] = str(raw_final_path.resolve())
     _write_json(render_props_path, raw_props)
@@ -509,23 +604,38 @@ def orchestrate_render(
         "background_bed": bed_result,
         "raw_video_path": str(raw_final_path),
         "final_video_path": str(final_path),
+        "renderer": raw_props.get("renderer", "remotion"),
         "scene_count": scene_count,
         "render_duration_seconds": render_duration,
         "estimated_frames": summary.get("estimated_frames", 0),
         "errors": errors,
         "warnings": warnings,
+        "revision": authorization_attempt["revision"] if authorization_attempt else None,
     }
     if no_render:
         return manifest
 
+    _write_json(episode_path / "render_attempts.json", authorization_attempt)
     min_render_bytes = _minimum_render_bytes(render_duration)
     try:
-        render_result = _render_remotion(
-            root_dir=root_path,
-            raw_props=raw_props,
-            timeout_seconds=timeout_seconds,
-            log_path=log_path,
-        )
+        if raw_props.get("renderer") == "minimal_doc":
+            from producer_minimal_renderer import render_minimal_doc
+
+            render_result = render_minimal_doc(
+                root_dir=root_path,
+                episode_dir=episode_path,
+                raw_props=raw_props,
+                narration_end=render_duration - outro_hold_seconds,
+                timeout_seconds=timeout_seconds,
+                log_path=log_path,
+            )
+        else:
+            render_result = _render_remotion(
+                root_dir=root_path,
+                raw_props=raw_props,
+                timeout_seconds=timeout_seconds,
+                log_path=log_path,
+            )
         manifest["render_result"] = render_result
         if not raw_final_path.exists() or raw_final_path.stat().st_size <= min_render_bytes:
             raise RuntimeError("final_unnormalized.mp4 was not created or is too small")

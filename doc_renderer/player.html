@@ -1,0 +1,272 @@
+<!doctype html>
+<!-- Minimal documentary player for Producer Mode. Driven frame-by-frame by render.cjs via window.__init / window.__seek. -->
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@300;400&family=IBM+Plex+Sans+Thai:wght@300;400&display=block" rel="stylesheet">
+<style>
+  :root { --gold: #d9b26a; --ink: #f1ece2; --paper: #f2eee6; }
+  html, body { margin: 0; width: 1920px; height: 1080px; background: #000; overflow: hidden; }
+  #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #050505; }
+  .serif { font-family: 'Noto Serif Thai', serif; }
+  .sans  { font-family: 'IBM Plex Sans Thai', sans-serif; }
+
+  .shot { position: absolute; inset: 0; opacity: 0; overflow: hidden; }
+  .shot img { display: block; will-change: transform; }
+  .cover img.main, .video img.main { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .slide { background: #0b1418; }
+  .slide img.main { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform-origin: 50% 50%; }
+
+  /* plate & figure share a right-hand frame and a left caption column */
+  .plate, .figure { background: radial-gradient(ellipse at 70% 50%, #15161a 0%, #070708 70%); }
+  .plate img.bg { position: absolute; inset: -40px; width: calc(100% + 80px); height: calc(100% + 80px); object-fit: cover; opacity: .32; }
+  .frame { position: absolute; left: 760px; top: 110px; width: 1020px; height: 860px; display: flex; align-items: center; justify-content: center; transform-origin: 50% 50%; }
+  .plate .frame img { max-width: 1020px; max-height: 860px; box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 30px 80px rgba(0,0,0,.6); }
+  .figure .card { background: var(--paper); padding: 30px; box-shadow: 0 30px 80px rgba(0,0,0,.65); }
+  .figure .card img { max-width: 960px; max-height: 800px; mix-blend-mode: multiply; }
+
+  #grain { position: absolute; inset: 0; opacity: .055; mix-blend-mode: overlay; pointer-events: none; }
+  #vignette { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.5) 100%),
+                linear-gradient(to top, rgba(0,0,0,.5) 0%, rgba(0,0,0,0) 30%); }
+  #shade { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    background: linear-gradient(to right, rgba(0,0,0,.75) 0%, rgba(0,0,0,.35) 55%, rgba(0,0,0,.15) 100%); }
+
+  .cap { position: absolute; left: 140px; color: var(--ink); opacity: 0; max-width: 860px; }
+  .cap.low { bottom: 118px; }
+  .cap.col { top: 50%; max-width: 540px; }
+  .cap .rule { height: 1px; background: var(--gold); margin-bottom: 18px; width: 44px; }
+  .cap .t { font-size: 29px; font-weight: 400; line-height: 1.55; }
+  .cap .s { font-size: 23px; font-weight: 300; line-height: 1.55; opacity: .72; margin-top: 2px; }
+  .cap.col .t { font-size: 32px; }
+  .cap.col .s { font-size: 24px; }
+
+  .credit { position: absolute; right: 140px; bottom: 62px; font-size: 17px; letter-spacing: .04em; color: rgba(240,236,228,.6);
+    text-align: right; max-width: 1000px; opacity: 0; }
+
+  #chapter { position: absolute; left: 140px; bottom: 150px; color: var(--ink); opacity: 0; }
+  #chapter .eyebrow { font-size: 24px; letter-spacing: .06em; color: var(--gold); }
+  #chapter .rule { height: 1px; background: var(--gold); width: 0; margin: 20px 0 24px; }
+  #chapter .name { font-size: 76px; font-weight: 300; line-height: 1.28; max-width: 1200px; }
+
+  #end { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding-left: 140px; color: var(--ink); opacity: 0; }
+  #end .eyebrow { font-size: 22px; letter-spacing: .06em; color: var(--gold); }
+  #end .rule { height: 1px; background: var(--gold); width: 120px; margin: 20px 0 30px; }
+  #end .src { font-size: 28px; font-weight: 300; line-height: 1.9; }
+  #end .note { font-size: 20px; font-weight: 300; opacity: .6; margin-top: 34px; max-width: 1100px; line-height: 1.6; }
+
+  #fade { position: absolute; inset: 0; background: #000; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="shots"></div>
+  <canvas id="grain" width="960" height="540"></canvas>
+  <div id="vignette"></div>
+  <div id="shade"></div>
+  <div id="caps"></div>
+  <div id="chapter"><div class="eyebrow sans"></div><div class="rule"></div><div class="name serif"></div></div>
+  <div id="dim" style="position:absolute;inset:0;background:#000;opacity:0;pointer-events:none"></div>
+  <div id="end">
+    <div class="eyebrow sans">แหล่งข้อมูล</div><div class="rule"></div>
+    <div class="src sans"></div>
+    <div class="note sans"></div>
+  </div>
+  <div id="fade"></div>
+</div>
+<script>
+const XF = 1.0, CHAPTER_XF = 1.6;
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = x => x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+const ramp = (t, a, b) => b <= a ? (t >= b ? 1 : 0) : clamp((t - a) / (b - a));
+const win = (t, a, b, din, dout = din) => ease(ramp(t, a, a + din)) * (1 - ease(ramp(t, b - dout, b)));
+const bell = (t, c, w) => { const x = Math.abs(t - c) / w; return x >= 1 ? 0 : ease(1 - x); };
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+// deterministic film grain
+const g = document.getElementById('grain'), gx = g.getContext('2d');
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const tiles = Array.from({ length: 6 }, () => {
+  const d = gx.createImageData(960, 540);
+  for (let i = 0; i < d.data.length; i += 4) { const v = rnd() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+  return d;
+});
+
+let TL, live = [], chapterStarts = new Set();
+
+window.__init = async (timeline, from, to) => {
+  TL = timeline;
+  chapterStarts = new Set(TL.chapters.map(c => c.start));
+  const shotsEl = document.getElementById('shots'), capsEl = document.getElementById('caps');
+  shotsEl.innerHTML = ''; capsEl.innerHTML = ''; live = [];
+  document.querySelector('#end .src').innerHTML = TL.sources.map(esc).join('<br>');
+  document.querySelector('#end .note').textContent = TL.endNote || '';
+  document.querySelector('#end').style.display = TL.sources.length || TL.endNote ? 'flex' : 'none';
+
+  const S = TL.shots;
+  S.forEach((s, idx) => {
+    const isChap = chapterStarts.has(s.start) && idx > 0;
+    const xfIn = idx === 0 ? 0 : (isChap ? CHAPTER_XF : XF);
+    const next = S[idx + 1];
+    const xfOut = !next ? 0 : (chapterStarts.has(next.start) ? CHAPTER_XF : XF);
+    s._a = idx === 0 ? 0 : s.start - xfIn / 2;           // visible from
+    s._in = xfIn;
+    s._b = next ? s.end + xfOut / 2 : TL.total;          // visible until
+    // caption continuity: same text + same layout family => no flicker between shots
+    const fam = k => (k === 'cover' || k === 'video' ? 'low' : k === 'slide' ? 'none' : 'col');
+    const same = (a, b) => a && b && a.capTitle === b.capTitle && a.capSub === b.capSub && fam(a.kind) === fam(b.kind);
+    s._capFromPrev = same(S[idx - 1], s) && !isChap;
+    s._capToNext = same(s, next) && !(next && chapterStarts.has(next.start));
+    s._creditToNext = next && next.credit === s.credit && !chapterStarts.has(next.start);
+    s._creditFromPrev = idx > 0 && S[idx - 1].credit === s.credit && !isChap;
+  });
+
+  const need = S.filter(s => s._b >= from - 0.1 && s._a <= to + 0.1);
+  const loads = [];
+  for (const s of need) {
+    const el = document.createElement('div'); el.className = 'shot ' + s.kind;
+    let mover;
+    if (s.kind === 'cover' || s.kind === 'slide' || s.kind === 'video') {
+      el.innerHTML = `<img class="main" src="${s.src}">`;
+      mover = el.querySelector('img');
+      if (s.kind === 'cover') mover.style.transformOrigin = `${s.anchor[0] * 100}% ${s.anchor[1] * 100}%`;
+    } else if (s.kind === 'plate') {
+      el.innerHTML = `<img class="bg" src="${s.blur}"><div class="frame"><img src="${s.src}"></div>`;
+      mover = el.querySelector('.frame');
+    } else {
+      el.innerHTML = `<div class="frame"><div class="card"><img src="${s.src}"></div></div>`;
+      mover = el.querySelector('.frame');
+    }
+    if (s.kind === 'plate' || s.kind === 'figure') {
+      const pad = s.kind === 'figure' ? 60 : 0;
+      const k = Math.min((1020 - pad) / s.w, (860 - pad) / s.h, 2.0);
+      const img = el.querySelector('.frame img');
+      img.style.width = Math.round(s.w * k) + 'px'; img.style.height = Math.round(s.h * k) + 'px';
+      img.style.maxWidth = 'none'; img.style.maxHeight = 'none';
+    }
+    shotsEl.appendChild(el);
+    el.querySelectorAll('img').forEach(i => loads.push(i.decode().catch(() => { throw new Error('decode ' + i.src); })));
+
+    let cap = null;
+    if (s.kind !== 'slide' && s.capTitle) {
+      cap = document.createElement('div');
+      cap.className = 'cap sans ' + (s.kind === 'cover' || s.kind === 'video' ? 'low' : 'col');
+      cap.innerHTML = `<div class="rule"></div><div class="t">${esc(s.capTitle)}</div>` + (s.capSub ? `<div class="s">${esc(s.capSub)}</div>` : '');
+      capsEl.appendChild(cap);
+    }
+    let creditText = s.credit || (s.kind === 'slide' ? [s.capTitle, s.capSub].filter(Boolean).join(' — ') : '');
+    let credit = null;
+    if (creditText) {
+      credit = document.createElement('div'); credit.className = 'credit sans'; credit.textContent = creditText;
+      capsEl.appendChild(credit);
+    }
+    live.push({ s, el, mover, cap, credit });
+  }
+  const sample = 'กขคงจฉบทที่แหล่งข้อมูล ABC abc 0123456789' + TL.chapters.map(c => c.title).join('');
+  const faces = ['300 76px "Noto Serif Thai"', '400 76px "Noto Serif Thai"', '300 24px "IBM Plex Sans Thai"', '400 24px "IBM Plex Sans Thai"'];
+  await Promise.all([...faces.map(f => document.fonts.load(f, sample)), ...loads]);
+  await document.fonts.ready;
+  if (!faces.every(f => document.fonts.check(f, sample))) throw new Error('fonts not loaded');
+  // vertically centre column captions once fonts are in
+  document.querySelectorAll('.cap.col').forEach(c => c.style.marginTop = (-c.offsetHeight / 2) + 'px');
+  return need.length;
+};
+
+function chapterAt(t) {
+  let c = null; for (const ch of TL.chapters) if (ch.start <= t) c = ch; return c;
+}
+const CH_IN = s => (s === 0 ? 1.4 : 0.9), CH_LEN = 5.4;
+
+window.__seek = (t) => {
+  const pending = [];
+  gx.putImageData(tiles[Math.round(t * 25) % tiles.length], 0, 0);
+  const ch = chapterAt(t);
+  const chA = ch.start + CH_IN(ch.start), chB = chA + CH_LEN;
+  const capHold = (s) => chapterStarts.has(s.start) ? chB - 0.2 : s.start + 0.7;   // captions wait for chapter cards
+
+  const endO = ease(ramp(t, TL.narrationEnd + 0.3, TL.narrationEnd + 1.4));
+  for (const { s, el, mover, cap, credit } of live) {
+    const vis = t >= s._a && t <= s._b + 0.001;
+    el.style.display = vis ? 'block' : 'none';
+    if (!vis) { if (cap) cap.style.opacity = 0; if (credit) credit.style.opacity = 0; continue; }
+    el.style.opacity = s._in ? ease(ramp(t, s._a, s._a + s._in)) : 1;
+    const p = clamp((t - s._a) / (s._b - s._a));
+
+    if (s.kind === 'cover') {
+      const push = s.move % 2 === 0;
+      let z0 = push ? 1.03 : 1.12, z1 = push ? 1.12 : 1.03;
+      if (s.minZoom) { z0 = Math.max(z0, s.minZoom); z1 = Math.max(z1, s.minZoom); }   // crop burned-in corner credits
+      if (s.zoom) { [z0, z1] = s.zoom; }
+      const centred = s.anchor[0] === 0.5 && s.anchor[1] === 0.5;
+      const drift = centred ? 34 : 0;
+      const dx = s.move === 0 ? -drift : s.move === 1 ? drift : 0;
+      const dy = s.move === 2 ? -drift * .6 : s.move === 3 ? drift * .6 : 0;
+      mover.style.transform = `translate(${dx * (p - .5)}px, ${dy * (p - .5)}px) scale(${z0 + (z1 - z0) * p})`;
+    } else if (s.kind === 'video') {
+      // play the clip once from the start of its visible window; hold the last frame, never loop
+      const n = Math.min(s.frameCount, Math.max(1, Math.floor((t - s._a) * TL.fps) + 1));
+      const src = s.framesBase + String(n).padStart(5, '0') + '.jpg';
+      if (mover.dataset.frame !== src) {
+        mover.dataset.frame = src; mover.src = src;
+        pending.push(mover.decode().catch(() => { throw new Error('decode ' + src); }));
+      }
+      mover.style.transform = `scale(${1.0 + 0.03 * p})`;
+    } else if (s.kind === 'slide') {
+      mover.style.transform = `scale(${1 + 0.025 * p})`;
+    } else {
+      mover.style.transform = `scale(${1 + 0.03 * p})`;
+    }
+
+    if (cap) {
+      const a = capHold(s), b = s.end - 0.35;
+      const o = s._capFromPrev && s._capToNext ? 1
+              : s._capFromPrev ? 1 - ease(ramp(t, b - .6, b))
+              : s._capToNext ? ease(ramp(t, a, a + .8))
+              : win(t, a, b, .8, .6);
+      const active = t >= (s._capFromPrev ? s.start : a) && t <= (s._capToNext ? s.end : b);
+      cap.style.opacity = active ? o * (1 - endO) : 0;
+      const r = s._capFromPrev ? 1 : ease(ramp(t, a, a + .9));
+      cap.querySelector('.rule').style.width = 44 * r + 'px';
+      cap.style.transform = cap.classList.contains('col') ? `translateY(${(1 - r) * 12}px)` : `translateY(${(1 - r) * 12}px)`;
+    }
+    if (credit) {
+      const a = s._creditFromPrev ? s.start : s.start + 0.9, b = s.end - 0.25;
+      const o = s._creditFromPrev && s._creditToNext ? 1
+              : s._creditFromPrev ? 1 - ease(ramp(t, b - .5, b))
+              : s._creditToNext ? ease(ramp(t, a, a + .7))
+              : win(t, a, b, .7, .5);
+      credit.style.opacity = (t >= s.start && t <= s.end) ? o * (1 - endO) : 0;
+    }
+  }
+
+  // chapter card
+  const chEl = document.getElementById('chapter');
+  const co = win(t, chA, chB, 1.0, 0.9);
+  chEl.style.opacity = co;
+  chEl.querySelector('.eyebrow').textContent = 'บทที่ ' + ch.no;
+  chEl.querySelector('.name').textContent = ch.title;
+  const chShot = TL.shots.find(x => x.start === ch.start);
+  chEl.querySelector('.name').style.maxWidth = chShot && chShot.kind !== 'cover' ? '560px' : '1200px';  // keep clear of the right-hand frame
+  chEl.style.transform = `translateY(${(1 - ease(ramp(t, chA, chA + 1.2))) * 16}px)`;
+  chEl.querySelector('.rule').style.width = 120 * ease(ramp(t, chA + 0.4, chA + 1.8)) + 'px';
+
+  // end card
+  const endA = TL.narrationEnd + 0.3;
+  const eo = ease(ramp(t, endA, endA + 1.4));
+  document.getElementById('end').style.opacity = eo;
+  document.getElementById('end').style.transform = `translateY(${(1 - eo) * 14}px)`;
+
+  // left-side shade while a chapter card or end card is up
+  document.getElementById('shade').style.opacity = Math.max(co * 0.85, eo);
+
+  // open from black, dip between chapters, close to black
+  let f = 1 - ease(ramp(t, 0, 1.2));
+  for (const c of TL.chapters) if (c.start > 0) f = Math.max(f, 0.6 * bell(t, c.start, 0.8));
+  document.getElementById('dim').style.opacity = 0.9 * eo;
+  f = Math.max(f, ease(ramp(t, TL.total - 1.3, TL.total)));
+  document.getElementById('fade').style.opacity = f;
+  return Promise.all(pending);
+};
+</script>
+</body>
+</html>

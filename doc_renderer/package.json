@@ -1,0 +1,9 @@
+{
+  "name": "moneyprinter-doc-renderer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal documentary renderer for Producer Mode (HTML player driven frame-by-frame in headless Chrome).",
+  "dependencies": {
+    "puppeteer-core": "19.11.1"
+  }
+}
