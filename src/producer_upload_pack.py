@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 
-UPLOAD_PACK_VERSION = 1
+UPLOAD_PACK_VERSION = 2
 MAX_TITLE_LENGTH = 100
 MAX_DESCRIPTION_LENGTH = 5000
 MAX_TAGS = 24
+MAX_DESCRIPTION_SOURCES = 8
+MIN_CHAPTER_COUNT = 3
 
 
 def _utc_now() -> str:
@@ -39,6 +41,22 @@ def _compact_multiline(value: Any, limit: int) -> str:
     return text[: max(0, limit - 3)].rstrip() + "..."
 
 
+def _clean_multiline(value: Any, fallback: str = "") -> str:
+    """Normalize public copy while preserving intentional paragraph breaks."""
+
+    lines: list[str] = []
+    previous_blank = True
+    for raw_line in str(value or "").splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if line:
+            lines.append(line)
+            previous_blank = False
+        elif lines and not previous_blank:
+            lines.append("")
+            previous_blank = True
+    return "\n".join(lines).strip() or fallback
+
+
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -60,8 +78,24 @@ def _write_json(path: Path, payload: Any) -> None:
     )
 
 
-def _source_lines(research: dict[str, Any], *, limit: int = 8) -> list[str]:
-    sources = _as_list(research.get("sources"))
+def _read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8-sig") as f:
+            payload = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _source_lines(research: dict[str, Any], *, source_ids: list[Any] | None = None, limit: int = 4) -> list[str]:
+    sources = [source for source in _as_list(research.get("sources")) if isinstance(source, dict)]
+    if source_ids:
+        # Producer-chosen order (seo_packaging.description_source_ids); research order is not a ranking.
+        by_id = {_clean_text(source.get("source_id")): source for source in sources}
+        sources = [by_id[key] for key in (_clean_text(item) for item in source_ids) if key in by_id]
+        limit = MAX_DESCRIPTION_SOURCES
     rows: list[str] = []
     for source in sources[:limit]:
         if not isinstance(source, dict):
@@ -70,18 +104,8 @@ def _source_lines(research: dict[str, Any], *, limit: int = 8) -> list[str]:
         url = _clean_text(source.get("url") or source.get("source_url"))
         publisher = _clean_text(source.get("publisher") or source.get("source_type"))
         if url:
-            rows.append(f"- {title} ({publisher})\n  {url}".strip())
-    return rows
-
-
-def _section_lines(sections: list[Any], *, limit: int = 8) -> list[str]:
-    rows: list[str] = []
-    for section in sections[:limit]:
-        if not isinstance(section, dict):
-            continue
-        title = _clean_text(section.get("title"), "Untitled section")
-        goal = _clean_text(section.get("narrative_goal"))
-        rows.append(f"- {title}{f': {goal}' if goal else ''}")
+            publisher_label = f" ({publisher})" if publisher else ""
+            rows.append(f"- {title}{publisher_label}\n  {url}".strip())
     return rows
 
 
@@ -103,20 +127,15 @@ def _topic_tokens(topic: str) -> list[str]:
 
 
 def _hashtags(topic: str, title: str) -> list[str]:
-    base = ["สารคดี", "เล่าเรื่อง", "ความรู้"]
-    for token in _topic_tokens(f"{topic} {title}")[:5]:
-        clean = _hash_token(token)
-        if clean and clean not in base:
-            base.append(clean)
-    tags = [f"#{item}" for item in base if item]
-    return tags[:8]
+    # Splitting the topic produced fragments such as "#วงแหวนที่มองไม่เห็นของ"; producers set
+    # seo_packaging.hashtags, and the fallback stays generic.
+    return ["#สารคดี", "#ความรู้"]
 
 
 def _tags(topic: str, title: str, sections: list[Any]) -> list[str]:
-    tags = ["สารคดี", "เล่าเรื่อง", "ความรู้", "PodcastV2", "documentary"]
-    for token in _topic_tokens(f"{topic} {title}"):
-        if token not in tags:
-            tags.append(token)
+    # Fallback only: section titles are viewer-facing Thai; topic/title fragments and internal
+    # labels (e.g. "PodcastV2") are not tags.
+    tags = ["สารคดี", "ความรู้", "documentary"]
     for section in sections[:6]:
         if isinstance(section, dict):
             title_text = _clean_text(section.get("title"))
@@ -143,22 +162,13 @@ def _title_options(seo: dict[str, Any], topic: str) -> list[dict[str, str]]:
             }
             for item in options[:3]
         ]
+    # No English template suffixes on a Thai channel; a missing title is a packaging warning.
     return [
         {
-            "role": "curiosity_question",
-            "title": _compact(f"{topic}: What Are We Missing?", MAX_TITLE_LENGTH),
-            "rationale": "Fallback curiosity angle; replace after SEO research if needed.",
-        },
-        {
-            "role": "concrete_stakes",
-            "title": _compact(f"{topic}: The Part That Changes the Story", MAX_TITLE_LENGTH),
-            "rationale": "Fallback stakes angle; replace after SEO research if needed.",
-        },
-        {
-            "role": "documentary_trust",
-            "title": _compact(f"{topic}, Explained Without Hype", MAX_TITLE_LENGTH),
-            "rationale": "Fallback documentary trust angle.",
-        },
+            "role": "fallback_topic",
+            "title": _compact(topic, MAX_TITLE_LENGTH),
+            "rationale": "Fallback: write seo_packaging.title_options before publishing.",
+        }
     ]
 
 
@@ -190,32 +200,98 @@ def _thumbnail_concepts(seo: dict[str, Any], topic: str) -> list[dict[str, Any]]
     ]
 
 
+def _format_timestamp(seconds: float) -> str:
+    total_seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+def _chapters_from_render_props(render_props: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build YouTube chapter rows from the final renderer-facing scene contract."""
+
+    titles = _as_list(render_props.get("sceneTitles"))
+    durations = _as_list(render_props.get("sceneDurations"))
+    if not titles or len(titles) != len(durations):
+        return []
+
+    chapters: list[dict[str, Any]] = []
+    elapsed = 0.0
+    previous_timestamp = ""
+    previous_title = ""
+    for index, (raw_title, raw_duration) in enumerate(zip(titles, durations), start=1):
+        title = _clean_text(raw_title)
+        try:
+            duration = float(raw_duration)
+        except (TypeError, ValueError):
+            return []
+        if not title or duration <= 0:
+            return []
+        timestamp = _format_timestamp(elapsed)
+        # Render props contain one entry per narration scene.  Consecutive
+        # scenes frequently belong to the same editorial chapter, so emit one
+        # viewer-facing YouTube marker at the first occurrence rather than a
+        # run of identical timestamp labels.
+        if timestamp != previous_timestamp and title != previous_title:
+            chapters.append(
+                {
+                    "index": index,
+                    "start_seconds": round(elapsed, 3),
+                    "timestamp": timestamp,
+                    "title": title,
+                }
+            )
+            previous_timestamp = timestamp
+            previous_title = title
+        elapsed += duration
+    return chapters
+
+
+def _chapter_lines(chapters: list[dict[str, Any]]) -> list[str]:
+    return [f"{item['timestamp']} {item['title']}" for item in chapters]
+
+
+def _fallback_description(
+    *,
+    topic: str,
+    topic_profile: dict[str, Any],
+    research: dict[str, Any],
+) -> str:
+    """Keep the fallback audience-facing; never expose internal section goals."""
+
+    viewer_promise = _clean_text(topic_profile.get("viewer_promise"))
+    central_question = _clean_text(topic_profile.get("central_question"))
+    # research_summary is internal (often English) and never public copy.
+    paragraphs = [viewer_promise] if viewer_promise else []
+    if not paragraphs and central_question:
+        paragraphs.append(f"ตอนนี้ชวนหาคำตอบว่า {central_question}")
+    if not paragraphs:
+        paragraphs.append(f"ตอนนี้พาไปสำรวจ {topic} ผ่านข้อมูลและแหล่งอ้างอิงที่ตรวจสอบได้")
+    return "\n\n".join(paragraphs)
+
+
 def _description(
     *,
     topic: str,
-    title: str,
     topic_profile: dict[str, Any],
     research: dict[str, Any],
-    sections: list[Any],
+    public_copy: str,
+    chapters: list[dict[str, Any]],
     hashtags: list[str],
+    source_ids: list[Any] | None = None,
 ) -> str:
-    viewer_promise = _clean_text(topic_profile.get("viewer_promise"))
-    central_question = _clean_text(topic_profile.get("central_question"))
-    summary = _clean_text(research.get("research_summary"))
-    section_rows = _section_lines(sections)
-    source_rows = _source_lines(research)
+    body = _clean_multiline(public_copy) or _fallback_description(
+        topic=topic,
+        topic_profile=topic_profile,
+        research=research,
+    )
+    source_rows = _source_lines(research, source_ids=source_ids)
 
-    parts = [
-        title,
-        "",
-        viewer_promise or f"ตอนนี้เล่าเรื่อง {topic} ด้วยโทนสารคดีที่อิงจากแหล่งข้อมูลจริง",
-    ]
-    if central_question:
-        parts.extend(["", f"คำถามหลัก: {central_question}"])
-    if summary:
-        parts.extend(["", _compact(summary, 900)])
-    if section_rows:
-        parts.extend(["", "ในตอนนี้:", *section_rows])
+    parts = [body]
+    if chapters:
+        parts.extend(["", "ช่วงเวลาในคลิป:", *_chapter_lines(chapters)])
     if source_rows:
         parts.extend(["", "แหล่งอ้างอิงหลัก:", *source_rows])
     parts.extend(["", " ".join(hashtags)])
@@ -274,6 +350,7 @@ def write_upload_pack(
     final_qc: dict[str, Any] | None = None,
     cost_report: dict[str, Any] | None = None,
     final_report_path: str | Path | None = None,
+    render_props: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write upload-ready metadata files under upload_pack/."""
 
@@ -286,22 +363,49 @@ def write_upload_pack(
     sections = _as_list(plan.get("sections"))
     final_qc = _as_dict(final_qc)
     cost_report = _as_dict(cost_report)
+    render_props = _as_dict(render_props)
     topic = _clean_text(episode.get("topic"), episode_path.name)
+    root_metadata_path = episode_path / "metadata.json"
+    existing_metadata = _read_json(root_metadata_path)
 
     title_options = _title_options(seo, topic)
     recommended_title = _clean_text(seo.get("recommended_title")) or title_options[0]["title"]
     recommended_title = _compact(recommended_title, MAX_TITLE_LENGTH)
-    hashtags = _hashtags(topic, recommended_title)
-    tags = _tags(topic, recommended_title, sections)
+    custom_hashtags: list[str] = []
+    for value in _as_list(seo.get("hashtags")):
+        token = _hash_token(_clean_text(value).lstrip("#"))
+        hashtag = f"#{token}" if token else ""
+        if hashtag and hashtag.lower() not in [item.lower() for item in custom_hashtags]:
+            custom_hashtags.append(hashtag)
+    hashtags = custom_hashtags[:8] or _hashtags(topic, recommended_title)
+
+    custom_tags: list[str] = []
+    for value in _as_list(seo.get("tags")):
+        tag = _compact(value, 60)
+        if tag and tag.lower() not in [item.lower() for item in custom_tags]:
+            custom_tags.append(tag)
+    tags = custom_tags[:MAX_TAGS] or _tags(topic, recommended_title, sections)
+    public_copy = _clean_multiline(seo.get("upload_description"))
+    description_source = "seo_packaging.upload_description"
+    if not public_copy and _clean_text(existing_metadata.get("description_source")) in {"authored", "manual"}:
+        public_copy = _clean_multiline(existing_metadata.get("description"))
+        description_source = "existing_metadata.authored"
+    if not public_copy:
+        description_source = "generated_fallback"
+    chapters = _chapters_from_render_props(render_props)
     description = _description(
         topic=topic,
-        title=recommended_title,
         topic_profile=topic_profile,
         research=research,
-        sections=sections,
+        public_copy=public_copy,
+        chapters=chapters,
         hashtags=hashtags,
+        source_ids=_as_list(seo.get("description_source_ids")),
     )
-    pinned_comment = _pinned_comment(topic_profile, topic)
+    pinned_comment = _clean_multiline(seo.get("pinned_comment")) or _pinned_comment(
+        topic_profile,
+        topic,
+    )
     thumbnail_concepts = _thumbnail_concepts(seo, topic)
     final_video = final_qc.get("final_video_path") or episode_path / "final.mp4"
     final_report = str(final_report_path or episode_path / "final_report.html")
@@ -312,8 +416,14 @@ def write_upload_pack(
         errors.append(f"final video missing: {final_video}")
     if final_qc.get("status") not in {"pass", "review"}:
         warnings.append(f"final QC status is {final_qc.get('status') or 'missing'}")
-    if cost_report.get("status") not in {"pass", "ready", ""}:
-        warnings.append(f"cost report status is {cost_report.get('status') or 'missing'}")
+    # A cost report may be in review solely because an external or unmetered
+    # provider does not expose a local price signal.  Preserve that disclosure
+    # in the handoff manifest, but do not block otherwise complete public
+    # upload metadata.  Actual report errors remain a packaging warning.
+    cost_status = _clean_text(cost_report.get("status"))
+    cost_errors = _as_list(cost_report.get("errors"))
+    if cost_status not in {"pass", "ready", "review", ""} or cost_errors:
+        warnings.append(f"cost report status is {cost_status or 'missing'}")
     if not seo.get("recommended_title"):
         warnings.append("recommended title came from fallback title options.")
     competitor_results = _as_list(research.get("competitor_results")) or _as_list(
@@ -323,10 +433,29 @@ def write_upload_pack(
         warnings.append("competitor SEO results are missing or empty.")
     if len(_as_list(research.get("sources"))) < int(research.get("minimum_sources") or 3):
         warnings.append("source count is below the research minimum.")
+    if description_source == "generated_fallback":
+        warnings.append(
+            "seo_packaging.upload_description is missing; generated fallback description requires public-copy review."
+        )
+    if len(chapters) < MIN_CHAPTER_COUNT:
+        warnings.append(
+            "chapter timestamps are missing or incomplete; final render_props scene titles and durations are required."
+        )
+
+    description_review = {
+        "status": "ready"
+        if description_source != "generated_fallback" and len(chapters) >= MIN_CHAPTER_COUNT
+        else "review",
+        "source": description_source,
+        "chapter_count": len(chapters),
+        "uses_generated_fallback": description_source == "generated_fallback",
+    }
 
     metadata = {
         "title": recommended_title,
         "description": description,
+        "description_source": description_source,
+        "chapters": chapters,
         "tags": tags,
         "hashtags": hashtags,
         "pinned_comment": pinned_comment,
@@ -334,6 +463,7 @@ def write_upload_pack(
         "final_video_path": str(final_video),
         "final_report_path": final_report,
         "thumbnail_brief_path": str(pack_dir / "thumbnail_brief.html"),
+        "timestamps_path": str(pack_dir / "timestamps.txt"),
     }
     thumbnail_brief = {
         "topic": topic,
@@ -349,9 +479,19 @@ def write_upload_pack(
         "status": "blocked" if errors else ("review" if warnings else "ready"),
         "episode_dir": str(episode_path),
         "metadata": metadata,
+        "description_review": description_review,
+        "chapters": chapters,
         "title_options": title_options,
         "thumbnail_brief": thumbnail_brief,
         "cost_summary": _as_dict(cost_report.get("totals")),
+        "cost_reconciliation": {
+            "status": cost_status or "missing",
+            "review_reason": (
+                "External or unmetered provider costs are not available in local manifests."
+                if cost_status == "review" and not cost_errors
+                else ""
+            ),
+        },
         "warnings": warnings,
         "errors": errors,
     }
@@ -360,6 +500,7 @@ def write_upload_pack(
     _write_json(pack_dir / "metadata.json", metadata)
     _write_json(pack_dir / "upload_pack_manifest.json", pack_manifest)
     _write_text(pack_dir / "description.txt", description + "\n")
+    _write_text(pack_dir / "timestamps.txt", "\n".join(_chapter_lines(chapters)) + "\n")
     _write_text(pack_dir / "tags.txt", ", ".join(tags) + "\n")
     _write_text(pack_dir / "hashtags.txt", " ".join(hashtags) + "\n")
     _write_text(pack_dir / "pinned_comment.txt", pinned_comment + "\n")
@@ -376,6 +517,8 @@ def write_upload_pack(
                 "# Upload Pack",
                 "",
                 f"- Title: {recommended_title}",
+                f"- Description source: {description_source}",
+                f"- Timestamps: {pack_dir / 'timestamps.txt'} ({len(chapters)} chapters)",
                 f"- Final video: {final_video}",
                 f"- Final report: {final_report}",
                 "- Use metadata.json for uploader compatibility.",
@@ -385,16 +528,7 @@ def write_upload_pack(
         ),
     )
 
-    root_metadata_path = episode_path / "metadata.json"
-    existing: dict[str, Any] = {}
-    if root_metadata_path.exists():
-        try:
-            with root_metadata_path.open("r", encoding="utf-8-sig") as f:
-                loaded = json.load(f)
-            existing = loaded if isinstance(loaded, dict) else {}
-        except (OSError, json.JSONDecodeError):
-            existing = {}
-    merged_metadata = {**existing, **metadata}
+    merged_metadata = {**existing_metadata, **metadata}
     _write_json(root_metadata_path, merged_metadata)
 
     files = {
@@ -403,6 +537,7 @@ def write_upload_pack(
         "root_metadata": str(root_metadata_path),
         "manifest": str(pack_dir / "upload_pack_manifest.json"),
         "description": str(pack_dir / "description.txt"),
+        "timestamps": str(pack_dir / "timestamps.txt"),
         "tags": str(pack_dir / "tags.txt"),
         "hashtags": str(pack_dir / "hashtags.txt"),
         "pinned_comment": str(pack_dir / "pinned_comment.txt"),
