@@ -48,11 +48,12 @@ type Job = {
   label: string              // 'render', 'tts', … or the command's script name for 'other'
   command: string            // capped to 1000 chars
   episodeDir?: string        // absolute .mp/<ep> when the command names one
-  logs: { path: string; offset: number }[]  // byte offset recorded at registration
+  logs: { path: string; offset: number; seenMtimeMs: number }[]  // offset in characters, see Error Handling
+  ttsTotal?: number          // tts only: scenes this run will write, fixed at registration
   startedAt: number          // epoch ms
   status: 'running' | 'done' | 'failed'
-  phase?: string             // render: 'stills' | 'encode' | 'loudnorm' | …
-  progress?: { done: number; total: number; unit: string }  // 'fr', 'ฉาก', 'block'
+  phase?: string             // render: 'audio' | 'frames' | 'mux' | 'finalize'
+  progress?: { done: number; total?: number; unit: string; etaMs?: number }  // 'chunk', 'fr', 'ฉาก', 'block', 'รายการ'
   note?: string              // e.g. 'รอ rate limit 240s (429)'
   lastLine?: string
   lastWriteAt: number        // newest mtime seen across logs; drives the 'เงียบ' badge
@@ -66,7 +67,7 @@ State lives in `$.state` (session scope), so a hot reload keeps it. Running jobs
 
 | kind | Command matches | Logs read | Progress source |
 |---|---|---|---|
-| render | `producer_mode.py render-video` without `--no-render` | `<ep>/producer_render.log`, `<ep>/render_manifest.json`, plus the task output | Phase from the last `RUN <cmd>` line after the offset: `render.cjs` → stills, ffmpeg writing `final_unnormalized` → encode, `loudnorm` → loudnorm. In encode, the last `frame=N` against `estimated_frames` from a manifest whose `created_at` is at or after `startedAt` gives a % and an ETA. |
+| render | `producer_mode.py render-video` without `--no-render` | `<ep>/producer_render.log`, plus the task output | The new region of the log is read in order as a small state machine. A `RUN … audio_concat`/`merged_audio` line → `audio`. `RUN … render.cjs` → `frames`. `frames N, chunks C, todo T, workers W` → `frames`, total T chunks, and N kept as the frame count. `chunk x done (k/T) Ss` → k/T chunks with ETA `S·(T−k)/k`. `video ready …` → `mux`. A `RUN … video.mp4` line → `mux`. After that, `frame=n … elapsed=h:mm:ss` → `finalize`, n/N frames, with ETA from `elapsed`. Phase must not rely on `RUN` lines alone: `producer_renderer._run_subprocess` writes its `RUN` header without a flush, so the header lands after that command's own output (the minimal renderer's `_run` flushes). `render_manifest.json` is not read. `node render.cjs` is the long step (the asteroid run logged `chunk 21 done (23/40) 407s`); the trailing `frame=` lines come from the ~27 s loudnorm copy. |
 | tts | `producer_mode.py produce-tts` | `<ep>/` listing, plus the task output | Count of `scene_NN.wav` with mtime ≥ `startedAt` against a total fixed at registration. The total is the length of `<ep>/script.json` (a list of scenes), cut to `--limit` when given. Without `--force`, scenes whose wav already exists are subtracted, because `producer_tts.py:283` skips them. Do not use `producer_plan.json` `script_draft.scene_count`: it is `0` on the asteroid episode. |
 | fetch | `fetch_official.py`, `search_official.py`, `producer_mode.py produce-assets` | redirect target or task output | Count of asset lines. A trailing `429 on … waiting Ns` sets `note` to `รอ rate limit Ns (429)`. A `download failed:` line is kept as `lastLine`. |
 | score | `producer_score.py render` | redirect target or task output | `pad block b/nb` (split on `\r`). The lines `pad + drone`, `air / events` and `reverb` give the phase. |
@@ -80,11 +81,11 @@ State lives in `$.state` (session scope), so a hot reload keeps it. Running jobs
 
 1. **Register.** `on('tool.call', { tool: 'Bash' })` awaits `next(e)` and returns that result unchanged. If the result carries `backgroundTaskId` (including commands backgrounded by Ctrl+B or by timeout), the hook does the following inside its own try:
    - classify the command
-   - record each log's current size as its `offset`
+   - record each shared log's current text length as its `offset` (see Error Handling)
    - append the job
    - open the pane
    - start the timer if it is not already running
-2. **Poll.** `$.clock.every(2000)` runs only while any job is running and is cancelled when none is. For each running job it stats each log. When a log's mtime changed, it reads from `max(offset, size − 16 KB)` to the end, splits on `\n` and `\r`, runs the kind's parser, and writes the job back. One `update` call per tick covers all jobs.
+2. **Poll.** `$.clock.every(2000)` runs only while any job is running and is cancelled when none is. For each running job it stats each log. When a log's mtime changed, it reads the file. `$.fs.read` has no range read, so the whole file is read. It keeps the text after `offset`, capped to the last 256 K characters, splits on `\n` and `\r`, runs the kind's parser over that whole region, and writes the job back. One `update` call per tick covers all jobs.
 3. **Finish.** `on('prompt.submit')` with `e.origin.kind === 'task-notification'` parses the task id and status out of `e.text`, marks the matching job `done` or `failed`, sets `endedAt`, and raises a toast:
    - `render เสร็จ · 4:12`
    - `tts พัง · <lastLine>`
@@ -101,7 +102,7 @@ State lives in `$.state` (session scope), so a hot reload keeps it. Running jobs
 
 ```
 asteroid-impact-plan
-● render  encode ██████████░░░░░  62%  12,410/19,946 fr · ETA 0:41 · 4:12
+● render  ██████████░░░░░  62% frames · 25/40 chunk · ETA 4:10 · 7:02
 ● fetch   118 รายการ · ⏳ รอ rate limit 240s (429) · 2:03
 ◐ score   pad block 34/80 · 0:51
 ─ จบแล้ว ─
@@ -129,11 +130,11 @@ Raised only on finish or failure. Native notifications (`$.ui.notify`) are not u
 
 ## Error Handling
 
-- **Stale log content:** reading starts from the byte offset recorded at registration, so an older run's `frame=19946` cannot show 100 % at start. A `render_manifest.json` with `created_at` before `startedAt` is ignored. TTS counts only wav files with mtime ≥ `startedAt`.
+- **Stale log content:** a shared, append-only log is read only from the offset recorded at registration, so an older run's `chunk 40 done (40/40)` cannot show 100 % at start. The shared logs are `<ep>/producer_render.log` and a `>>` or `tee -a` target. The offset is in characters, because reads are text. A `>` or `tee` target and the task output start fresh, so their offset is 0. A file shorter than its offset was truncated, and it is read from the start. TTS counts only wav files with mtime ≥ `startedAt`.
 - **Never disturbs Claude's work:** the `tool.call` hook returns the result of `next(e)` whatever happens in bookkeeping, and the `prompt.submit` hook never rewrites the prompt.
 - **Parser failure:** a parser that throws leaves that job with `lastLine` only, and the tick goes on for the other jobs. A missing log shows `ยังไม่มี log`, which is not an error.
 - **Lost notification:** if a session dies mid-job, the silence badge is what remains visible. No job is auto-ended.
-- **Cost:** each tick does at most a few stats and 16 KB reads per running job, plus one directory listing for TTS. `script.json` is read once per TTS job.
+- **Cost:** each tick does a stat per log. A whole-file read happens only when that log's mtime changed (`producer_render.log` is 75 KB after many runs). TTS adds one directory listing. `script.json` is read once per TTS job.
 
 ## Testing
 
@@ -150,8 +151,8 @@ Raised only on finish or failure. Native notifications (`$.ui.notify`) are not u
    - `producer_score.py render --episode …`
 
    Parsers against excerpts copied from the asteroid episode's logs:
-   - `frame=` lines
-   - `RUN` phase lines
+   - `frames N, chunks …`, `chunk x done (k/T) Ss` and `video ready` lines
+   - `frame=` lines after `video ready`, and a `RUN` header that arrives after its own output
    - `429 … waiting` lines
    - `pad block` with `\r`
 
