@@ -42,6 +42,21 @@ The choice is copied into the prepared props, so it is part of the render revisi
 
 Render preflight also warns when a video clip is shorter than its slot, when several `local_reframe` slots crop the same still, and when assets in `visual_timeline.json` are missing from the render props (repairs must be synced into `asset_manifest.json`). Inspection stills before consent: `python scripts/minimal_doc_stills.py --plan <plan> --times 3,66,570` (same timeline and path handling as the render).
 
+## Composed score and explainer graphics
+
+The global `background_bed_*` settings loop a file from `Songs/`. An episode can instead use its own bed, set in the plan (part of the render revision):
+
+```json
+"render_settings": {"renderer": "minimal_doc",
+                    "background_bed": {"path": "score/score_bed.wav", "volume_db": -18.0, "stereo": true}}
+```
+
+The path is episode-relative and must exist. The bed goes through the same sidechain ducking chain; `stereo: true` keeps the whole mix (bed, SFX cues, final AAC) at 48 kHz stereo instead of the narration's mono 24 kHz. A procedural score is authored as `score/score_cues.json` (chords, per-section moods and events; see `src/producer_score.py`) and rendered with `python scripts/producer_score.py onsets --episode <dir>` then `render --episode <dir>`. Nobody hears the score inside the tool, so a person must listen before render consent.
+
+Flat explainer graphics use `doc_renderer/gfx_kit/` (`kit.js` scene primitives and mascot, `template.html`, `record.cjs` recorder at the 25 fps minimal_doc rate). Designed SFX stems for them are built with `src/producer_sfx_synth.py` and added to `sfx_cues.json` at the slot start.
+
+## Framing overrides
+
 Optional per-episode framing overrides go in `minimal_render_overrides.json` next to the plan (also part of the revision). Keys are asset file names; `kind` (`cover`, `plate`, `figure`, `slide`), `anchor` `[x, y]` (0–1 zoom focus), `zoom` `[start, end]`, `min_zoom` (crops burned-in corner credits) and `caption_title` (display-only). `end_card.sources` / `end_card.note` replace the generated end card. The outro hold (`outro_hold_seconds`) is where the end card appears.
 
 | Environment variable | Default | Purpose |

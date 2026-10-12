@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Starter page for an episode's explainer graphics. Copy to .mp/<episode>/<graphics dir>/gfx.html;
+     the relative paths below assume that location (fonts in .mp/fonts, kit in doc_renderer/gfx_kit).
+     Record: node doc_renderer/gfx_kit/record.cjs <that gfx.html> demo 8 <out.mp4>
+     Rules: every number/claim matches the reviewed script; keep the qualification footer on screen;
+     anchor reveal times to speech (scripts/producer_score.py onsets, per-scene ASR). -->
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500&display=block" rel="stylesheet">
+<style>
+@font-face{font-family:Kanit;src:url("../../fonts/Kanit-Bold.ttf");font-weight:700}
+@font-face{font-family:Kanit;src:url("../../fonts/Kanit-Black.ttf");font-weight:900}
+html,body{margin:0;background:#0c0a24;overflow:hidden}
+svg{display:block}
+text{font-family:Kanit,'Leelawadee UI',sans-serif}
+</style></head><body>
+<script src="../../../doc_renderer/gfx_kit/kit.js"></script>
+<script>
+const NAME = new URLSearchParams(location.search).get('g');
+
+function demo() {
+  const { svg } = stage();
+  const bg = background(svg, 11);
+  const cam = el('g', {}, svg);
+  const earth = planet(cam, 90, 'earth', 9);
+  const m = mascot(cam, 1500, 880, 1);
+  overlays(svg);
+  const hud = el('g', {}, svg);
+  const title = chip(hud, 960, 110, [{ text: 'หัวข้อของกราฟิก', size: 52, color: C.white, weight: 900 }]);
+  const foot = footer(hud, 'ข้อความกำกับ: แบบจำลอง / คำนวณสมมติ / ที่มา', 0.5);
+  return t => {
+    bg(t);
+    earth.state({ x: 960, y: 560, s: pop(t, .4, .6) });
+    m.update(t, { in: .8, look: [-1, -.4], blink: [3.0], hop: [5.0], bubble: { ch: '?', tIn: 2.0, tOut: 4.5 } });
+    title.update(t, .2);
+    foot(t);
+  };
+}
+
+const SCENES = { demo };
+let render = null;
+window.__ready = document.fonts.load('900 40px Kanit').then(() => document.fonts.load('700 40px Kanit'))
+  .then(() => { render = SCENES[NAME](); render(0); return true; });
+window.__seek = t => render(t);
+</script>
+</body></html>
