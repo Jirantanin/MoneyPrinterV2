@@ -1,4 +1,4 @@
-"""Designed SFX primitives for explainer graphics (pops, ticks, bells, whooshes, booms), numpy only.
+"""Designed SFX primitives for explainer graphics and opening stings (pops, ticks, bells, whooshes, booms, alerts), numpy only.
 
 Build one stem per graphic clip with Stem(seconds).add(sound, t, pan) at the clip's animation event
 times, then write_wav(stem.finished()) and add it to sfx_cues.json at the slot start (about -21 dB).
@@ -88,6 +88,15 @@ def engine(d, lvl=.25):
     t = tt(d)
     x = lp(rng.standard_normal(len(t)), 900) * (1 + .3 * np.sin(2 * np.pi * 7 * t)) + .4 * np.sin(2 * np.pi * 110 * t)
     return x * np.minimum(1, t / .4) * np.minimum(1, (d - t) / .4) * lvl
+
+
+def alert(f=1175.0, d=.24, lvl=.7):
+    """Short warning beep ("แป๊น"): a soft square tone that droops slightly, like a console alarm, not a siren."""
+    t = tt(d)
+    ph = 2 * np.pi * np.cumsum(f * (1 - .03 * t / d)) / SR
+    tone = .6 * np.tanh(3 * np.sin(ph)) + .4 * np.sin(2 * ph)
+    env = np.minimum(1, t / .006) * np.exp(-t * 6) * np.minimum(1, (d - t) / .02)
+    return lp(tone * env, 6000) * lvl
 
 
 class Stem:
