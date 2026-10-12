@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from producer_visual_policy import (
+    plan_visual_source_policy,
     policy_review_warnings,
     policy_warnings,
     visual_policy_report,
@@ -565,7 +566,8 @@ def build_render_preflight(
                                  "section_index": metadata.get("section_index") or scene_report.get("section_index") or scene_report["scene_index"],
                                  "local_path": asset["path"], "media_type": asset["type"],
                                  "slot_duration_seconds": scene_asset_durations[offset]})
-    visual_policy = visual_policy_report(render_slots)
+    visual_policy = visual_policy_report(
+        render_slots, policy=plan_visual_source_policy(read_json(episode_path / "producer_plan.json", {})))
     visual_policy_manual_review_passed = sequence_review_passed(episode_path, render_slots)
     errors.extend(message for message in policy_warnings(visual_policy) if message not in errors)
     warnings.extend(message for message in policy_review_warnings(visual_policy) if message not in warnings)

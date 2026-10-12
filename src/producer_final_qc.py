@@ -11,6 +11,7 @@ from typing import Any
 from producer_contract import file_hash, read_json, sequence_review_passed
 
 from producer_visual_policy import (
+    plan_visual_source_policy,
     policy_review_warnings,
     policy_warnings,
     visual_policy_report,
@@ -219,7 +220,10 @@ def build_final_qc(
 
     asset_entries = render_preflight.get("render_slots") or (asset_manifest.get("entries") if isinstance(asset_manifest.get("entries"), list) else [])
     if asset_entries:
-        visual_policy = visual_policy_report(render_preflight.get("render_slots") or [entry for entry in asset_entries if isinstance(entry, dict)])
+        visual_policy = visual_policy_report(
+            render_preflight.get("render_slots") or [entry for entry in asset_entries if isinstance(entry, dict)],
+            policy=plan_visual_source_policy(read_json(episode_path / "producer_plan.json", {})),
+        )
         policy_messages = policy_warnings(visual_policy)
         policy_review_messages = policy_review_warnings(visual_policy)
         if sequence_review_passed(episode_path, render_preflight.get("render_slots") or []):

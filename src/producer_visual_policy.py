@@ -95,6 +95,14 @@ def default_visual_source_policy() -> dict[str, Any]:
     }
 
 
+def plan_visual_source_policy(plan: dict[str, Any]) -> dict[str, Any] | None:
+    """The episode's own source policy (``visual_rules.source_policy`` in producer_plan.json), e.g. a
+    user-directed cap override; None falls back to the default policy."""
+    rules = plan.get("visual_rules") if isinstance(plan, dict) else None
+    policy = rules.get("source_policy") if isinstance(rules, dict) else None
+    return policy if isinstance(policy, dict) and isinstance(policy.get("caps"), dict) else None
+
+
 def _limit_for(total: int, ratio: float) -> int:
     if total <= 0:
         return 0
