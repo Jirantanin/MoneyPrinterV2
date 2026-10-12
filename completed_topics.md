@@ -1,6 +1,6 @@
 # Completed Topics
 
-ไฟล์นี้เป็นรายการหัวข้อที่ทำเสร็จแล้วและมี `final.mp4` พร้อม `final_qc.json` ผ่าน
+ไฟล์นี้เป็นรายการหัวข้อที่ทำเสร็จแล้ว: มี `final.mp4` และอัปโหลดหรือตั้งเวลาบน YouTube แล้ว
 ใช้เช็กก่อนเริ่มหัวข้อใหม่ เพื่อไม่ทำซ้ำโดยไม่ตั้งใจ
 
 ## หัวข้อที่ทำเสร็จแล้ว
@@ -18,12 +18,15 @@
 | 2026-07-07 | ดาวที่ซ่อนตัวในหมอกดำ: Barnard 68 | [.mp/podcast_v2_barnard-68-dark-nebula_20260707_181109](.mp/podcast_v2_barnard-68-dark-nebula_20260707_181109) |
 | 2026-07-15 | Biosphere 2: เมื่อมนุษย์สร้างโลกปิด แล้วออกซิเจนหายไปไหน | [.mp/podcast_v2_biosphere-2-closed-world-beats_20260715_115305](.mp/podcast_v2_biosphere-2-closed-world-beats_20260715_115305) |
 | 2026-07-20 | คำสัญญาที่เดินทางไกลกว่ามนุษย์ \| Voyager Golden Record | [.mp/podcast_v2_voyager-golden-record-promise_20260717_141324](.mp/podcast_v2_voyager-golden-record-promise_20260717_141324) |
+| 2026-09-17 | Webb เจอโลกน้ำแข็ง 27 ดวง — และพวกมันจำอดีตเมื่อ 4.6 พันล้านปีก่อนได้ | [.mp/podcast_v2_tno-remember-past_20260917](.mp/podcast_v2_tno-remember-past_20260917) |
+| 2026-10-05 | ถ้าเกิดสงครามนิวเคลียร์ สิ่งที่คร่าชีวิตคนมากที่สุดอาจไม่ใช่ระเบิด \| Nuclear Winter | [.mp/podcast_v2_nuclear-winter-soot-not-blast_20261005_112716](.mp/podcast_v2_nuclear-winter-soot-not-blast_20261005_112716) |
+| 2026-10-09 | ถ้ามนุษย์ต้องอยู่บนดาวอังคาร ทำไมใต้ดินอาจเป็นที่เดียวที่รอดได้ \| อาณานิคมใต้ดิน | [.mp/podcast_v2_mars-underground-colony_20261009_102647](.mp/podcast_v2_mars-underground-colony_20261009_102647) |
+| 2026-10-11 | ทำไมเรายังไม่เจอมนุษย์ต่างดาว? บางทีเราอาจเป็นสิ่งมีชีวิตรุ่นแรกๆ ของเอกภพ | [.mp/podcast_v2_firstborn-cosmic-silence_20261011_221035_revision_kurz-gfx_02](.mp/podcast_v2_firstborn-cosmic-silence_20261011_221035_revision_kurz-gfx_02) |
+| 2026-10-12 | ดาวเคราะห์น้อยพุ่งชนโลกอีกครั้ง เราจะรอดไหม? จากยานชนหินถึงคลังเมล็ดพันธุ์ | [.mp/podcast_v2_asteroid-impact-plan_20261012_172530](.mp/podcast_v2_asteroid-impact-plan_20261012_172530) |
 
 ## วิธีเพิ่มหัวข้อใหม่
 
-เพิ่มแถวใหม่เมื่อ episode มีทั้ง:
-
-- `final.mp4`
-- `final_qc.json` ที่ผ่าน
+เพิ่มแถวใหม่เมื่ออัปโหลดหรือตั้งเวลาบน YouTube เสร็จ (มี `final.mp4` และ `upload_pack/youtube_upload_receipt.json`)
+แม้ `final_qc.json` จะยังเป็น `review` เพราะรอนนฟัง
 
 ถ้าเป็น revision ของหัวข้อเดิม ให้แก้ลิงก์ artifact ของแถวเดิมแทนการเพิ่มหัวข้อซ้ำ
