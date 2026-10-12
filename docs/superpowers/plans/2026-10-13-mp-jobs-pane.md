@@ -1929,13 +1929,7 @@ Recorded 2026-10-13 from `scratchpad/mp-jobs-spike.log` in the desktop Code tab 
 
 - **(a) Pane:** drawn unasked. `session.start ... unasked-open={"isPlaced":true}`, then `render Pane surface=desktop placement=dock cols=41`. The docked pane is only **41 columns** wide. Note that `session.start` `e.surface` was `null`; the render's `e.surface` is `desktop`.
 - **(b) Status line:** visible. นน saw both the pane and the status line.
-- **(c) Background Bash:** `result={"stdout":"","stderr":"","interrupted":false,"isImage":false,"noOutputExpected":false,"backgroundTaskId":"bb7rwf3pb"}`. The `text` is `Command running in background with ID: bb7rwf3pb. Output is being written to: C:\...	asksb7rwf3pb.output. You will be notified when it completes. To check interim output, use Read on that file path.` The path is followed by `. You will be notified…` **on the same line**, so the plan's `(\S.*?)\s*$` regex would swallow that sentence. The path must end at `.output`.
-- **(d) Notification:** `prompt.submit origin={"kind":"task-notification"}` with text `<task-notification>
-<task-id>bb7rwf3pb</task-id>
-<tool-use-id>…</tool-use-id>
-<output-file>…</output-file>
-<status>completed</status>
-<summary>Background command "Run a short fake job in the background" completed (exit code 0)</summary>
-</task-notification>`. `<task-id>` equals `backgroundTaskId`, and the shape matches `NOTIFY` and `finishedTasks`.
+- **(c) Background Bash:** `result={"stdout":"","stderr":"","interrupted":false,"isImage":false,"noOutputExpected":false,"backgroundTaskId":"bb7rwf3pb"}`. The `text` is `Command running in background with ID: bb7rwf3pb. Output is being written to: C:\Users\66984\AppData\Local\Temp\claude\<project>\<session>\tasks\bb7rwf3pb.output. You will be notified when it completes. To check interim output, use Read on that file path.` The path is followed by `. You will be notified…` **on the same line**, so the plan's `(\S.*?)\s*$` regex would swallow that sentence. The path must end at `.output`.
+- **(d) Notification:** `prompt.submit origin={"kind":"task-notification"}`. Its text is the `<task-notification>` block exactly as `NOTIFY` builds it: `<task-id>bb7rwf3pb</task-id>`, `<tool-use-id>`, `<output-file>`, `<status>completed</status>`, `<summary>Background command "Run a short fake job in the background" completed (exit code 0)</summary>`, one tag per line. `<task-id>` equals `backgroundTaskId`.
 - **(e) Timer from a `tool.call` `$`:** not confirmed by eye. The ledger ruling avoids depending on it: the ticker starts in `session.start`, the documented home for work that outlives a dispatch.
 - **Validator rule found while writing the spike:** `$` may not be stored (`session$ = $` is refused). `$` may only be passed to functions declared at the top level of the file. Closures inside `register` cannot receive it, but a timer callback that calls a top-level function with `$` is accepted.
