@@ -57,7 +57,7 @@ Flat explainer graphics use `doc_renderer/gfx_kit/` (`kit.js` scene primitives a
 
 ## Framing overrides
 
-Optional per-episode framing overrides go in `minimal_render_overrides.json` next to the plan (also part of the revision). Keys are asset file names; `kind` (`cover`, `plate`, `figure`, `slide`), `anchor` `[x, y]` (0–1 zoom focus), `zoom` `[start, end]`, `min_zoom` (crops burned-in corner credits) and `caption_title` (display-only). `end_card.sources` / `end_card.note` replace the generated end card. The outro hold (`outro_hold_seconds`) is where the end card appears.
+Optional per-episode framing overrides go in `minimal_render_overrides.json` next to the plan (also part of the revision). Keys are asset file names; `kind` (`cover`, `plate`, `figure`, `slide`), `anchor` `[x, y]` (0–1 zoom focus), `zoom` `[start, end]` (also for video clips; `[1, 1]` stops the default 3% push, e.g. for graphic runs cut into slot pieces), `min_zoom` (crops burned-in corner credits) and `caption_title` (display-only). `end_card.sources` / `end_card.note` replace the generated end card. The outro hold (`outro_hold_seconds`) is where the end card appears.
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |

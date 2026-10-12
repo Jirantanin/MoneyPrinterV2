@@ -235,7 +235,8 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
                                     "last frame holds")
                 shots.append({**common, "kind": "video", "framesBase": _file_url(frames_dir) + "/f_",
                               "frameCount": frame_count, "src": _file_url(frames_dir / "f_00001.jpg"),
-                              "blur": None, "w": 1920, "h": 1080, "anchor": [0.5, 0.5], "zoom": None, "minZoom": 0})
+                              "blur": None, "w": 1920, "h": 1080, "anchor": [0.5, 0.5],
+                              "zoom": list(override["zoom"]) if override.get("zoom") else None, "minZoom": 0})
                 start += durations[j]
                 continue
             with Image.open(source) as probe:

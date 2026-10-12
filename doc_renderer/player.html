@@ -210,7 +210,8 @@ window.__seek = (t) => {
         mover.dataset.frame = src; mover.src = src;
         pending.push(mover.decode().catch(() => { throw new Error('decode ' + src); }));
       }
-      mover.style.transform = `scale(${1.0 + 0.03 * p})`;
+      const [v0, v1] = s.zoom || [1.0, 1.03];   // [1, 1] for clips that carry their own camera (graphic runs)
+      mover.style.transform = `scale(${v0 + (v1 - v0) * p})`;
     } else if (s.kind === 'slide') {
       mover.style.transform = `scale(${1 + 0.025 * p})`;
     } else {

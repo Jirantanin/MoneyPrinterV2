@@ -106,6 +106,10 @@ class TimelineTests(unittest.TestCase):
         self.assertTrue(any("last frame holds" in w for w in tl["warnings"]))
         with Image.open(video["src"].replace("file:///", "")) as frame:
             self.assertEqual(frame.size, (1920, 1080))
+        self.assertIsNone(video["zoom"])                                 # player default push 1.00 -> 1.03
+        held = build_timeline(props, narration_end=8.0, assets_dir=self.dir / "assets",
+                              overrides={"assets": {"b.mp4": {"zoom": [1, 1]}}})["shots"][1]
+        self.assertEqual(held["zoom"], [1, 1])
 
     def test_rejects_unknown_types_and_inconsistent_props(self):
         props = props_for(self.images[:2], counts=[2], scene_durations=[6.0], titles=["A"], types=["image", "audio"])
