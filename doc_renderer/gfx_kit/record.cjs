@@ -2,6 +2,7 @@
 // The page must load kit.js, expose window.__ready (Promise) and window.__seek(t), and read ?g=<name>.
 //   node doc_renderer/gfx_kit/record.cjs <page.html> <name> <seconds> <out.mp4> [--fps 25]
 //   node doc_renderer/gfx_kit/record.cjs <page.html> <name> <seconds> <out_prefix> --stills 1.5,8,14
+//   --from -0.8 starts at page time -0.8 s (crossfade handles); window.__SFX is saved next to the MP4 as <out>.sfx.json
 // Record at the episode render rate (minimal_doc: 25 fps) and to the exact slot length.
 const path = require('path');
 const fs = require('fs');
@@ -21,6 +22,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
 (async () => {
   const [page_, name, seconds, out] = process.argv.slice(2);
   const fps = Number(arg('--fps', 25)), total = Math.round(Number(seconds) * fps), stills = arg('--stills', null);
+  const from = Number(arg('--from', 0));   // page time of the first frame (negative = lead-in handle)
   const profile = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gfxkit-'));
   const browser = await puppeteer.launch({ executablePath: findChrome(), headless: true, userDataDir: profile,
     args: ['--no-sandbox', '--allow-file-access-from-files', '--hide-scrollbars', '--force-color-profile=srgb'] });
@@ -37,8 +39,10 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
   } else {
     const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
       '-c:v', 'libx264', '-crf', '14', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out], { stdio: ['pipe', 'inherit', 'inherit'] });
+    const sfx = await page.evaluate(() => window.__SFX || null);
+    if (sfx) fs.writeFileSync(out.replace(/\.mp4$/i, '') + '.sfx.json', JSON.stringify(sfx));
     for (let i = 0; i < total; i++) {
-      await page.evaluate(v => window.__seek(v), i / fps);
+      await page.evaluate(v => window.__seek(v), from + i / fps);
       const buf = await page.screenshot({ type: 'jpeg', quality: 95 });
       if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
     }

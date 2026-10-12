@@ -232,3 +232,26 @@ function mascot(parent, x, y, scale = 1) {
 
 // draw-on helper for paths with pathLength=1
 const drawOn = (e, k) => e.setAttribute('stroke-dasharray', `${clamp(k)} 2`);
+
+// ---------------------------------------------------------------- scene scaffolding
+// base(seed): stage + animated space background + camera group; finish(svg): vignette + HUD layer on top.
+function base(seed = 11) {
+  const { svg } = stage();
+  const bg = background(svg, seed);
+  const cam = el('g', {}, svg);
+  return { svg, bg, cam };
+}
+function finish(svg) { overlays(svg); return el('g', {}, svg); }
+// camera(cam, scale, pivotX, pivotY, dx, dy): zoom about a pivot (slow push-ins, focus moves)
+function camera(cam, s, px = 960, py = 540, dx = 0, dy = 0) {
+  set(cam, { transform: `translate(${px + dx},${py + dy}) scale(${s}) translate(${-px},${-py})` });
+}
+// miniPlanet(parent, x, y, r, fill): the top arc of a small planet for the mascot to stand on (x, y = top point)
+function miniPlanet(parent, x, y, r = 200, fill = '#3fa9ff') {
+  const g = el('g', {}, parent);
+  el('circle', { cx: x, cy: y + r, r, fill }, g);
+  el('circle', { cx: x - r * .45, cy: y + r * .55, r: r * .12, fill: '#000', opacity: .15 }, g);
+  el('circle', { cx: x + r * .3, cy: y + r * .35, r: r * .08, fill: '#000', opacity: .15 }, g);
+  el('path', { d: `M${x - r * .97},${y + r * 1.2} A${r},${r} 0 0 1 ${x},${y}`, fill: 'none', stroke: '#fff', 'stroke-width': 8, opacity: .25, 'stroke-linecap': 'round' }, g);
+  return g;
+}
