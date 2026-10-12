@@ -185,6 +185,20 @@ def _background_settings() -> dict[str, Any]:
         return {}
 
 
+def _episode_bed_override(episode_dir: Path) -> dict[str, Any] | None:
+    """Per-episode bed from producer_plan.json render_settings.background_bed (e.g. a composed score).
+
+    {"path": "score/score_bed.wav", "volume_db": -18.0, "stereo": true}; the path is episode-relative.
+    """
+    plan_path = episode_dir / "producer_plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8")) if plan_path.is_file() else {}
+    render_settings = plan.get("render_settings") if isinstance(plan, dict) else None
+    bed = render_settings.get("background_bed") if isinstance(render_settings, dict) else None
+    if not isinstance(bed, dict) or not str(bed.get("path") or "").strip():
+        return None
+    return bed
+
+
 def _mix_background_bed(
     *,
     root_dir: Path,
@@ -196,22 +210,31 @@ def _mix_background_bed(
     log_path: Path,
 ) -> tuple[Path, dict[str, Any]]:
     settings = _background_settings()
-    enabled = bool(settings.get("background_bed_enabled", False))
-    env_enabled = os.environ.get("PODCAST_BACKGROUND_BED_ENABLED")
-    if env_enabled is not None:
-        enabled = env_enabled.strip().lower() in {"1", "true", "yes", "on"}
-    if not enabled:
-        return narration_audio, {"enabled": False, "status": "disabled"}
+    override = _episode_bed_override(episode_dir)
+    stereo = False
+    if override is not None:
+        bed_path = str((episode_dir / str(override["path"])).resolve())
+        if not Path(bed_path).is_file():
+            raise RuntimeError(f"episode background bed is missing: {bed_path}")
+        settings = {**settings, "background_bed_volume_db": override.get("volume_db", settings.get("background_bed_volume_db", -16.0))}
+        stereo = bool(override.get("stereo", False))
+    else:
+        enabled = bool(settings.get("background_bed_enabled", False))
+        env_enabled = os.environ.get("PODCAST_BACKGROUND_BED_ENABLED")
+        if env_enabled is not None:
+            enabled = env_enabled.strip().lower() in {"1", "true", "yes", "on"}
+        if not enabled:
+            return narration_audio, {"enabled": False, "status": "disabled"}
 
-    bed_path = os.environ.get("PODCAST_BACKGROUND_BED_PATH") or str(
-        settings.get("background_bed_path", "")
-    )
-    bed_path = _resolve_background_bed_path(root_dir, bed_path)
-    if not bed_path or not Path(bed_path).exists():
-        fallback = _find_background_bed_candidate(root_dir)
-        if not fallback:
-            return narration_audio, {"enabled": True, "status": "missing_bed_file"}
-        bed_path = fallback
+        bed_path = os.environ.get("PODCAST_BACKGROUND_BED_PATH") or str(
+            settings.get("background_bed_path", "")
+        )
+        bed_path = _resolve_background_bed_path(root_dir, bed_path)
+        if not bed_path or not Path(bed_path).exists():
+            fallback = _find_background_bed_candidate(root_dir)
+            if not fallback:
+                return narration_audio, {"enabled": True, "status": "missing_bed_file"}
+            bed_path = fallback
 
     output_path = episode_dir / "merged_audio_with_bed.wav"
     if output_path.exists() and output_path.stat().st_size > 100_000 and not force:
@@ -219,29 +242,13 @@ def _mix_background_bed(
     if output_path.exists():
         output_path.unlink()
 
-    volume_db = float(settings.get("background_bed_volume_db", -16.0))
-    ducking_ratio = float(settings.get("background_bed_ducking_ratio", 2.0))
-    fade_seconds = float(settings.get("background_bed_fade_seconds", 2.0))
-    fade_seconds = max(0.0, min(fade_seconds, max(0.0, total_duration / 2)))
-    fade_out_start = max(0.0, total_duration - fade_seconds)
-
-    bed_filters = [
-        f"atrim=0:{total_duration:.3f}",
-        "asetpts=PTS-STARTPTS",
-        f"volume={volume_db:.1f}dB",
-    ]
-    if fade_seconds > 0:
-        bed_filters.append(f"afade=t=in:st=0:d={fade_seconds:.3f}")
-        bed_filters.append(f"afade=t=out:st={fade_out_start:.3f}:d={fade_seconds:.3f}")
-
-    filter_complex = (
-        f"[0:a]apad=pad_dur={max(0.0, narration_pad_seconds):.3f},"
-        "asetpts=PTS-STARTPTS,asplit=2[narr_mix][narr_side];"
-        f"[1:a]{','.join(bed_filters)}[bed];"
-        f"[bed][narr_side]sidechaincompress=threshold=0.025:ratio={ducking_ratio:.2f}:"
-        "attack=80:release=900:makeup=1[ducked];"
-        "[narr_mix][ducked]amix=inputs=2:duration=first:normalize=0,"
-        "alimiter=limit=0.95[out]"
+    filter_complex = _bed_filter_complex(
+        total_duration=total_duration,
+        narration_pad_seconds=narration_pad_seconds,
+        volume_db=float(settings.get("background_bed_volume_db", -16.0)),
+        ducking_ratio=float(settings.get("background_bed_ducking_ratio", 2.0)),
+        fade_seconds=float(settings.get("background_bed_fade_seconds", 2.0)),
+        stereo=stereo,
     )
 
     try:
@@ -274,7 +281,42 @@ def _mix_background_bed(
         }
     if not output_path.exists() or output_path.stat().st_size <= 100_000:
         return narration_audio, {"enabled": True, "status": "invalid_output", "bed_path": bed_path}
-    return output_path, {"enabled": True, "status": "mixed", "bed_path": bed_path}
+    result = {"enabled": True, "status": "mixed", "bed_path": bed_path}
+    if override is not None:
+        result.update(source="episode_render_settings", stereo=stereo)
+    return output_path, result
+
+
+def _bed_filter_complex(
+    *,
+    total_duration: float,
+    narration_pad_seconds: float,
+    volume_db: float,
+    ducking_ratio: float,
+    fade_seconds: float,
+    stereo: bool = False,
+) -> str:
+    """Narration (input 0) over a ducked bed (input 1). Stereo keeps a 48 kHz stereo score wide downstream."""
+    fade_seconds = max(0.0, min(fade_seconds, max(0.0, total_duration / 2)))
+    fade_out_start = max(0.0, total_duration - fade_seconds)
+    fmt = "aformat=sample_rates=48000:channel_layouts=stereo," if stereo else ""
+    bed_filters = [
+        f"atrim=0:{total_duration:.3f}",
+        "asetpts=PTS-STARTPTS",
+        f"volume={volume_db:.1f}dB",
+    ]
+    if fade_seconds > 0:
+        bed_filters.append(f"afade=t=in:st=0:d={fade_seconds:.3f}")
+        bed_filters.append(f"afade=t=out:st={fade_out_start:.3f}:d={fade_seconds:.3f}")
+    return (
+        f"[0:a]{fmt}apad=pad_dur={max(0.0, narration_pad_seconds):.3f},"
+        "asetpts=PTS-STARTPTS,asplit=2[narr_mix][narr_side];"
+        f"[1:a]{fmt}{','.join(bed_filters)}[bed];"
+        f"[bed][narr_side]sidechaincompress=threshold=0.025:ratio={ducking_ratio:.2f}:"
+        "attack=80:release=900:makeup=1[ducked];"
+        "[narr_mix][ducked]amix=inputs=2:duration=first:normalize=0,"
+        "alimiter=limit=0.95[out]"
+    )
 
 
 def _sfx_filter_complex(cues: list[dict[str, Any]], *, sample_rate: int, channel_layout: str) -> str:
