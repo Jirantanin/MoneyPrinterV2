@@ -1,0 +1,6 @@
+{
+  "name": "mp-jobs",
+  "version": "0.1.0",
+  "description": "Live pane for MoneyPrinter render, TTS, fetch and score jobs Claude runs in the background",
+  "types": "./types/index.d.ts"
+}

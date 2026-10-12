@@ -32,3 +32,5 @@ remotion/.*props*.json
 remotion/public/final_retry_assets/
 remotion/public/producer_preview/
 /short_*.mp4
+
+claude-mods/*/.claude-plugin/types/
