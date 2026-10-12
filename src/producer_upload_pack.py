@@ -13,6 +13,7 @@ from typing import Any
 UPLOAD_PACK_VERSION = 2
 MAX_TITLE_LENGTH = 100
 MAX_DESCRIPTION_LENGTH = 5000
+MAX_DESCRIPTION_BYTES = 5000   # YouTube counts UTF-8 bytes (Thai = 3 per character); youtube_upload refuses more
 MAX_TAGS = 24
 MAX_DESCRIPTION_SOURCES = 8
 MIN_CHAPTER_COUNT = 3
@@ -414,6 +415,11 @@ def write_upload_pack(
     errors: list[str] = []
     if not Path(str(final_video)).exists():
         errors.append(f"final video missing: {final_video}")
+    description_bytes = len(description.encode("utf-8"))
+    if description_bytes > MAX_DESCRIPTION_BYTES:
+        errors.append(f"description is {description_bytes} bytes; YouTube allows {MAX_DESCRIPTION_BYTES} (Thai uses 3 bytes per "
+                      f"character) - shorten seo_packaging.upload_description by at least "
+                      f"{description_bytes - MAX_DESCRIPTION_BYTES} bytes")
     if final_qc.get("status") not in {"pass", "review"}:
         warnings.append(f"final QC status is {final_qc.get('status') or 'missing'}")
     # A cost report may be in review solely because an external or unmetered
@@ -449,6 +455,7 @@ def write_upload_pack(
         "source": description_source,
         "chapter_count": len(chapters),
         "uses_generated_fallback": description_source == "generated_fallback",
+        "bytes": description_bytes,
     }
 
     metadata = {

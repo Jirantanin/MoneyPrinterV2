@@ -116,6 +116,15 @@ class UploadPackTests(unittest.TestCase):
         self.assertLess(description.index("Source 5"), description.index("Source 0"))
         self.assertNotIn("Source 1", description)
 
+    def test_blocks_a_thai_description_over_youtube_byte_limit(self) -> None:
+        _, manifest = self._write_pack(
+            upload_description="ดาวเคราะห์น้อย " * 120,       # ~1,800 characters but over 5,000 UTF-8 bytes
+            render_props={"sceneTitles": ["บทนำ", "หลักฐาน", "บทสรุป"], "sceneDurations": [60.0, 60.0, 60.0]},
+        )
+        self.assertEqual(manifest["status"], "blocked")
+        self.assertGreater(manifest["description_review"]["bytes"], 5000)
+        self.assertTrue(any("bytes" in error and "upload_description" in error for error in manifest["errors"]))
+
     def test_marks_pack_for_review_when_public_copy_or_chapters_are_missing(self) -> None:
         _, manifest = self._write_pack(render_props={})
 
