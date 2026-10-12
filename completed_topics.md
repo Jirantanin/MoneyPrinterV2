@@ -18,7 +18,12 @@
 | 2026-07-07 | ดาวที่ซ่อนตัวในหมอกดำ: Barnard 68 | [.mp/podcast_v2_barnard-68-dark-nebula_20260707_181109](.mp/podcast_v2_barnard-68-dark-nebula_20260707_181109) |
 | 2026-07-15 | Biosphere 2: เมื่อมนุษย์สร้างโลกปิด แล้วออกซิเจนหายไปไหน | [.mp/podcast_v2_biosphere-2-closed-world-beats_20260715_115305](.mp/podcast_v2_biosphere-2-closed-world-beats_20260715_115305) |
 | 2026-07-20 | คำสัญญาที่เดินทางไกลกว่ามนุษย์ \| Voyager Golden Record | [.mp/podcast_v2_voyager-golden-record-promise_20260717_141324](.mp/podcast_v2_voyager-golden-record-promise_20260717_141324) |
+| 2026-08-04 | เราตายทุกวัน: คนที่ตื่นขึ้นมาอาจไม่ใช่คนเดิม | [.mp/podcast_v2_we-die-every-day_20260804_123115](.mp/podcast_v2_we-die-every-day_20260804_123115) |
+| 2026-08-17 | Denisovan ตัวใหญ่แค่ไหน? เบาะแสจากกระดูกขาใต้ทะเลไต้หวัน | [.mp/podcast_v2_denisovan-large-body-taiwan-20260817_20260817_171113](.mp/podcast_v2_denisovan-large-body-taiwan-20260817_20260817_171113) |
+| 2026-08-31 | ระเบิดฮิโรชิมาสร้างโลหะที่ไม่เคยพบมาก่อน? หลักฐานจิ๋วหลัง 80 ปี | [.mp/podcast_v2_hiroshimaite-alloy_20260831_104932](.mp/podcast_v2_hiroshimaite-alloy_20260831_104932) |
 | 2026-09-17 | Webb เจอโลกน้ำแข็ง 27 ดวง — และพวกมันจำอดีตเมื่อ 4.6 พันล้านปีก่อนได้ | [.mp/podcast_v2_tno-remember-past_20260917](.mp/podcast_v2_tno-remember-past_20260917) |
+| 2026-09-24 | ดาวมวลสองเท่าดาวพฤหัสใน IC 348: Brown dwarf เกิดอย่างดาวฤกษ์ แต่มีจานที่อาจสร้างดาวเคราะห์ | [.mp/podcast_v2_two-jupiter-mass-brown-dwarf-ic348_20260924_150717](.mp/podcast_v2_two-jupiter-mass-brown-dwarf-ic348_20260924_150717) |
+| 2026-10-04 | วงแหวนที่ไม่มีใครถ่ายภาพได้ กำลังเปลี่ยนไปต่อหน้าเรา \| คาริคโล | [.mp/podcast_v2_chariklo-rings-changing_20261004_122050](.mp/podcast_v2_chariklo-rings-changing_20261004_122050) |
 | 2026-10-05 | ถ้าเกิดสงครามนิวเคลียร์ สิ่งที่คร่าชีวิตคนมากที่สุดอาจไม่ใช่ระเบิด \| Nuclear Winter | [.mp/podcast_v2_nuclear-winter-soot-not-blast_20261005_112716](.mp/podcast_v2_nuclear-winter-soot-not-blast_20261005_112716) |
 | 2026-10-09 | ถ้ามนุษย์ต้องอยู่บนดาวอังคาร ทำไมใต้ดินอาจเป็นที่เดียวที่รอดได้ \| อาณานิคมใต้ดิน | [.mp/podcast_v2_mars-underground-colony_20261009_102647](.mp/podcast_v2_mars-underground-colony_20261009_102647) |
 | 2026-10-11 | ทำไมเรายังไม่เจอมนุษย์ต่างดาว? บางทีเราอาจเป็นสิ่งมีชีวิตรุ่นแรกๆ ของเอกภพ | [.mp/podcast_v2_firstborn-cosmic-silence_20261011_221035_revision_kurz-gfx_02](.mp/podcast_v2_firstborn-cosmic-silence_20261011_221035_revision_kurz-gfx_02) |
