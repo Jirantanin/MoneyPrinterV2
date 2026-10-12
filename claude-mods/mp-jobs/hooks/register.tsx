@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Job, LogRef } from '../types'
 import { classify, logTargets, taskOutputPath } from './classify'
 import { finishedTasks, sceneCount, sliceNew, ttsDone, ttsTotal } from './parse'
-import { clock, finish, keep, mergeJob, statusText } from './view'
+import { bar, clock, detail, episodeSlug, finish, keep, mergeJob, percent, silentFor, statusText } from './view'
 
 const PANE = 'mp-jobs'
 const REPO = /[\\/]MoneyPrinterV2(?:[\\/]|$)/i
@@ -194,4 +194,54 @@ export const register: Register = on => {
 
     return next(e)
   }).catch(($, e, next) => next(e))
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Text } = $.ui.resolve(e)
+    const list = await read($, jobs)
+    const now = await $.clock.now()
+    const running = list.filter(j => j.status === 'running')
+    const finished = list.filter(j => j.status !== 'running')
+    const dirs = [...new Set(list.flatMap(j => (j.episodeDir === undefined ? [] : [j.episodeDir])))]
+    const shared = dirs.length === 1 ? episodeSlug(dirs[0]!) : undefined
+    // The docked desktop pane is about 41 columns: there the detail gets a line of its own.
+    const isNarrow = e.props.bodyColumns < 60
+    const barWidth = e.props.bodyColumns >= 70 ? 15 : 8
+
+    const row = (job: Job) => {
+      const color = job.status === 'failed' ? 'error' : job.status === 'done' ? 'success' : 'suggestion'
+      const icon = job.status === 'failed' ? '✗' : job.status === 'done' ? '✓' : '●'
+      const pct = job.progress !== undefined ? percent(job.progress) : undefined
+      const meter =
+        job.status === 'running' && job.progress !== undefined && pct !== undefined
+          ? `${bar(job.progress, barWidth)} ${String(pct).padStart(3)}% `
+          : ''
+      const where = shared === undefined && job.episodeDir !== undefined ? ` · ${episodeSlug(job.episodeDir)}` : ''
+      const text = `${detail(job, now)}${where}`
+      const quiet = silentFor(job, now)
+      const under =
+        job.lastLine ?? (job.status === 'running' && job.progress === undefined ? 'ยังไม่มี log' : undefined)
+
+      return (
+        <Box key={job.id} flexDirection="column">
+          <Box flexDirection="row">
+            <Text color={color}>{`${icon} ${job.label.padEnd(7)} `}</Text>
+            {isNarrow ? meter !== '' && <Text>{meter}</Text> : <Text wrap="truncate-end">{`${meter}${text}`}</Text>}
+            {quiet !== undefined && <Text color="warning">{` เงียบ ${clock(quiet)}`}</Text>}
+          </Box>
+          {isNarrow && <Text wrap="truncate-end">{`  ${text}`}</Text>}
+          {under !== undefined && <Text dimColor wrap="truncate-end">{`  ${under}`}</Text>}
+        </Box>
+      )
+    }
+
+    return (
+      <Box flexDirection="column">
+        {shared !== undefined && <Text bold>{shared}</Text>}
+        {list.length === 0 && <Text dimColor>ยังไม่มีงานรัน</Text>}
+        {running.map(row)}
+        {finished.length > 0 && <Text dimColor>─ จบแล้ว ─</Text>}
+        {finished.map(row)}
+      </Box>
+    )
+  })
 }
