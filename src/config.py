@@ -70,7 +70,7 @@ def _default_podcast_settings() -> dict:
             "anthropic_model": "claude-sonnet-4-6",
         },
         "advanced": {
-            "outro_hold_seconds": 3.0,
+            "outro_hold_seconds": 6.0,   # minimal_doc end card: ~1.7 s in, ~3 s readable, ~1.3 s close to black
         },
         "audio": {
             "background_bed_enabled": True,
@@ -127,7 +127,7 @@ def get_podcast_background_bed_settings() -> dict:
 
 
 def get_podcast_outro_hold_seconds() -> float:
-    return float(get_podcast_settings().get("advanced", {}).get("outro_hold_seconds", 3.0))
+    return float(get_podcast_settings().get("advanced", {}).get("outro_hold_seconds", 6.0))
 
 
 def get_verbose() -> bool:

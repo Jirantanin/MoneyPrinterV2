@@ -32,7 +32,7 @@
       "anthropic_model": "claude-sonnet-4-6"
     },
     "advanced": {
-      "outro_hold_seconds": 3
+      "outro_hold_seconds": 6
     },
     "audio": {
       "background_bed_enabled": true,
