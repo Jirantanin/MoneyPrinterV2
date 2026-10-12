@@ -18,7 +18,12 @@ Optional per-episode framing overrides live in ``minimal_render_overrides.json``
 
     {"assets": {"scene_00_2.jpg": {"kind": "cover", "anchor": [0.93, 0.12], "zoom": [1.32, 1.48],
                                     "min_zoom": 1.07, "caption_title": "ดาวพฤหัสบดี"}},
-     "end_card": {"sources": ["..."], "note": "..."}}
+     "end_card": {"sources": ["..."], "note": "..."},
+     "opening": {"seconds": 6.5}}
+
+``opening`` marks an opening sting: the first slot(s) of scene 0 run before the narration (scene 0's
+audio carries that much lead silence). No chapter card shows during the sting; chapter 1's card and
+the chapter dip start at ``seconds``, which must be a shot boundary.
 """
 
 from __future__ import annotations
@@ -262,11 +267,18 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
         raise ValueError("render props contain no visual assets")
     shots[-1]["end"] = total                    # last image holds under the end card
 
+    opening = float((overrides.get("opening") or {}).get("seconds") or 0.0)
+    if opening:
+        boundary = next((s["start"] for s in shots if abs(s["start"] - opening) < 0.02), None)
+        if boundary is None or not chapters or chapters[0]["start"] != 0.0:
+            raise ValueError(f"{OVERRIDES_FILE}: opening.seconds={opening} must be a shot boundary inside chapter 1")
+        chapters[0]["start"] = boundary          # chapter 1 begins when the story does, after the sting
+
     end_card = overrides.get("end_card") or {}
     sources = end_card.get("sources") if "sources" in end_card else end_card_sources(credits)
     note = end_card.get("note") if "note" in end_card else (
         DEFAULT_END_NOTE if any("ไม่ใช่" in str(q) for q in quals) else "")
-    return {"fps": FPS, "total": total, "narrationEnd": round(min(narration_end, total), 3),
+    return {"fps": FPS, "total": total, "narrationEnd": round(min(narration_end, total), 3), "opening": opening,
             "shots": shots, "chapters": chapters, "sources": list(sources or []), "endNote": note or "",
             "warnings": warnings}
 

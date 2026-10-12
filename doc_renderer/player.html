@@ -180,8 +180,8 @@ const CH_IN = s => (s === 0 ? 1.4 : 0.9), CH_LEN = 5.4;
 window.__seek = (t) => {
   const pending = [];
   gx.putImageData(tiles[Math.round(t * 25) % tiles.length], 0, 0);
-  const ch = chapterAt(t);
-  const chA = ch.start + CH_IN(ch.start), chB = chA + CH_LEN;
+  const ch = chapterAt(t);                // null during an opening sting
+  const chA = ch ? ch.start + CH_IN(ch.start) : Infinity, chB = chA + CH_LEN;
   const capHold = (s) => chapterStarts.has(s.start) ? chB - 0.2 : s.start + 0.7;   // captions wait for chapter cards
 
   const endO = ease(ramp(t, TL.narrationEnd + 0.3, TL.narrationEnd + 1.4));
@@ -242,14 +242,16 @@ window.__seek = (t) => {
 
   // chapter card
   const chEl = document.getElementById('chapter');
-  const co = win(t, chA, chB, 1.0, 0.9);
+  const co = ch ? win(t, chA, chB, 1.0, 0.9) : 0;
   chEl.style.opacity = co;
-  chEl.querySelector('.eyebrow').textContent = 'บทที่ ' + ch.no;
-  chEl.querySelector('.name').textContent = ch.title;
-  const chShot = TL.shots.find(x => x.start === ch.start);
-  chEl.querySelector('.name').style.maxWidth = chShot && chShot.kind !== 'cover' ? '560px' : '1200px';  // keep clear of the right-hand frame
-  chEl.style.transform = `translateY(${(1 - ease(ramp(t, chA, chA + 1.2))) * 16}px)`;
-  chEl.querySelector('.rule').style.width = 120 * ease(ramp(t, chA + 0.4, chA + 1.8)) + 'px';
+  if (ch) {
+    chEl.querySelector('.eyebrow').textContent = 'บทที่ ' + ch.no;
+    chEl.querySelector('.name').textContent = ch.title;
+    const chShot = TL.shots.find(x => x.start === ch.start);
+    chEl.querySelector('.name').style.maxWidth = chShot && chShot.kind !== 'cover' && chShot.kind !== 'video' ? '560px' : '1200px';  // keep clear of the right-hand frame
+    chEl.style.transform = `translateY(${(1 - ease(ramp(t, chA, chA + 1.2))) * 16}px)`;
+    chEl.querySelector('.rule').style.width = 120 * ease(ramp(t, chA + 0.4, chA + 1.8)) + 'px';
+  }
 
   // end card
   const endA = TL.narrationEnd + 0.3;
@@ -261,7 +263,7 @@ window.__seek = (t) => {
   document.getElementById('shade').style.opacity = Math.max(co * 0.85, eo);
 
   // open from black, dip between chapters, close to black
-  let f = 1 - ease(ramp(t, 0, 1.2));
+  let f = 1 - ease(ramp(t, 0, TL.opening ? 0.3 : 1.2));   // a sting opens fast
   for (const c of TL.chapters) if (c.start > 0) f = Math.max(f, 0.6 * bell(t, c.start, 0.8));
   document.getElementById('dim').style.opacity = 0.9 * eo;
   f = Math.max(f, ease(ramp(t, TL.total - 1.3, TL.total)));

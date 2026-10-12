@@ -93,6 +93,15 @@ class TimelineTests(unittest.TestCase):
         self.assertIsNotNone(shot["shots"][0]["blur"])
         self.assertEqual((shot["sources"], shot["endNote"]), (["S"], ""))
 
+    def test_opening_sting_moves_chapter_one_after_it(self):
+        props = props_for(self.images, counts=[3, 1], scene_durations=[12.0, 5.0], titles=["A", "B"])
+        tl = build_timeline(props, narration_end=17.0, assets_dir=self.dir / "assets", overrides={"opening": {"seconds": 4.0}})
+        self.assertEqual([(c["no"], c["start"]) for c in tl["chapters"]], [(1, 4.0), (2, 12.0)])
+        self.assertEqual(tl["opening"], 4.0)
+        self.assertEqual(build_timeline(props, narration_end=17.0, assets_dir=self.dir / "assets")["opening"], 0.0)
+        with self.assertRaises(ValueError):          # the sting must be its own slot
+            build_timeline(props, narration_end=17.0, assets_dir=self.dir / "assets", overrides={"opening": {"seconds": 5.0}})
+
     def test_video_frames_play_once_and_short_clips_warn(self):
         clip = self.dir / "b.mp4"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30:duration=2",
