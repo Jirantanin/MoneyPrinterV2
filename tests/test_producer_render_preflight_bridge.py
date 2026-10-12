@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from producer_render_preflight import _slot_bridge_warnings  # noqa: E402
+from producer_render_preflight import _chapter_caption_warnings, _slot_bridge_warnings  # noqa: E402
 
 
 class SlotBridgeWarningTests(unittest.TestCase):
@@ -38,6 +38,23 @@ class SlotBridgeWarningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             slots = [{"local_path": "a.jpg", "media_type": "image", "slot_duration_seconds": 4.0}]
             self.assertEqual(_slot_bridge_warnings(Path(temp), slots), [])
+
+
+class ChapterCaptionWarningTests(unittest.TestCase):
+    TITLES, COUNTS, DURS = ["A", "A", "B"], [2, 1, 2], [4.0, 6.0, 5.0, 5.0, 5.0]
+    PATHS = ["sting.mp4", "real.jpg", "x.jpg", "ai.png", "y.jpg"]
+
+    def test_flags_labelled_image_that_opens_a_chapter(self) -> None:
+        quals = ["", "", "", "ภาพจำลอง สร้างด้วย AI — ไม่ใช่ภาพจริง", ""]
+        warnings = _chapter_caption_warnings(self.TITLES, self.COUNTS, self.DURS, quals, self.PATHS)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("ai.png (scene 2)", warnings[0])
+
+    def test_opening_sting_moves_chapter_one_card_to_the_next_shot(self) -> None:
+        quals = ["", "ภาพ CGI ประกอบ — ไม่ใช่ภาพถ่ายจริง", "", "ภาพประกอบ", ""]   # plain ภาพประกอบ stock is not flagged
+        self.assertEqual(_chapter_caption_warnings(self.TITLES, self.COUNTS, self.DURS, quals, self.PATHS), [])
+        warnings = _chapter_caption_warnings(self.TITLES, self.COUNTS, self.DURS, quals, self.PATHS, opening=4.0)
+        self.assertIn("real.jpg (scene 0)", warnings[0])
 
 
 if __name__ == "__main__":

@@ -363,6 +363,38 @@ def _slot_bridge_warnings(episode_path: Path, render_slots: list[dict[str, Any]]
     return warnings
 
 
+LABEL_MARKERS = ("AI", "CGI", "ไม่ใช่", "จำลอง")   # "not a real photo" labels; plain ภาพประกอบ stock is fine
+
+
+def _chapter_caption_warnings(
+    scene_titles: list[str], scene_image_counts: list[int], durations: list[float],
+    qualifications: list[str], image_paths: list[str], opening: float = 0.0,
+) -> list[str]:
+    """minimal_doc holds a chapter's first caption until the chapter card leaves (~6 s), so an AI/CGI/simulated
+    image that opens a chapter plays without its "not real" label. Flag those shots."""
+
+    starts, t = [], 0.0
+    for duration in durations:
+        starts.append(t)
+        t += duration
+    flagged, previous, first = [], None, 0
+    for scene, (title, count) in enumerate(zip(scene_titles, scene_image_counts)):
+        if title and title != previous and count:
+            index = first
+            if scene == 0 and opening:     # chapter 1's card lands on the shot after the opening sting
+                index = next((i for i, s in enumerate(starts) if abs(s - opening) < 0.05), first)
+            label = str(qualifications[index] if index < len(qualifications) else "")
+            if any(marker in label for marker in LABEL_MARKERS):
+                flagged.append(f"{Path(image_paths[index]).name} (scene {scene})")
+        previous = title
+        first += count
+    if not flagged:
+        return []
+    return ["Chapter cards hide the first caption of their opening shot; these chapters open on an AI/CGI/simulated "
+            "image that plays without its label for several seconds - open on a shot that needs no label: "
+            + ", ".join(flagged)]
+
+
 def build_render_preflight(
     *,
     root_dir: str | Path,
@@ -611,6 +643,10 @@ def build_render_preflight(
             errors.append("minimal_doc does not support the scene_00.mp4 intro video; switch renderer or remove it")
         if producer_motion_graphics or glossary_entries:
             warnings.append("minimal_doc ignores producerMotionGraphics and glossaryEntries; they render as plain stills/captions")
+        opening = float(((read_json(episode_path / "minimal_render_overrides.json", {}) or {}).get("opening") or {}).get("seconds") or 0.0)
+        warnings.extend(message for message in _chapter_caption_warnings(
+            scene_titles, scene_image_counts, scene_asset_durations, scene_asset_qualifications, image_paths, opening)
+            if message not in warnings)
     elif renderer != "remotion":
         errors.append(f"Unknown render_settings.renderer: {renderer}")
 
