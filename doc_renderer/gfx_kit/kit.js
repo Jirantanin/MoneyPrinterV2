@@ -32,8 +32,12 @@ function set(e, attrs) { for (const k in attrs) e.setAttribute(k, attrs[k]); }
 const show = (e, o) => e.setAttribute('opacity', clamp(o).toFixed(3));
 
 // ---------------------------------------------------------------- stage
+// Frame size: landscape episode graphics by default; call kitSize(1080, 1920) before building for vertical Shorts
+// (and record with --size 1080x1920).
+let KW = 1920, KH = 1080;
+function kitSize(w, h) { KW = w; KH = h; }
 function stage() {
-  const svg = el('svg', { viewBox: '0 0 1920 1080', width: 1920, height: 1080 }, document.body);
+  const svg = el('svg', { viewBox: `0 0 ${KW} ${KH}`, width: KW, height: KH }, document.body);
   const defs = el('defs', {}, svg);
   defs.innerHTML = `
     <radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="#2b1f6e"/><stop offset=".55" stop-color="#171245"/><stop offset="1" stop-color="#0a0820"/></radialGradient>
@@ -51,15 +55,15 @@ function stage() {
 
 function background(svg, seed = 11) {
   const R = rng(seed);
-  el('rect', { width: 1920, height: 1080, fill: 'url(#bg)' }, svg);
+  el('rect', { width: KW, height: KH, fill: 'url(#bg)' }, svg);
   const neb = el('g', { filter: 'url(#blur70)' }, svg);
   [[420, 300, 420, 220, C.pink, .2], [1550, 260, 380, 260, C.violet, .32], [1200, 880, 520, 200, C.teal, .12], [300, 900, 360, 200, C.violet, .22]]
-    .forEach(([cx, cy, rx, ry, f, o]) => el('ellipse', { cx, cy, rx, ry, fill: f, opacity: o }, neb));
+    .forEach(([cx, cy, rx, ry, f, o]) => el('ellipse', { cx: cx * KW / 1920, cy: cy * KH / 1080, rx, ry, fill: f, opacity: o }, neb));
   const layers = [70, 45, 22].map((n, L) => {
     const g = el('g', {}, svg);
     const st = [];
     for (let i = 0; i < n; i++) {
-      const s = { x: R() * 2200 - 140, y: R() * 1200 - 60, ph: R() * 6.28, sp: 1 + R() * 2.5, base: .3 + R() * .5 };
+      const s = { x: R() * (KW + 280) - 140, y: R() * (KH + 120) - 60, ph: R() * 6.28, sp: 1 + R() * 2.5, base: .3 + R() * .5 };
       const col = R() < .15 ? C.yellow : R() < .2 ? C.teal : '#ffffff', size = [2, 3.2, 5][L] * (.6 + R() * .8);
       s.e = L > 0 && R() < .35 ? el('path', { d: sparkle(size * 2.6), fill: col, transform: `translate(${s.x},${s.y})` }, g)
         : el('circle', { cx: s.x, cy: s.y, r: size, fill: col }, g);
@@ -77,7 +81,7 @@ function background(svg, seed = 11) {
 }
 
 function overlays(svg) {
-  el('rect', { width: 1920, height: 1080, fill: 'url(#vig)', 'pointer-events': 'none' }, svg);
+  el('rect', { width: KW, height: KH, fill: 'url(#vig)', 'pointer-events': 'none' }, svg);
 }
 
 // ---------------------------------------------------------------- text
@@ -120,8 +124,8 @@ function label(parent, x, y, text, size, color = C.white, weight = 700, anchor =
 // qualification footer — must stay readable; returns update(t)
 function footer(parent, text, tIn = 1.0) {
   const g = el('g', {}, parent);
-  el('rect', { x: 0, y: 1018, width: 1920, height: 62, fill: '#0a0820', opacity: .55 }, g);
-  label(g, 64, 1058, text, 26, '#d8d3ff', 500, 'start');
+  el('rect', { x: 0, y: KH - 62, width: KW, height: 62, fill: '#0a0820', opacity: .55 }, g);
+  label(g, 64, KH - 22, text, 26, '#d8d3ff', 500, 'start');
   return t => show(g, p(t, tIn, tIn + .6));
 }
 
@@ -243,7 +247,7 @@ function base(seed = 11) {
 }
 function finish(svg) { overlays(svg); return el('g', {}, svg); }
 // camera(cam, scale, pivotX, pivotY, dx, dy): zoom about a pivot (slow push-ins, focus moves)
-function camera(cam, s, px = 960, py = 540, dx = 0, dy = 0) {
+function camera(cam, s, px = KW / 2, py = KH / 2, dx = 0, dy = 0) {
   set(cam, { transform: `translate(${px + dx},${py + dy}) scale(${s}) translate(${-px},${-py})` });
 }
 // miniPlanet(parent, x, y, r, fill): the top arc of a small planet for the mascot to stand on (x, y = top point)

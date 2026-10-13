@@ -3,6 +3,7 @@
 //   node doc_renderer/gfx_kit/record.cjs <page.html> <name> <seconds> <out.mp4> [--fps 25]
 //   node doc_renderer/gfx_kit/record.cjs <page.html> <name> <seconds> <out_prefix> --stills 1.5,8,14
 //   --from -0.8 starts at page time -0.8 s (crossfade handles); window.__SFX is saved next to the MP4 as <out>.sfx.json
+//   --size 1080x1920 sets the viewport for a vertical page (the page calls kitSize(1080, 1920))
 // Record at the episode render rate (minimal_doc: 25 fps) and to the exact slot length.
 const path = require('path');
 const fs = require('fs');
@@ -23,12 +24,13 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
   const [page_, name, seconds, out] = process.argv.slice(2);
   const fps = Number(arg('--fps', 25)), total = Math.round(Number(seconds) * fps), stills = arg('--stills', null);
   const from = Number(arg('--from', 0));   // page time of the first frame (negative = lead-in handle)
+  const [width, height] = arg('--size', '1920x1080').split('x').map(Number);
   const profile = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gfxkit-'));
   const browser = await puppeteer.launch({ executablePath: findChrome(), headless: true, userDataDir: profile,
     args: ['--no-sandbox', '--allow-file-access-from-files', '--hide-scrollbars', '--force-color-profile=srgb'] });
   const page = await browser.newPage();
   page.on('pageerror', e => { console.error('pageerror', e.message); process.exitCode = 2; });
-  await page.setViewport({ width: 1920, height: 1080 });
+  await page.setViewport({ width, height });
   await page.goto('file:///' + path.resolve(page_).split(path.sep).join('/') + '?g=' + name, { waitUntil: 'networkidle0' });
   await page.evaluate(() => window.__ready);
   if (stills) {
