@@ -15,6 +15,8 @@ export type Job = {
   command: string
   episodeDir?: string
   logs: LogRef[]
+  /** The harness's .output for a background task: its trailer says when it ended. */
+  taskOutput?: string
   ttsTotal?: number
   startedAt: number
   status: JobStatus

@@ -5,7 +5,7 @@ import type { Job, LogRef } from '../types'
 import { agentJob, agentStep, stepLine } from './agent'
 import { bandAlt, bandHeight, bandRows, bandSvg, bandWidth } from './band'
 import { classify, logTargets, taskOutputPath } from './classify'
-import { finishedTasks, sceneCount, sliceNew, ttsDone, ttsTotal } from './parse'
+import { finishedTasks, sceneCount, sliceNew, taskEnd, ttsDone, ttsTotal } from './parse'
 import { bar, clock, detail, episodeSlug, finish, keep, mergeJob, percent, silentFor, statusText } from './view'
 
 const PANE = 'mp-jobs'
@@ -36,7 +36,17 @@ async function showStatus($: EngineInterface, now: number) {
   isStatusShown = text !== undefined
 }
 
-async function refresh($: EngineInterface, job: Job): Promise<Job> {
+type TaskEnded = { isFailed: boolean; summary?: string }
+
+/** A file read whole only while it is small: a redirected task's .output holds little but its trailer. */
+async function smallText($: EngineInterface, path: string): Promise<string | undefined> {
+  const stat = await $.fs.stat(path).catch(() => undefined)
+
+  return stat === undefined || stat.size > 65_536 ? undefined : textOf($, path)
+}
+
+/** The job with its logs read on; `end` once its .output says the task is over. */
+async function refresh($: EngineInterface, job: Job): Promise<{ job: Job; end?: TaskEnded }> {
   let lastWriteAt = job.lastWriteAt
   const fresh: (string | undefined)[] = []
   const logs: LogRef[] = []
@@ -57,14 +67,32 @@ async function refresh($: EngineInterface, job: Job): Promise<Job> {
     done = ttsDone(entries, job.startedAt)
     for (const f of entries) if (/^scene_\d+\.wav$/.test(f.name)) lastWriteAt = Math.max(lastWriteAt, f.mtimeMs)
   }
-
-  return mergeJob(job, {
+  let end: TaskEnded | undefined
+  if (job.taskOutput !== undefined) {
+    const i = job.logs.findIndex(l => l.path === job.taskOutput)
+    const text = i >= 0 ? fresh[i] : await smallText($, job.taskOutput)
+    end = text === undefined ? undefined : taskEnd(text)
+  }
+  // A row tracked before taskOutput existed kept the trailer as its last line, its .output since removed.
+  end ??= job.lastLine === undefined ? undefined : taskEnd(job.lastLine)
+  const next = mergeJob(job, {
     logs,
     lastWriteAt,
     ...(fresh[0] !== undefined ? { primary: fresh[0] } : {}),
     ...(fresh[1] !== undefined ? { secondary: fresh[1] } : {}),
     ...(done !== undefined ? { ttsDone: done } : {}),
   })
+
+  return end === undefined ? { job: next } : { job: next, end }
+}
+
+/** Ends a job still running, with a toast; a second signal for it finds it ended and says nothing. */
+async function endJob($: EngineInterface, job: Job, end: TaskEnded, now: number) {
+  if (!(await read($, jobs)).some(j => j.id === job.id && j.status === 'running')) return
+  await update($, jobs, cur => finish(cur.map(j => (j.id === job.id ? job : j)), { id: job.id, isFailed: end.isFailed }, now))
+  $.ui.toast(
+    end.isFailed ? `${job.label} พัง · ${job.lastLine ?? end.summary ?? ''}` : `${job.label} เสร็จ · ${clock(now - job.startedAt)}`,
+  )
 }
 
 async function tick($: EngineInterface) {
@@ -75,10 +103,14 @@ async function tick($: EngineInterface) {
     const running = (await read($, jobs)).filter(j => j.status === 'running')
     if (running.length > 0) {
       // An agent has no log to read: its steps arrive on tool.call, and a snapshot written back would drop them.
-      const fresh = await Promise.all(running.filter(j => j.kind !== 'agent').map(j => refresh($, j).catch(() => j)))
-      const byId = new Map(fresh.map(j => [j.id, j]))
+      const fresh = await Promise.all(
+        running.filter(j => j.kind !== 'agent').map(j => refresh($, j).catch(() => ({ job: j }) as { job: Job; end?: TaskEnded })),
+      )
+      const byId = new Map(fresh.map(r => [r.job.id, r.job]))
       // A new object for every running job, so the drawings redraw their clocks.
       await update($, jobs, list => list.map(j => (j.status === 'running' ? byId.get(j.id) ?? { ...j } : j)))
+      // A subagent's task, or one whose notification lands mid-turn, ends here rather than on prompt.submit.
+      for (const r of fresh) if (r.end !== undefined) await endJob($, r.job, r.end, now)
     }
     await showStatus($, now)
   } finally {
@@ -106,7 +138,8 @@ async function track($: EngineInterface, id: string, command: string, cwd: strin
   const c = classify(command, cwd)
   const now = await $.clock.now()
   const logs: LogRef[] = []
-  for (const target of logTargets(c, taskOutputPath(resultText))) {
+  const output = taskOutputPath(resultText)
+  for (const target of logTargets(c, output)) {
     const text = target.isShared ? await textOf($, target.path) : undefined
     const stat = target.isShared ? await $.fs.stat(target.path).catch(() => undefined) : undefined
     logs.push({ path: target.path, offset: text?.length ?? 0, seenMtimeMs: stat?.mtimeMs ?? 0 })
@@ -124,6 +157,7 @@ async function track($: EngineInterface, id: string, command: string, cwd: strin
     command: command.slice(0, 1000),
     ...(c.episodeDir !== undefined ? { episodeDir: c.episodeDir } : {}),
     logs,
+    ...(output !== undefined ? { taskOutput: output } : {}),
     ...(total !== undefined ? { ttsTotal: total, progress: { done: 0, total, unit: 'ฉาก' } } : {}),
     startedAt: now,
     status: 'running',
@@ -142,13 +176,8 @@ async function finishTasks($: EngineInterface, text: string) {
   const now = await $.clock.now()
   for (const f of ours) {
     const job = list.find(j => j.id === f.id)!
-    const last = await refresh($, job).catch(() => job)
-    await update($, jobs, cur => finish(cur.map(j => (j.id === last.id ? last : j)), f, now))
-    $.ui.toast(
-      f.isFailed
-        ? `${last.label} พัง · ${last.lastLine ?? f.summary ?? ''}`
-        : `${last.label} เสร็จ · ${clock(now - last.startedAt)}`,
-    )
+    const last = await refresh($, job).catch(() => ({ job }))
+    await endJob($, last.job, f, now)
   }
   await showStatus($, now)
 }

@@ -10,6 +10,8 @@ const MAX_REGION = 262_144
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g
 const NOISE =
   /puppeteer|headless|developer\.chrome\.com|^(?:metadata|handler_name|vendor_id|encoder|compatible_brands|major_brand|minor_version|side data|icc profile)\b/i
+// What the harness appends to a task's .output when the command exits or is stopped.
+const TRAILER = /^\[(?:exited with code (-?\d+)|killed)\]$/
 const ASSET = /^[a-z]+ \S+ .+ \d{2,5} \d{2,5}\b/
 const WAV = /^scene_(\d+)\.wav$/
 
@@ -43,10 +45,18 @@ export function lines(text: string): string[] {
 export function lastLine(all: readonly string[]): string | undefined {
   for (let i = all.length - 1; i >= 0; i -= 1) {
     const line = all[i]!.trim()
-    if (!NOISE.test(line)) return line.length > 200 ? `${line.slice(0, 199)}…` : line
+    if (!NOISE.test(line) && !TRAILER.test(line)) return line.length > 200 ? `${line.slice(0, 199)}…` : line
   }
 
   return undefined
+}
+
+/** How a task ended, from the trailer on its .output; undefined while it runs. */
+export function taskEnd(text: string): { isFailed: boolean; summary: string } | undefined {
+  const m = lines(text).map(l => l.trim()).filter(l => l !== '').at(-1)?.match(TRAILER)
+  if (!m) return undefined
+
+  return m[1] === undefined ? { isFailed: true, summary: 'killed' } : { isFailed: m[1] !== '0', summary: `exit ${m[1]}` }
 }
 
 /**

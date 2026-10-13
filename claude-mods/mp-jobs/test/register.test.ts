@@ -78,3 +78,28 @@ test('does nothing outside the repo', async ($, on) => {
   expect(h.opened).toEqual([])
   expect(h.statuses).toEqual([])
 })
+
+// A subagent's job, or one whose notification lands mid-turn, never reaches prompt.submit.
+test('a job ends on its output trailer when no notification comes', async ($, on) => {
+  const h = harness(on)
+  h.write('C:/tmp/tasks/b5.output', '', START)
+  await h.start($)
+  await h.background($, 'b5', 'python scripts/build_timeline.py')
+  h.append('C:/tmp/tasks/b5.output', 'done\n[exited with code 0]\n', START + 1000)
+  await h.tick()
+  expect(h.toasts).toEqual(['build_timeline.py เสร็จ · 0:02'])
+  expect(h.statuses.at(-1)).toBeUndefined()
+  await h.notify($, 'b5', 'completed', 0)
+  expect(h.toasts).toHaveLength(1)
+})
+
+test('a redirected job ends on its task output too, and a stopped one has failed', async ($, on) => {
+  const h = harness(on)
+  await h.start($)
+  await h.background($, 'b6', `python ${EP_REL}/tools/noaa_fetch.py > ${EP_REL}/noaa.log 2>&1`)
+  h.write(`${EP}/noaa.log`, 'image a.jpg https://x 1920 1080\n', START + 500)
+  h.write('C:/tmp/tasks/b6.output', '[killed]\n', START + 1000)
+  await h.tick()
+  expect(h.toasts).toEqual(['noaa_fetch.py พัง · image a.jpg https://x 1920 1080'])
+})
+

@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   finishedTasks, lastLine, lines, parse, parseFetch, parseRender, parseScore,
-  sceneCount, sliceNew, ttsDone, ttsTotal,
+  sceneCount, sliceNew, taskEnd, ttsDone, ttsTotal,
 } from '../hooks/parse'
 
 // Lines copied from .mp/podcast_v2_asteroid-impact-plan_20261012_172530/producer_render.log and fetch_run2.log, paths shortened.
@@ -131,4 +131,14 @@ test('finishedTasks reads every block, failure by status or exit code', async ()
     { id: 'b3', isFailed: true, summary: 'Background command "x" completed (exit code 2)' },
   ])
   expect(finishedTasks('hello')).toEqual([])
+})
+
+// The harness appends these to a task's .output when the command exits or TaskStop kills it.
+test('a task output trailer tells how the job ended', async () => {
+  expect(taskEnd('x\n[exited with code 0]\n')).toEqual({ isFailed: false, summary: 'exit 0' })
+  expect(taskEnd('Traceback\n[exited with code 1]')).toEqual({ isFailed: true, summary: 'exit 1' })
+  expect(taskEnd('[killed]\n')).toEqual({ isFailed: true, summary: 'killed' })
+  expect(taskEnd('chunk 3 done (3/40) 9s\n')).toBeUndefined()
+  expect(taskEnd('')).toBeUndefined()
+  expect(lastLine(lines('ValueError: no shots\n[exited with code 1]\n'))).toBe('ValueError: no shots')
 })
