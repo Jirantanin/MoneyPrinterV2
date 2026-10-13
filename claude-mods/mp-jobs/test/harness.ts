@@ -83,6 +83,8 @@ export function harness(on: On, cwd = REPO) {
         }
   })
   on('prompt.submit', (_$, e) => ({ text: e.text }))
+  // The engine's own band, beneath the mod: what a pass-through draws.
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Text({ children: 'engine band' }))
 
   return {
     files,

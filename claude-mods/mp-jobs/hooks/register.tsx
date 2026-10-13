@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Job, LogRef } from '../types'
+import { bandAlt, bandHeight, bandRows, bandSvg, bandWidth } from './band'
 import { classify, logTargets, taskOutputPath } from './classify'
 import { finishedTasks, sceneCount, sliceNew, ttsDone, ttsTotal } from './parse'
 import { bar, clock, detail, episodeSlug, finish, keep, mergeJob, percent, silentFor, statusText } from './view'
@@ -9,6 +10,8 @@ import { bar, clock, detail, episodeSlug, finish, keep, mergeJob, percent, silen
 const PANE = 'mp-jobs'
 const REPO = /[\\/]MoneyPrinterV2(?:[\\/]|$)/i
 const TICK_MS = 2000
+// SMIL needs the sandboxed frame, which reloads (and flickers) on every redraw: a still image instead.
+const ANIMATE = false
 
 const jobs = atom({ plugin: 'mp-jobs', key: 'jobs' } as const, [])
 
@@ -194,6 +197,26 @@ export const register: Register = on => {
 
     return next(e)
   }).catch(($, e, next) => next(e))
+
+  // Only the desktop draws Svg; the terminal keeps the status line.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    const now = await $.clock.now()
+    const band = bandRows(await read($, jobs), now)
+    if (band.rows.length === 0) return next(e)
+    const { Svg } = $.ui.resolve(e)
+    const width = bandWidth(e.props.bodyColumns)
+
+    return (
+      <Svg
+        source={bandSvg(band, { width, now, animate: ANIMATE })}
+        alt={bandAlt(band)}
+        width={width}
+        height={bandHeight(band)}
+        isInteractive={ANIMATE}
+      />
+    )
+  })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
