@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Gallery of the shared cast (library.js) under three example themes, to check that one library can look different
+     per episode. Stills: node doc_renderer/gfx_kit/record.cjs doc_renderer/gfx_kit/library_demo.html space 1 <prefix> --stills 1,4,7
+     Names: space (kit default, จุก in the space helmet), ocean, dusk. The themes are examples only; each episode chooses its own. -->
+<style>
+@font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Bold.ttf");font-weight:700}
+@font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Black.ttf");font-weight:900}
+html,body{margin:0;background:#0c0a24;overflow:hidden}
+svg{display:block}
+text{font-family:Kanit,'Leelawadee UI',sans-serif}
+</style></head><body>
+<script src="kit.js"></script>
+<script src="library.js"></script>
+<script>
+const NAME = new URLSearchParams(location.search).get('g');
+const THEMES = {
+  space: null,
+  ocean: { bg: ['#0f4a6e', '#0a2a4a', '#04121f'], vig: '#020a12', stars: [0, 0, 0],
+           nebula: [[500, 250, 520, 160, '#3fe0d0', .12], [1500, 820, 600, 220, '#1f7fd1', .2]],
+           palette: { yellow: '#ffe28a', orange: '#ff9f6b', teal: '#5ff2d8' } },
+  dusk: { bg: ['#7a3b2e', '#3b1d2c', '#160b16'], vig: '#0d0509', stars: [30, 14, 0], starColors: ['#ffe9b0', '#ffc38a', '#fff3e0'],
+          nebula: [[960, 980, 900, 260, '#ff8a3d', .25]], palette: { pink: '#ff7a6b', violet: '#b0587a' } },
+};
+
+function gallery(name) {
+  if (THEMES[name]) theme(THEMES[name]);
+  const { svg } = stage();
+  const bg = background(svg, 7);
+  const cam = el('g', {}, svg);
+  const theSun = sun(cam, 90);
+  const earth = planet(cam, 110, 'earth', 9);
+  const rocks = [[1220, 300, 60, 11, '#9a8fb8'], [1420, 380, 38, 23, '#b98a6a'], [1330, 520, 26, 5, '#7f8aa8']]
+    .map(([x, y, r, seed, fill]) => ({ x, y, g: rock(cam, r, { seed, fill }) }));
+  const juk = mascot(cam, 640, 900, 1.3);
+  const helmet = name === 'space' ? spaceHelmet(juk) : null;
+  overlays(svg);
+  const hud = el('g', {}, svg);
+  const title = chip(hud, 960, 96, [{ text: `ธีม: ${name}`, size: 46, weight: 900 }]);
+  const cmp = truthTag(hud, 'compare', 1330, 640);
+  const sup = truthTag(hud, 'suppose', 170, 90);
+  const frame = supposeFrame(hud);
+  const scale = truthTag(hud, 'scale');
+  const n = counter(hud, 1500, 900, { size: 150 });
+  return t => {
+    bg(t);
+    theSun.state({ x: 330, y: 380, t, s: pop(t, .2, .6) });
+    earth.state({ x: 760, y: 560, s: pop(t, .5, .6) });
+    rocks.forEach((q, i) => put(q.g, q.x, q.y + 6 * Math.sin(t * 1.4 + i), pop(t, .8 + .2 * i), 20 * t * (i % 2 ? -1 : 1)));
+    juk.update(t, { in: 1.2, look: [1, -.3], blink: [3.2], hop: [5.5], bubble: { ch: '?', tIn: 2.0, tOut: 4.6 } });
+    if (helmet) helmet.update(t, p(t, 1.4, 1.8));
+    title.update(t, .1);
+    cmp.update(t, 1.6);
+    sup.update(t, 2.4, 6.6);
+    frame(t, p(t, 2.4, 2.9) * (1 - p(t, 6.6, 7.0)));
+    scale.update(t, 1.0);
+    n.update(t, [{ at: 0, text: '0', color: C.yellow }, { at: 4.0, text: '3.1', color: C.orange }, { at: 6.2, text: '~0', color: C.teal }],
+             { from: 0, to: 3.1, a: 2.2, b: 4.0, digits: 1 });
+  };
+}
+function put(g, x, y, s = 1, r = 0) { set(g, { transform: `translate(${x},${y}) rotate(${r}) scale(${Math.max(0, s)})` }); }
+
+let render = null;
+window.__ready = document.fonts.load('900 40px Kanit').then(() => document.fonts.load('700 40px Kanit'))
+  .then(() => { render = gallery(NAME); render(0); return true; });
+window.__seek = t => render(t);
+</script>
+</body></html>

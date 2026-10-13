@@ -50,6 +50,10 @@ class ExplainerDefaultTests(unittest.TestCase):
         report = visual_policy_report(slots(2, 8) + slots(3, 0))
         self.assertTrue(any(w["category"] == "graphic_run" for w in report["review_warnings"]))
 
+    def test_new_plans_have_an_art_direction_to_fill(self) -> None:
+        art = default_producer_plan("topic", Path("ep"))["visual_rules"]["art_direction"]
+        self.assertEqual(set(art), {"palette", "background", "recurring_metaphor", "camera_motion", "topic_characters"})
+
     def test_explainer_policy_keeps_the_generated_image_cap(self) -> None:
         self.assertEqual(explainer_visual_source_policy()["caps"]["generated_image_max_ratio"], 0.5)
 

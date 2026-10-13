@@ -621,6 +621,9 @@ def default_producer_plan(
             "source_strategy_artifact": str(visual_source_strategy_path(episode_path)),
             "source_policy": visual_policy,
             "section_count_default": {"min": 4, "max": 7},
+            # This episode's own look, chosen to differ from the last three (doc_renderer/gfx_kit/LIBRARY.md).
+            "art_direction": {"palette": "", "background": "", "recurring_metaphor": "", "camera_motion": "",
+                              "topic_characters": []},
             "section_opener": {
                 "required": True,
                 "provider": "flat_explainer_graphic_in_the_episode_motif",

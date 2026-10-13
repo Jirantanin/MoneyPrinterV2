@@ -5,6 +5,20 @@ const C = {
   yellow: '#ffd23f', orange: '#ff8a3d', pink: '#ff4f8b', teal: '#38e0c8', violet: '#7b5cff', blue: '#3fa9ff',
   white: '#fff6e8', ink: '#211a5e', dim: '#b9b2ff', mint: '#3dd6c0', leaf: '#8be05a', red: '#ff5a4f',
 };
+// Each episode picks its own look (art direction in the producer-mode skill): call theme({...}) before building.
+// Without a call the kit draws its original violet-nebula space, so older pages render unchanged.
+//   theme({ palette: {pink: '#..'}, bg: [centre, mid, edge], vig: '#..', nebula: [[x, y, rx, ry, colour, opacity], ...] | [],
+//           stars: [far, mid, near counts], starColors: [rare, uncommon, common] })   colours may be C names
+const THEME = {
+  bg: ['#2b1f6e', '#171245', '#0a0820'], vig: '#050414',
+  nebula: [[420, 300, 420, 220, 'pink', .2], [1550, 260, 380, 260, 'violet', .32], [1200, 880, 520, 200, 'teal', .12], [300, 900, 360, 200, 'violet', .22]],
+  stars: [70, 45, 22], starColors: ['yellow', 'teal', '#ffffff'],
+};
+function theme(o = {}) {
+  Object.assign(C, o.palette || {});
+  for (const k of ['bg', 'vig', 'nebula', 'stars', 'starColors']) if (o[k] != null) THEME[k] = o[k];
+}
+const col = c => C[c] || c;
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const p = (t, a, b) => clamp((t - a) / (b - a));
 const eio = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
@@ -12,6 +26,14 @@ const eo = x => 1 - Math.pow(1 - x, 3);
 const back = x => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
 const pop = (t, a, d = .45) => t < a ? 0 : back(p(t, a, a + d));
 const lerp = (a, b, k) => a + (b - a) * k;
+const lerpPt = (A, B, k) => [lerp(A[0], B[0], k), lerp(A[1], B[1], k)];
+const bump = (t, a, d = .35) => Math.sin(Math.PI * p(t, a, a + d));            // 0 -> 1 -> 0 over [a, a + d]
+const mixColor = (a, b, k) => { const h = c => [1, 3, 5].map(i => parseInt(col(c).slice(i, i + 2), 16));
+  const A = h(a), B = h(b); return '#' + A.map((v, i) => Math.round(lerp(v, B[i], clamp(k))).toString(16).padStart(2, '0')).join(''); };
+// track([[t0, v0], [t1, v1], ...], t): piecewise-linear value, held flat before the first and after the last key
+const track = (pts, t) => { if (t <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (t <= pts[i][0]) return lerp(pts[i - 1][1], pts[i][1], (t - pts[i - 1][0]) / (pts[i][0] - pts[i - 1][0]));
+  return pts[pts.length - 1][1]; };
 function rng(seed) { return () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
   t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const sparkle = s => `M0,${-s}Q0,0 ${s},0Q0,0 0,${s}Q0,0 ${-s},0Q0,0 0,${-s}Z`;
@@ -40,8 +62,8 @@ function stage() {
   const svg = el('svg', { viewBox: `0 0 ${KW} ${KH}`, width: KW, height: KH }, document.body);
   const defs = el('defs', {}, svg);
   defs.innerHTML = `
-    <radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="#2b1f6e"/><stop offset=".55" stop-color="#171245"/><stop offset="1" stop-color="#0a0820"/></radialGradient>
-    <radialGradient id="vig" cx="50%" cy="50%" r="70%"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#050414" stop-opacity=".6"/></radialGradient>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="${col(THEME.bg[0])}"/><stop offset=".55" stop-color="${col(THEME.bg[1])}"/><stop offset="1" stop-color="${col(THEME.bg[2])}"/></radialGradient>
+    <radialGradient id="vig" cx="50%" cy="50%" r="70%"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="${col(THEME.vig)}" stop-opacity=".6"/></radialGradient>
     <radialGradient id="flash"><stop offset="0" stop-color="#fffbe6"/><stop offset=".35" stop-color="${C.yellow}"/><stop offset="1" stop-color="${C.orange}" stop-opacity="0"/></radialGradient>
     <radialGradient id="sunG" cx="40%" cy="35%"><stop offset="0" stop-color="#fff3b0"/><stop offset="1" stop-color="${C.orange}"/></radialGradient>
     <radialGradient id="redG" cx="40%" cy="35%"><stop offset="0" stop-color="#ffb08a"/><stop offset="1" stop-color="#e2343f"/></radialGradient>
@@ -57,16 +79,16 @@ function background(svg, seed = 11) {
   const R = rng(seed);
   el('rect', { width: KW, height: KH, fill: 'url(#bg)' }, svg);
   const neb = el('g', { filter: 'url(#blur70)' }, svg);
-  [[420, 300, 420, 220, C.pink, .2], [1550, 260, 380, 260, C.violet, .32], [1200, 880, 520, 200, C.teal, .12], [300, 900, 360, 200, C.violet, .22]]
-    .forEach(([cx, cy, rx, ry, f, o]) => el('ellipse', { cx: cx * KW / 1920, cy: cy * KH / 1080, rx, ry, fill: f, opacity: o }, neb));
-  const layers = [70, 45, 22].map((n, L) => {
+  THEME.nebula.forEach(([cx, cy, rx, ry, f, o]) => el('ellipse', { cx: cx * KW / 1920, cy: cy * KH / 1080, rx, ry, fill: col(f), opacity: o }, neb));
+  const sc = THEME.starColors.map(col);
+  const layers = THEME.stars.map((n, L) => {
     const g = el('g', {}, svg);
     const st = [];
     for (let i = 0; i < n; i++) {
       const s = { x: R() * (KW + 280) - 140, y: R() * (KH + 120) - 60, ph: R() * 6.28, sp: 1 + R() * 2.5, base: .3 + R() * .5 };
-      const col = R() < .15 ? C.yellow : R() < .2 ? C.teal : '#ffffff', size = [2, 3.2, 5][L] * (.6 + R() * .8);
-      s.e = L > 0 && R() < .35 ? el('path', { d: sparkle(size * 2.6), fill: col, transform: `translate(${s.x},${s.y})` }, g)
-        : el('circle', { cx: s.x, cy: s.y, r: size, fill: col }, g);
+      const fill = R() < .15 ? sc[0] : R() < .2 ? sc[1] : sc[2], size = [2, 3.2, 5][L] * (.6 + R() * .8);
+      s.e = L > 0 && R() < .35 ? el('path', { d: sparkle(size * 2.6), fill, transform: `translate(${s.x},${s.y})` }, g)
+        : el('circle', { cx: s.x, cy: s.y, r: size, fill }, g);
       st.push(s);
     }
     return { g, st, L };
@@ -174,10 +196,13 @@ function burst(parent, n, seed, cols = [C.yellow, C.orange, C.pink, C.teal, C.wh
 }
 
 // ---------------------------------------------------------------- mascot "จุก": round mint sprout creature
+// Outfits attach to m.back (behind the body) and m.front (over it) and move with every hop and breath, e.g.
+// spaceHelmet(m) in library.js; an episode's own outfit is drawn there in its style. Keep the eyes visible.
 function mascot(parent, x, y, scale = 1) {
   const root = el('g', {}, parent);
   const g = el('g', {}, root);
   el('ellipse', { cx: 0, cy: 2, rx: 40, ry: 8, fill: '#000', opacity: .25 }, g);
+  const back = el('g', {}, g);
   const body = el('g', {}, g);
   el('ellipse', { cx: -16, cy: -6, rx: 13, ry: 8, fill: '#1f8f84' }, body);
   el('ellipse', { cx: 16, cy: -6, rx: 13, ry: 8, fill: '#1f8f84' }, body);
@@ -194,13 +219,14 @@ function mascot(parent, x, y, scale = 1) {
     p: el('ellipse', { cx: ex, cy: -52, rx: 7, ry: 7.5, fill: '#14103a' }, body),
     h: el('circle', { cx: ex + 2, cy: -56, r: 2.6, fill: '#fff' }, body), ex }));
   const mouth = el('path', { d: 'M-7,-30 Q0,-24 7,-30', fill: 'none', stroke: '#14103a', 'stroke-width': 3.5, 'stroke-linecap': 'round' }, body);
+  const front = el('g', {}, g);
   // speech bubble
   const bub = el('g', {}, root);
   el('circle', { cx: -18, cy: 36, r: 7, fill: C.white }, bub);
   el('circle', { r: 40, fill: C.white }, bub);
   const bt = el('text', { y: 21, 'text-anchor': 'middle', 'font-size': 60, 'font-weight': 900, fill: C.ink }, bub, '?');
   return {
-    root,
+    root, back, front,
     // st: {in, look:[dx,dy], blink:[t...], hop:[t...], bubble:{ch, tIn, tOut, color}, mouth:'smile'|'o'|'flat', wide, sleep}
     update(t, st = {}) {
       const ein = st.in == null ? 1 : pop(t, st.in, .55);
