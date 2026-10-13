@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import requests
 
-from producer_visual_policy import default_visual_source_policy
+from producer_visual_policy import default_visual_source_policy, explainer_visual_source_policy
 from producer_contract import THAI_MIN, THAI_MAX, default_episode_spec, episode_spec, require_production_review
 
 
@@ -549,7 +549,7 @@ def default_producer_plan(
     episode_path = Path(episode_dir)
     episode_slug = _slugify(slug or clean_topic)
     now = _utc_now()
-    visual_policy = default_visual_source_policy()
+    visual_policy = explainer_visual_source_policy()
     return {
         "schema_version": PRODUCER_PLAN_VERSION,
         "mode": "podcastv2_producer",
@@ -623,23 +623,21 @@ def default_producer_plan(
             "section_count_default": {"min": 4, "max": 7},
             "section_opener": {
                 "required": True,
-                "provider": "codex_imagegen_if_within_generated_cap",
+                "provider": "flat_explainer_graphic_in_the_episode_motif",
                 "variants": 2,
                 "retry_rounds": 1,
                 "embedded_text": False,
                 "style_consistency": True,
             },
             "source_order": [
-                "official_verified_real_media_for_specific_beats",
-                "pexels_stock_video",
-                "pixabay_stock_video",
-                "remotion_graphic_for_diagrams_or_charts",
-                "section_opener_codex_imagegen_if_under_50_percent_generated_cap",
-                "runware_flux1_fallback_or_illustrative_if_under_50_percent_generated_cap",
+                "flat_explainer_graphic_gfx_kit_around_one_recurring_metaphor",
+                "official_verified_real_media_where_the_evidence_itself_is_the_point",
+                "stock_video_only_when_specific_and_not_misleading",
+                "generated_image_rarely_and_qualified_on_screen",
                 "manual_review_when_caps_would_be_exceeded",
             ],
             "source_caps": [
-                "graphics_max_20_percent",
+                "graphics_max_80_percent",
                 "runware_plus_codex_imagegen_max_50_percent",
                 "real_footage_unlimited_when_relevant",
             ],
@@ -2005,9 +2003,10 @@ def _heuristic_research_plan(topic: str, research_inputs: dict[str, Any]) -> dic
                 "narrative_goal": goal,
                 "source_ids": source_ids,
                 "visual_direction": (
-                    "Use a consistent documentary opener, then prefer official/verified media "
-                    "for factual beats and stock video for generic context. Keep graphics at or "
-                    "below 20 percent and Runware/Codex imagegen at or below 50 percent."
+                    "Open on a flat explainer graphic in the episode motif; carry mechanisms, scale and "
+                    "what-if beats with flat graphics around one recurring metaphor, and use "
+                    "official/verified media wherever the evidence itself is the point. Stay within "
+                    "the plan's visual_rules.source_policy caps."
                 ),
                 "beats": [
                     {

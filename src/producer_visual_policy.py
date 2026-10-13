@@ -16,6 +16,8 @@ from typing import Any
 VISUAL_POLICY_VERSION = 1
 GRAPHIC_MAX_RATIO = 0.20
 GENERATED_IMAGE_MAX_RATIO = 0.50
+# New episodes since 2026-10-13 (user direction): flat explainer graphics carry the story, real evidence keeps >= 20%.
+EXPLAINER_GRAPHIC_MAX_RATIO = 0.80
 GRAPHIC_REVIEW_MIN_RATIO = 0.08
 LOCAL_REFRAME_REVIEW_MAX_RATIO = 0.60
 BALANCE_REVIEW_MIN_VISUAL_COUNT = 20
@@ -93,6 +95,25 @@ def default_visual_source_policy() -> dict[str, Any]:
             "manual_review_if_caps_or_relevance_fail",
         ],
     }
+
+
+def explainer_visual_source_policy() -> dict[str, Any]:
+    """Default for episodes created since 2026-10-13: Kurzgesagt-like explainer graphics around a recurring visual
+    metaphor, with official/verified media wherever the evidence itself is the point. Archived plans keep the policy
+    stored in them; a plan without one still falls back to default_visual_source_policy()."""
+    policy = default_visual_source_policy()
+    policy["policy_name"] = "producer_visual_source_policy_explainer_v1"
+    policy["caps"]["graphic_max_ratio"] = EXPLAINER_GRAPHIC_MAX_RATIO
+    policy["balance"]["graphic_run_review_max"] = None  # long graphic runs are this style's norm, not a review signal
+    policy["source_order"] = [
+        "flat_explainer_graphic_for_metaphor_mechanism_scale_or_hypothetical",
+        "official_or_verified_real_media_where_the_evidence_itself_is_the_point",
+        "stock_video_only_when_specific_and_not_misleading",
+        "local_reframe_from_real_or_approved_source",
+        "generated_image_rarely_and_qualified_on_screen",
+        "manual_review_if_caps_or_relevance_fail",
+    ]
+    return policy
 
 
 def plan_visual_source_policy(plan: dict[str, Any]) -> dict[str, Any] | None:
@@ -288,8 +309,9 @@ def visual_policy_report(
 
     ratios = {key: _ratio(value, total) for key, value in category_counts.items()}
     time_exposure = visual_time_exposure(entries)
-    if time_exposure["longest_graphic_run"] > 2:
-        review_warnings.append({"category": "graphic_run", "message": "More than two consecutive graphics; review the explanatory purpose of this sequence."})
+    run_max = balance.get("graphic_run_review_max", 2)
+    if run_max is not None and time_exposure["longest_graphic_run"] > run_max:
+        review_warnings.append({"category": "graphic_run", "message": f"More than {run_max} consecutive graphics; review the explanatory purpose of this sequence."})
     if time_exposure["coverage"] == "complete":
         for category, cap in (("graphic", graphic_ratio), ("generated_image", generated_ratio)):
             actual = time_exposure["category_ratios"].get(category, 0)
