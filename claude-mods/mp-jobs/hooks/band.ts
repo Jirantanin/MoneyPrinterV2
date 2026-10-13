@@ -31,16 +31,18 @@ const COLORS: Record<JobKind | 'quiet', { fill: string; ink: string }> = {
   tts: { fill: '#5DCAA5', ink: '#04342C' },
   fetch: { fill: '#85B7EB', ink: '#042C53' },
   score: { fill: '#ED93B1', ink: '#4B1528' },
+  agent: { fill: '#F0997B', ink: '#4A1B0C' },
   other: { fill: '#B4B2A9', ink: '#2C2C2A' },
   quiet: { fill: '#EF9F27', ink: '#412402' },
 }
 
-// 8-wide pixel art: a clapperboard, a microphone, a download, two beamed notes, a critter.
+// 8-wide pixel art: a clapperboard, a microphone, a download, two beamed notes, a robot, a critter.
 const SPRITES: Record<JobKind, string[]> = {
   render: ['X.X.X.X.', 'XXXXXXXX', 'X......X', 'X......X', 'XXXXXXXX'],
   tts: ['..XXXX..', '.XXXXXX.', '.XXXXXX.', 'X.XXXX.X', 'X......X', '.XXXXXX.', '...XX...', '.XXXXXX.'],
   fetch: ['...XX...', '...XX...', '.XXXXXX.', '..XXXX..', '...XX...', 'X......X', 'XXXXXXXX'],
   score: ['..XXXXXX', '..X....X', '..X....X', 'XXX..XXX', 'XXX..XXX'],
+  agent: ['...XX...', '.XXXXXX.', 'XX.XX.XX', '.XXXXXX.', '..X..X..', '.XXXXXX.'],
   other: ['..X..X..', '.XXXXXX.', 'XX.XX.XX', 'XXXXXXXX', '.X.XX.X.', 'X......X'],
 }
 
@@ -54,7 +56,8 @@ function cap(text: string, max: number): string {
 
 function pillText(job: Job): string {
   if (job.note !== undefined) return `${job.label} ${job.note}`
-  const parts = [job.label]
+  // An agent's label is its description, already the row's title.
+  const parts = [job.kind === 'agent' ? 'agent' : job.label]
   if (job.phase !== undefined) parts.push(job.phase)
   const p = job.progress
   if (p !== undefined) parts.push(p.total !== undefined ? `${thousands(p.done)}/${thousands(p.total)}` : thousands(p.done))

@@ -1,4 +1,4 @@
-export type JobKind = 'render' | 'tts' | 'fetch' | 'score' | 'other'
+export type JobKind = 'render' | 'tts' | 'fetch' | 'score' | 'agent' | 'other'
 
 export type JobStatus = 'running' | 'done' | 'failed'
 

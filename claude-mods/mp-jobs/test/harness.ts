@@ -83,6 +83,13 @@ export function harness(on: On, cwd = REPO) {
         }
   })
   on('prompt.submit', (_$, e) => ({ text: e.text }))
+  const agents: string[] = []
+  on('agent.spawn', () => {
+    const agentId = `a${agents.length + 1}`
+    agents.push(agentId)
+    return { model: 'm', agentId }
+  })
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
   // The engine's own band, beneath the mod: what a pass-through draws.
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Text({ children: 'engine band' }))
 
@@ -101,6 +108,28 @@ export function harness(on: On, cwd = REPO) {
       queue.push(id)
       return $.tool.call({ tool: 'Bash', command, run_in_background: id !== undefined })
     },
+    /** Starts a subagent; the engine beneath hands out `a1`, `a2`, ... */
+    spawn: ($: Engine, description: string) =>
+      $.agent.spawn({
+        tool_use_id: 'tu1',
+        prompt: 'Read BRIEF.md and record the scene.',
+        description,
+        subagentType: 'general-purpose',
+        provider: { plugin: 'engine', tier: 'core' },
+        parentModel: 'm',
+        background: true,
+        fork: false,
+      }),
+    /** Ends a turn: a subagent's run with `agentId`, the main loop's without. */
+    turnDone: ($: Engine, agentId: string | undefined, reason: 'answer' | 'aborted' | 'error') =>
+      $.turn.complete({
+        answer: 'done',
+        durationMs: 1,
+        isAborted: reason === 'aborted',
+        turnId: 't1',
+        ...(agentId !== undefined ? { agentId } : {}),
+        reason,
+      }),
     notify: ($: Engine, id: string, status: string, code: number) =>
       $.prompt.submit({ text: notification(id, status, code), wait: false, origin: { kind: 'task-notification' } }),
     tick: async () => {

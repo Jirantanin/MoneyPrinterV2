@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Job, LogRef } from '../types'
+import { agentJob, agentStep, stepLine } from './agent'
 import { bandAlt, bandHeight, bandRows, bandSvg, bandWidth } from './band'
 import { classify, logTargets, taskOutputPath } from './classify'
 import { finishedTasks, sceneCount, sliceNew, ttsDone, ttsTotal } from './parse'
@@ -73,9 +74,11 @@ async function tick($: EngineInterface) {
     const now = await $.clock.now()
     const running = (await read($, jobs)).filter(j => j.status === 'running')
     if (running.length > 0) {
-      const fresh = await Promise.all(running.map(j => refresh($, j).catch(() => j)))
+      // An agent has no log to read: its steps arrive on tool.call, and a snapshot written back would drop them.
+      const fresh = await Promise.all(running.filter(j => j.kind !== 'agent').map(j => refresh($, j).catch(() => j)))
       const byId = new Map(fresh.map(j => [j.id, j]))
-      await update($, jobs, list => list.map(j => (j.status === 'running' ? byId.get(j.id) ?? j : j)))
+      // A new object for every running job, so the drawings redraw their clocks.
+      await update($, jobs, list => list.map(j => (j.status === 'running' ? byId.get(j.id) ?? { ...j } : j)))
     }
     await showStatus($, now)
   } finally {
@@ -150,6 +153,30 @@ async function finishTasks($: EngineInterface, text: string) {
   await showStatus($, now)
 }
 
+async function trackAgent($: EngineInterface, id: string, description: string, subagentType: string) {
+  const now = await $.clock.now()
+  await update($, jobs, list => keep([...list.filter(j => j.id !== id), agentJob(id, description, subagentType, now)]))
+  await showStatus($, now)
+  ensureTicker($)
+  await openPane($)
+}
+
+async function noteStep($: EngineInterface, id: string, line: string) {
+  const list = await read($, jobs)
+  if (!list.some(j => j.id === id && j.status === 'running')) return
+  const now = await $.clock.now()
+  await update($, jobs, cur => agentStep(cur, id, line, now))
+}
+
+async function finishAgent($: EngineInterface, id: string, isFailed: boolean) {
+  const job = (await read($, jobs)).find(j => j.id === id && j.kind === 'agent' && j.status === 'running')
+  if (job === undefined) return
+  const now = await $.clock.now()
+  await update($, jobs, cur => finish(cur, { id, isFailed }, now))
+  $.ui.toast(isFailed ? `${job.label} พัง` : `${job.label} เสร็จ · ${clock(now - job.startedAt)}`)
+  await showStatus($, now)
+}
+
 export const register: Register = on => {
   ticker = undefined
   isTicking = false
@@ -171,7 +198,41 @@ export const register: Register = on => {
     return { text: opened.isPlaced ? 'Jobs pane opened.' : `Jobs pane waits: ${opened.reason}` }
   })
 
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+  on('agent.spawn', async ($, e, next) => {
+    const cwd = await $.session.cwd().catch(() => '')
+    const started = await next(e)
+    if (!REPO.test(cwd) || started.agentId === undefined) return started
+    try {
+      await trackAgent($, started.agentId, e.description, e.subagentType)
+    } catch (err) {
+      $.ui.log(`mp-jobs: could not track agent ${started.agentId}: ${String(err)}`)
+    }
+
+    return started
+  }).catch(($, e, next) => next(e))
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId !== undefined) {
+      try {
+        await finishAgent($, e.agentId, e.reason !== 'answer')
+      } catch (err) {
+        $.ui.log(`mp-jobs: could not finish agent ${e.agentId}: ${String(err)}`)
+      }
+    }
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // Every tool: a subagent's call counts as one of its steps; a background Bash is a job of its own.
+  on('tool.call', async ($, e, next) => {
+    if (e.agentId !== undefined) {
+      try {
+        await noteStep($, e.agentId, stepLine(e as { tool: string } & Record<string, unknown>))
+      } catch (err) {
+        $.ui.log(`mp-jobs: could not count a step of ${e.agentId}: ${String(err)}`)
+      }
+    }
+    if (e.tool !== 'Bash') return next(e)
     const cwd = await $.session.cwd().catch(() => '')
     const ran = await next(e)
     if (!REPO.test(cwd) || ran.deny !== undefined || ran.isError === true) return ran
