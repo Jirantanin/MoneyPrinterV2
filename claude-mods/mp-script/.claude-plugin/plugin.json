@@ -1,0 +1,6 @@
+{
+  "name": "mp-script",
+  "version": "0.1.0",
+  "description": "Stops at each new MoneyPrinter narration draft so นน can edit it in VS Code, with a live diff pane and a send-back button",
+  "types": "./types/index.d.ts"
+}
