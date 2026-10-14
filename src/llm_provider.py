@@ -235,6 +235,17 @@ def _minimax_chat(
                 timeout=(15, 180),
             )
             response.raise_for_status()
+            trace_http_request(
+                provider="minimax",
+                url=f"{base_url}/chat/completions",
+                method="POST",
+                headers={"Authorization": f"Bearer {api_key}"},
+                request_json={"model": model, "messages": messages},
+                response_status=response.status_code,
+                response_headers=dict(response.headers),
+                response_text=response.text,
+                attempt=attempt + 1,
+            )
             return response.json()["choices"][0]["message"]["content"].strip()
         except requests.RequestException as exc:
             last_error = exc
