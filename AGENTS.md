@@ -7,9 +7,9 @@
 - `src/producer_contract.py`: canonical episode contract.
 - `src/classes/Tts.py`: shared Gemini TTS implementation used by Producer Mode.
 - `src/llm_provider.py`, `src/pexels_provider.py`, `src/pixabay_provider.py`, and `src/runware_provider.py`: provider integrations.
-- `remotion/src/VideoPodcast.tsx`: Producer Mode video composition.
+- `remotion/src/VideoPodcast.tsx`: opt-in Remotion documentary composition; older plans without `render_settings` fall back to it.
 - `remotion/src/ClipShort.tsx`: composition used by the adjacent Shorts Pack skill.
-- `src/producer_minimal_renderer.py` + `doc_renderer/`: optional minimal documentary renderer, chosen per episode with `render_settings.renderer`.
+- `src/producer_minimal_renderer.py` + `doc_renderer/`: default documentary renderer, written into new plans as `render_settings.renderer = "minimal_doc"`.
 - `docs/`: active workflow documentation and retained historical references.
 - `.mp/`: local episode work and generated media; do not remove as part of source cleanup.
 

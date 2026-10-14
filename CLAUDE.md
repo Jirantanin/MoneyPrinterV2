@@ -14,9 +14,9 @@ The adjacent `moneyprinter-shorts-pack` skill uses the Remotion `ClipShort` comp
 - `scripts/producer_review.py`: checks and render preparation
 - `src/producer_*.py`: production stages
 - `src/producer_contract.py`: canonical episode specification
-- `remotion/src/VideoPodcast.tsx`: documentary composition
+- `remotion/src/VideoPodcast.tsx`: Remotion documentary composition (opt-in with `"renderer": "remotion"`; plans without `render_settings` fall back to it)
 - `remotion/src/ClipShort.tsx`: Shorts Pack composition
-- `src/producer_minimal_renderer.py` + `doc_renderer/`: optional minimal documentary renderer (`render_settings.renderer = "minimal_doc"`, see `docs/Configuration.md`)
+- `src/producer_minimal_renderer.py` + `doc_renderer/`: default documentary renderer; `producer_mode.py init` writes `render_settings.renderer = "minimal_doc"` into new plans (see `docs/Configuration.md`)
 - `src/producer_score.py` + `scripts/producer_score.py`: composed procedural score bed from a cue sheet (`render_settings.background_bed`)
 - `doc_renderer/gfx_kit/` + `src/producer_sfx_synth.py`: flat explainer-graphic kit, recorder and designed SFX stems
 - `src/classes/Tts.py`: Gemini TTS implementation
