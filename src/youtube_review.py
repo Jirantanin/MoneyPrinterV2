@@ -103,6 +103,8 @@ def fetch(episode_dir: Path, *, days: int | None = None, channel_id: str = yt.DE
     published = datetime.fromisoformat(video["snippet"]["publishedAt"].replace("Z", "+00:00"))
     if video["status"].get("publishAt"):
         published = max(published, datetime.fromisoformat(video["status"]["publishAt"].replace("Z", "+00:00")))
+    if published > datetime.now(timezone.utc):
+        raise ValueError(f"video {video_id} is scheduled for {published.isoformat()} and has no analytics yet")
     today = datetime.now(timezone.utc).date()
     start = published.date() - timedelta(days=1)  # Analytics days are Pacific time
     end = min(published.date() + timedelta(days=days), today) if days else today
