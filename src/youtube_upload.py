@@ -22,6 +22,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
     "https://www.googleapis.com/auth/youtube.force-ssl",
+    "https://www.googleapis.com/auth/yt-analytics.readonly",
 ]
 CATEGORY_SCIENCE_TECH = "28"
 MAX_TITLE = 100
@@ -124,7 +125,7 @@ def upload_state(receipt: dict[str, Any]) -> str:
     return "done" if receipt.get("status") in {"uploaded_verified", "scheduled_verified"} else "resume_thumbnail"
 
 
-def youtube_client():
+def _client(service: str, version: str):
     import google_auth_httplib2
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
@@ -139,7 +140,16 @@ def youtube_client():
             raise RuntimeError("YouTube token expired or revoked; run `youtube_upload.py reconnect` (user signs in)") from exc
     transport = build_http()
     transport.timeout = 60
-    return build("youtube", "v3", http=google_auth_httplib2.AuthorizedHttp(credentials, http=transport), cache_discovery=False)
+    return build(service, version, http=google_auth_httplib2.AuthorizedHttp(credentials, http=transport), cache_discovery=False)
+
+
+def youtube_client():
+    return _client("youtube", "v3")
+
+
+def analytics_client():
+    """YouTube Analytics API; a token from before the yt-analytics scope was added needs `reconnect`."""
+    return _client("youtubeAnalytics", "v2")
 
 
 def reconnect() -> None:
