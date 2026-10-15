@@ -5,7 +5,7 @@
      Record: node doc_renderer/gfx_kit/record.cjs <that gfx.html> demo 8 <out.mp4>
      Rules: every number/claim matches the reviewed script; keep the qualification footer on screen;
      anchor reveal times to speech (scripts/producer_score.py onsets, per-scene ASR).
-     Shared cast and reuse rules: LIBRARY.md. Set this episode's own look with theme({...}) before building. -->
+     Shared cast, finish layer and reuse rules: LIBRARY.md. Set this episode's own look with theme({...}) before building. -->
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500&display=block" rel="stylesheet">
 <style>
 @font-face{font-family:Kanit;src:url("../../fonts/Kanit-Bold.ttf");font-weight:700}
@@ -16,17 +16,20 @@ text{font-family:Kanit,'Leelawadee UI',sans-serif}
 </style></head><body>
 <script src="../../../doc_renderer/gfx_kit/kit.js"></script>
 <script src="../../../doc_renderer/gfx_kit/library.js"></script>
+<script src="../../../doc_renderer/gfx_kit/finish.js"></script>
 <script>
 // theme({ bg: [...], nebula: [...], palette: {...} });   // this episode's art direction (visual_rules.art_direction)
 const NAME = new URLSearchParams(location.search).get('g');
 
 function demo() {
   const { svg } = stage();
+  finishDefs(svg, {});   // this episode's rim/shade/light colours (finish.js, LIBRARY.md)
   const bg = background(svg, 11);
   const cam = el('g', {}, svg);
   const earth = planet(cam, 90, 'earth', 9);
   const m = mascot(cam, 1500, 880, 1);
-  overlays(svg);
+  litPass(earth);
+  finishFrame(svg);
   const hud = el('g', {}, svg);
   const title = chip(hud, 960, 110, [{ text: 'หัวข้อของกราฟิก', size: 52, color: C.white, weight: 900 }]);
   const foot = footer(hud, 'ข้อความกำกับ: แบบจำลอง / คำนวณสมมติ / ที่มา', 0.5);

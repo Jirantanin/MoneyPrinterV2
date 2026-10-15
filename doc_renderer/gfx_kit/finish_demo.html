@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Check page for finish.js: the same shapes plain (left) and finished (right) under two example looks, to show the
+     finish adds light and depth without fixing a palette. Stills:
+       node doc_renderer/gfx_kit/record.cjs doc_renderer/gfx_kit/finish_demo.html night 1 <prefix> --stills 1,4
+     Names: night (cool rim, warm light source), day (warm rim, cool shade). Examples only; each episode chooses its own. -->
+<style>
+@font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Bold.ttf");font-weight:700}
+@font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Black.ttf");font-weight:900}
+html,body{margin:0;background:#0c0a24;overflow:hidden}
+svg{display:block}
+text{font-family:Kanit,'Leelawadee UI',sans-serif}
+</style></head><body>
+<script src="kit.js"></script>
+<script src="library.js"></script>
+<script src="finish.js"></script>
+<script>
+const NAME = new URLSearchParams(location.search).get('g');
+const LOOKS = {
+  night: { sky: ['#0d0b26', '#2a1846'], ground: ['#2a1c44', '#120b22'], body: ['#3d3378', '#a2563a'], blob: ['#5a3f7a', '#e0503a'],
+           fin: { rim: '#a9d2ff', shade: '#0b0628', warm: '#ff9a3c' }, shaft: '#8fc0ff', light: true },
+  day: { sky: ['#7fd0f0', '#e8f4ff'], ground: ['#e0b878', '#a8743c'], body: ['#d98a4a', '#f6d29a'], blob: ['#2f8f7a', '#7fe0b0'],
+         fin: { rim: '#fff3c4', shade: '#2a3a7a', shadeOpacity: .3, warm: '#fff0b0', light: [16, -12], vig: '#3a2a1a', vigOpacity: .3 }, shaft: '#fffbe0', light: false },
+};
+
+function look(name) {
+  const L = LOOKS[name];
+  const { svg, defs } = stage();
+  finishDefs(svg, L.fin);
+  const lg = (id, [a, b], x2 = 0, y2 = 1) => `<linearGradient id="${id}" x1="0" y1="0" x2="${x2}" y2="${y2}"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>`;
+  defs.insertAdjacentHTML('beforeend', lg('dSky', L.sky) + lg('dGround', L.ground) + lg('dBody', L.body, 1, 0) + lg('dBlob', L.blob, 1, 1));
+  el('rect', { width: KW, height: KH, fill: 'url(#dSky)' }, svg);
+  const shaft = lightShaft(svg, 'M1100,0 L1340,0 L1800,860 L1340,860Z', { color: L.shaft });
+  el('rect', { y: 860, width: KW, height: KH - 860, fill: 'url(#dGround)' }, svg);
+  el('line', { x1: KW / 2, y1: 0, x2: KW / 2, y2: KH, stroke: '#ffffff', 'stroke-opacity': .25, 'stroke-width': 2, 'stroke-dasharray': '10 10' }, svg);
+  const halo = L.light ? glowHalo(el('g', { transform: 'translate(1700,330)' }, svg), 300, { flicker: .04, seed: 3 }) : null;
+
+  const PILLAR = 'M-70,0 L-60,-420 Q0,-440 60,-420 L70,0Z', BLOB = 'M-120,0 C-150,-90 -90,-210 0,-210 C100,-210 150,-110 120,0Z';
+  const draw = (x, fin) => {
+    const g = el('g', { transform: `translate(${x},860)` }, svg);
+    // pillar: rimForm (rim drawn into the shape); blob and rock: litPass (one filter over a finished piece)
+    const pillar = el('g', { transform: 'translate(-170,0)' }, g), blob = el('g', { transform: 'translate(130,0)' }, g);
+    if (fin) rimForm(pillar, PILLAR, 'url(#dBody)'); else el('path', { d: PILLAR, fill: 'url(#dBody)' }, pillar);
+    el('path', { d: BLOB, fill: 'url(#dBlob)' }, blob);
+    if (fin) litPass(blob);
+    const r = rock(el('g', { transform: 'translate(-20,-560)' }, g), 70, { seed: 11, fill: L.blob[0] });
+    if (fin) litPass(r);
+    return g;
+  };
+  draw(480, false);
+  draw(1440, true);
+  const dust = dustLayer(svg, 5, { n: 70, h: 860 });
+  const m = mascot(svg, 1080, 860, 1);
+  finishFrame(svg);
+  const hud = el('g', {}, svg);
+  const a = chip(hud, 480, 80, [{ text: 'ไม่มี finish', size: 40, weight: 900 }]), b = chip(hud, 1440, 80, [{ text: 'finish.js', size: 40, weight: 900 }]);
+  return t => {
+    shaft(t); if (halo) halo(t); dust(t);
+    m.update(t, { in: .2, look: [1, -.3], blink: [2.4] });
+    a.update(t, .1); b.update(t, .1);
+  };
+}
+
+let render = null;
+window.__ready = document.fonts.load('900 40px Kanit').then(() => { render = look(NAME); render(0); return true; });
+window.__seek = t => render(t);
+</script>
+</body></html>

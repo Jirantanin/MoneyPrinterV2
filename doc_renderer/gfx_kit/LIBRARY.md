@@ -11,6 +11,7 @@ characters and compositions, and picks its own look with `theme()`.
 | Layer | Where | Reuse |
 |---|---|---|
 | Tools the viewer never sees: easing, `lerpPt`, `bump`, `mixColor`, `track`, `camera`, `chip`, `burst` | `kit.js` | Always |
+| Finish: light and depth on whatever the episode draws (rim light, shade band, glow, light shaft, dust, vignette, grain) | `finish.js` | Always, coloured per episode |
 | Shared cast, the same thing every time: Earth, the Sun, จุก, truth tags, the number counter, the rock generator | `kit.js` (Earth `planet(…, 'earth')`, `mascot()`), `library.js` | Yes, unchanged |
 | The episode's own: recurring metaphor, props (traffic light, hourglass, calendar, buildings, mountains), topic characters, layouts, palette | the episode's page | Never copied from another episode; draw it fresh in this episode's style |
 
@@ -28,8 +29,27 @@ episode needs it.
 | จุก's space helmet | `spaceHelmet(m)`, `.update(t, o)` | จุก in space; the same helmet every time (decided 2026-10-13) | a scene on Earth; a gimmick in every beat |
 | จุก's other outfits | draw on `m.back` / `m.front` (behind / over the body; they follow hops and breathing) | a setting change worth a visual joke: diving gear underwater, a hard hat in a mine | an outfit that claims something the narration does not (จุก down where no one can go) or hides the eyes |
 | Rock | `rock(parent, r, {seed, fill, craters})` | an asteroid or boulder; pick a new seed and a fill from this episode's palette | reusing another episode's seed and fill |
-| Truth tags | `truthTag(parent, 'compare'/'suppose', x, y)`, `truthTag(parent, 'scale')`, `.update(t, tIn, tOut)`; `supposeFrame(parent)` | `เปรียบเทียบ` on an analogy that could be read as data, `สมมติ` for the whole hypothetical, `ภาพประกอบ ไม่ตามสเกล` on orbits, maps, sizes | restyling them: their fixed look ignores `theme()` so viewers recognise them |
+| Truth tags | `truthTag(parent, 'compare'/'suppose', x, y)`, `truthTag(parent, 'scale')`, `.update(t, tIn, tOut)`; `supposeFrame(parent)` | `เปรียบเทียบ` on an analogy that could be read as data, `supposeFrame` (dashed border) for the whole hypothetical, never the `สมมติ` label on screen (นน 2026-10-15; the word is spoken instead), `ภาพประกอบ ไม่ตามสเกล` on orbits, maps, sizes | restyling them: their fixed look ignores `theme()` so viewers recognise them |
 | Counter | `counter(parent, x, y, {size, suffix})`, `.update(t, steps, climb)` | numbers the narration says; a drop or rewind is a step (swap) | counting through values nobody says; the climb guard throws if a climb counts down or misses its spoken landing value |
+
+## Finish layer (house level)
+
+Every episode's graphics get the same depth of finish; only the colours change (นน approved the level on 2026-10-15
+from the Hatshepsut v3 cut; Kurzgesagt is the reference level, not a look to copy). Load `finish.js` after `kit.js`.
+
+| Call | Does | Notes |
+|---|---|---|
+| `finishDefs(svg, {rim, shade, light, warm, warmCore, vig, vigOpacity, grain, dust})` | adds the `fin*` filters and gradients in this episode's colours | once, right after `stage()`; `light` is the offset toward the light, default `[-16, -12]` (upper left) |
+| `rimForm(parent, d, fill, {rim, dx, dy})` | a filled path with a thin rim light on the lit edge | for figures and shapes you build piece by piece; the rim side follows `light` unless dx/dy are given |
+| `litPass(node)` | one filter over a finished piece: rim on the lit edge, soft shade band on the far edge | props and library pieces (`rock`, planets, buildings); do not stack it over `rimForm` parts |
+| `glowHalo(parent, r, {flicker, seed, soft})` → `update(t)` | screen-blended halo for a light source | torches, lamps, a sun low in the frame |
+| `lightShaft(parent, d, {color, opacity, dir})` → `update(t)` | soft beam through a slot or window | one per scene is plenty |
+| `dustLayer(parent, seed, {n, h, colors})` → `update(t)` | drifting particles that catch the light | |
+| `finishFrame(svg, {vignette, grain})` | vignette and film grain over the frame | last, before the HUD, in place of `overlays()`; a bright scene wants a lighter `vig`/`vigOpacity` |
+
+Also build backgrounds in layers (far, mid, light sources) with slow parallax, and use gradient fills rather than flat
+ones. Check page: `finish_demo.html` (`night`, `day`), the same shapes plain and finished.
+Worked example of a whole cut: `.mp/podcast_v2_hatshepsut-erased-pharaoh_20261015_165703_revision_v3gfx_01/graphics/v3/`.
 
 ## Each episode's own look
 
