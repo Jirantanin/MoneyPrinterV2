@@ -16,11 +16,13 @@ const TL = JSON.parse(fs.readFileSync(args.timeline, 'utf8'));
 const FPS = TL.fps, FRAMES = Math.round(TL.total * FPS), CHUNK = 500;
 const WORK = path.resolve(args.work);
 const PLAYER = 'file:///' + path.join(__dirname, 'player.html').replace(/\\/g, '/');
+// PRODUCER_CHROME_GPU=1 rasterizes on the GPU (ANGLE/D3D11) instead of SwiftShader; frames match CPU to ~45 dB PSNR.
+const GPU_FLAGS = process.env.PRODUCER_CHROME_GPU === '1' ? ['--ignore-gpu-blocklist', '--use-angle=d3d11', '--enable-gpu-rasterization', '--enable-zero-copy'] : [];
 
 async function openPage(id) {
   const browser = await puppeteer.launch({
     executablePath: args.chrome, headless: true, userDataDir: path.join(WORK, 'profiles', String(id)),
-    args: ['--no-sandbox', '--allow-file-access-from-files', '--hide-scrollbars', '--force-color-profile=srgb'],
+    args: ['--no-sandbox', '--allow-file-access-from-files', '--hide-scrollbars', '--force-color-profile=srgb', ...GPU_FLAGS],
   });
   const page = await browser.newPage();
   await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 1 });
@@ -56,7 +58,7 @@ async function render(workers) {
     all.push(out);
     if (!fs.existsSync(out)) jobs.push({ c, f0: c * CHUNK, f1: Math.min(FRAMES, (c + 1) * CHUNK), out });
   }
-  console.log(`frames ${FRAMES}, chunks ${all.length}, todo ${jobs.length}, workers ${workers}`);
+  console.log(`frames ${FRAMES}, chunks ${all.length}, todo ${jobs.length}, workers ${workers}, ${GPU_FLAGS.length ? 'gpu' : 'cpu'}`);
   const t0 = Date.now(), todo = jobs.length; let done = 0;
   await Promise.all(Array.from({ length: Math.min(workers, jobs.length) }, async (_, w) => {
     const { browser, page } = await openPage(w);

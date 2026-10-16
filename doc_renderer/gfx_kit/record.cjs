@@ -5,6 +5,7 @@
 //   --from -0.8 starts at page time -0.8 s (crossfade handles); window.__SFX is saved next to the MP4 as <out>.sfx.json
 //   --size 1080x1920 sets the viewport for a vertical page (the page calls kitSize(1080, 1920))
 // Record at the episode render rate (minimal_doc: 25 fps) and to the exact slot length.
+// PRODUCER_CHROME_GPU=1 rasterizes on the GPU instead of SwiftShader (same flag as render.cjs).
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -27,7 +28,8 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
   const [width, height] = arg('--size', '1920x1080').split('x').map(Number);
   const profile = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gfxkit-'));
   const browser = await puppeteer.launch({ executablePath: findChrome(), headless: true, userDataDir: profile,
-    args: ['--no-sandbox', '--allow-file-access-from-files', '--hide-scrollbars', '--force-color-profile=srgb'] });
+    args: ['--no-sandbox', '--allow-file-access-from-files', '--hide-scrollbars', '--force-color-profile=srgb',
+      ...(process.env.PRODUCER_CHROME_GPU === '1' ? ['--ignore-gpu-blocklist', '--use-angle=d3d11', '--enable-gpu-rasterization', '--enable-zero-copy'] : [])] });
   const page = await browser.newPage();
   page.on('pageerror', e => { console.error('pageerror', e.message); process.exitCode = 2; });
   await page.setViewport({ width, height });

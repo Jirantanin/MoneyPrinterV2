@@ -86,6 +86,11 @@ def environment_checks(root_dir: Path) -> list[dict[str, str]]:
     return results
 
 
+def gpu_enabled() -> bool:
+    """PRODUCER_CHROME_GPU=1 makes render.cjs rasterize on the GPU instead of SwiftShader."""
+    return os.environ.get("PRODUCER_CHROME_GPU", "").strip() == "1"
+
+
 def _workers() -> int:
     raw = os.environ.get("PRODUCER_MINIMAL_WORKERS", "").strip()
     if raw.isdigit() and int(raw) > 0:
@@ -308,7 +313,10 @@ def _prepare_work(root_dir: str | Path, episode_dir: str | Path, raw_props: dict
     base = episode_path / "minimal_render"
     timeline = build_timeline(raw_props, narration_end=narration_end, assets_dir=base / "assets", overrides=overrides)
     # Chunks are reused on resume, so the work folder is keyed by everything that shapes the frames.
-    key = fingerprint({"timeline": timeline, "renderer": {str(p.name): file_hash(p) for p in renderer_files(root_path)}})[:16]
+    shape = {"timeline": timeline, "renderer": {str(p.name): file_hash(p) for p in renderer_files(root_path)}}
+    if gpu_enabled():  # GPU and CPU frames differ slightly, so resumed chunks never mix the two
+        shape["gpu"] = True
+    key = fingerprint(shape)[:16]
     work = base / key
     work.mkdir(parents=True, exist_ok=True)
     timeline_path = work / "timeline.json"

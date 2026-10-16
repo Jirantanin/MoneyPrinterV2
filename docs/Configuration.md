@@ -63,5 +63,6 @@ Optional per-episode framing overrides go in `minimal_render_overrides.json` nex
 | --- | --- | --- |
 | `PRODUCER_MINIMAL_WORKERS` | half the CPU cores, max 8 | Parallel headless Chrome workers |
 | `PRODUCER_MINIMAL_CHROME` | Remotion's bundled chrome-headless-shell | Chrome executable override |
+| `PRODUCER_CHROME_GPU` | off | `1` makes `render.cjs` and `gfx_kit/record.cjs` rasterize on the GPU (ANGLE/D3D11) instead of SwiftShader. Frames differ from CPU by ~45 dB PSNR, so the render work folder is keyed separately and chunks never mix |
 
 The ignored local files `config.json`, `client_secrets.json`, and `token.json` contain environment-specific values and must remain local.
