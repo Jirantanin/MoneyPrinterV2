@@ -11,6 +11,7 @@ import concurrent.futures
 import hashlib
 import json
 import subprocess
+import sys
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -725,4 +726,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for _stream in (sys.stdout, sys.stderr):  # Windows cp874 consoles cannot print every character
+        _stream.reconfigure(encoding="utf-8")
     raise SystemExit(main())

@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import subprocess
+import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -319,4 +320,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for _stream in (sys.stdout, sys.stderr):  # Windows cp874 consoles cannot print every character
+        _stream.reconfigure(encoding="utf-8")
     raise SystemExit(main())

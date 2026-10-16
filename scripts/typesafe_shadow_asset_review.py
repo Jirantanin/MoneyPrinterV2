@@ -147,4 +147,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for _stream in (sys.stdout, sys.stderr):  # Windows cp874 consoles cannot print every character
+        _stream.reconfigure(encoding="utf-8")
     raise SystemExit(main())

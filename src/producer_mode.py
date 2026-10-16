@@ -3351,6 +3351,8 @@ def run_render_video_checkpoint(
     else:
         props_file = props_source if props_source.exists() else render_props_path(episode_dir)
 
+    # A render can run for an hour; re-read so plan edits made meanwhile (seo_packaging) survive.
+    plan = load_producer_plan(plan_file)
     plan["render"] = {
         "status": manifest.get("status", "pending"),
         "rendered_at": manifest.get("completed_at") or manifest.get("created_at") or _utc_now(),
