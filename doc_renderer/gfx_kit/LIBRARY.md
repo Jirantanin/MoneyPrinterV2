@@ -62,9 +62,34 @@ Record the choice in the plan as `visual_rules.art_direction` (palette, backgrou
 motion language, topic characters) and make it visibly different from the last three episodes; see the
 producer-mode skill, sequence-and-review.md.
 
+## Glow direction (`glow.js`), the house default
+
+Since 2026-10-16 (นน, from the black-hole test) the default look is flat vector shapes that emit light, built on the
+finish layer: load `glow.js` after `finish.js`. Our own version, not a copy: จุก is the character, the palette is the
+episode's own (fallback mint and amber on deep teal), and the truth tags and Kanit labels stay. Pick paper-collage
+instead when the story is about paper; a plain finish-only cut is still fine for a quiet beat.
+
+| Call | Does | Notes |
+|---|---|---|
+| `glowDefs(svg, {hot, warm, accent, cool, deep, grain, vig, vigOpacity})` | blur filters, live grain, vignette | once, after `finishDefs()` |
+| `bloom(parent, draw, {blur, opacity})` | `draw(g, k)` runs twice: blurred screen-blended copy (k > 1, widen it) then the crisp shapes | every light source and hot shape; not on text |
+| `flowPath(parent, d, {color, width, speed, dashes})` → `update(t)` | dashes travel along any path | currents, orbits, signals, wind, blood flow; `dashes` a seed or `[[dash, gap], …]` |
+| `flowBands(parent, bands, {cx, cy, ry, a0, a1, speed})` → `update(t)` | concentric glowing ribbons with flowing streaks | disks and rings: back half `a0: PI, a1: 2PI` before the body, front half `0..PI` after it |
+| `glowMotes(parent, seed, {n, orbit, hide})` → `update(t)` | particles with their own glow, drifting or orbiting an ellipse | `hide(x, y)` hides the ones behind a body |
+| `depthFG(parent, seed, [[x, y, r], …], {fill, rim, vx})` → `update(t)` | out-of-focus foreground shapes with a lit edge, fast parallax | 2-3 at the frame edges, never over a label |
+| `blinkLight(parent, x, y, {color, period})` → `update(t)` | nav/status light | |
+| `pulseRing(parent, x, y, r)` → `update(t, t0)` returns the level | light ring at a moment of impact | flare something else with the returned level |
+| `glowFrame(svg, {grain})` → `update(t)` | vignette + grain that changes every 2 frames | replaces `finishFrame()`; call `update(t)` in render |
+
+Also: slow camera push and a small roll on the scene group, parallax on everything (far stars < mid < scene < foreground),
+rim light on characters from the scene's brightest source (`litPass`), and a reflection of that light where it would be
+seen (a visor, glass). Check page: `glow_demo.html` (`space`, `earth`). Worked example: the black-hole test in the
+2026-10-16 session (not in the repo). Renders are fast on the GPU (`PRODUCER_CHROME_GPU=1`, about 4-6 s per second of
+1080p for the demo); blur filters are the cost, so keep `bloom` to the bright pieces.
+
 ## Paper-collage direction (`paper.js`)
 
-A second house look besides the flat SVG + finish layer (นน chose it on 2026-10-16 from the Hatshepsut S10/S14 test):
+A second house look besides the glow look (นน chose it on 2026-10-16 from the Hatshepsut S10/S14 test):
 torn-paper cut-outs with deckle edges, pencil hatch, papyrus fibre, "boil" (shapes re-jitter every 2 frames, backdrops
 every 6), drawn on a Canvas 2D layer under the kit's SVG. Pick it per episode as the art direction when cut, torn,
 pasted or rebuilt paper carries the story (erasure, archives, folk tales, history told as a scrapbook); it is not a

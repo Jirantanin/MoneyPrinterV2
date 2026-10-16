@@ -1,0 +1,125 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Check page for glow.js (house default look): bloom, flowing bands and paths, orbiting motes, out-of-focus foreground,
+     blink light, pulse ring and live grain, with จุก as the character. Record:
+       node doc_renderer/gfx_kit/record.cjs doc_renderer/gfx_kit/glow_demo.html space 6 <out.mp4>
+     Names: space (a ringed world, จุก in its helmet), earth (jet-stream flows around Earth). Examples only; each
+     episode chooses its own palette with theme() and glowDefs(). -->
+<style>
+@font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Bold.ttf");font-weight:700}
+@font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Black.ttf");font-weight:900}
+html,body{margin:0;background:#040b16;overflow:hidden}
+svg{display:block}
+text{font-family:Kanit,'Leelawadee UI',sans-serif}
+</style></head><body>
+<script src="kit.js"></script>
+<script src="library.js"></script>
+<script src="finish.js"></script>
+<script src="glow.js"></script>
+<script>
+const NAME = new URLSearchParams(location.search).get('g') || 'space';
+
+function space() {
+  theme({ bg: ['#173f52', '#0a2034', '#030a15'], vig: '#020812', starColors: ['#ffd27a', '#7ff0dc', '#ffffff'],
+    nebula: [[320, 240, 420, 220, '#2fd0c0', .14], [1640, 880, 460, 240, '#ff9a4a', .12], [1600, 170, 300, 200, '#5aa8ff', .14]] });
+  const { svg, defs } = stage();
+  finishDefs(svg, { rim: '#ffd59a', shade: '#041422' });
+  glowDefs(svg, {});
+  defs.insertAdjacentHTML('beforeend', `
+    <radialGradient id="dWorld" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#4fe0c8"/><stop offset=".55" stop-color="#1b8a8a"/><stop offset="1" stop-color="#08303e"/></radialGradient>
+    <radialGradient id="dHaze"><stop offset="0" stop-color="#ffb24a" stop-opacity=".32"/><stop offset=".5" stop-color="#2fd0c0" stop-opacity=".12"/><stop offset="1" stop-color="#2fd0c0" stop-opacity="0"/></radialGradient>`);
+  const bg = background(svg, 21);
+  const cam = el('g', {}, svg);
+  const CX = 1120, CY = 540, R = 170;
+  el('ellipse', { cx: CX, cy: CY, rx: 820, ry: 440, fill: 'url(#dHaze)' }, cam);
+  const BANDS = [[250, 22, '#fff2cf'], [282, 18, '#ffd27a'], [312, 26, '#ffb24a'], [350, 22, '#ff8a4a'], [392, 30, '#2fd0c0'], [440, 24, '#1f9fb0'], [494, 36, '#16607e']];
+  const back = flowBands(cam, BANDS, { cx: CX, cy: CY, ry: .22, a0: Math.PI, a1: 2 * Math.PI, glow: .5, speed: 60, seed: 1 });
+  // the world itself: bloom halo, gradient body, cloud bands, rim on the side facing the ring light
+  const world = el('g', { transform: `translate(${CX},${CY})` }, cam);
+  bloom(world, (g, k) => el('circle', { r: R * (k > 1 ? 1.08 : 1.0), fill: k > 1 ? '#2fd0c0' : 'none' }, g), { opacity: .5 });
+  el('circle', { r: R, fill: 'url(#dWorld)' }, world);
+  const clouds = el('g', { 'clip-path': 'url(#dClip)' }, world);
+  defs.insertAdjacentHTML('beforeend', `<clipPath id="dClip"><circle cx="0" cy="0" r="${R}"/></clipPath>`);
+  const cloudFlows = [-90, -40, 20, 70, 115].map((y, i) => flowPath(clouds, `M${-R - 40},${y} Q0,${y + 18} ${R + 40},${y}`,
+    { color: i % 2 ? '#bff7ec' : '#ffffff', width: 10 - i, opacity: .28, speed: 26 + 8 * i, dashes: [[120, 60], [40, 90], [200, 80]], glow: false }));
+  el('path', { d: `M${-R * .2},${R * .98} A${R},${R} 0 0 0 ${R * .98},${-R * .2} A${R * 1.12},${R * 1.12} 0 0 1 ${-R * .2},${R * .98}Z`, fill: '#041422', opacity: .45 }, world);
+  el('path', { d: `M${-R * .92},${-R * .3} A${R},${R} 0 0 1 ${R * .2},${-R * .98}`, fill: 'none', stroke: '#ffd59a', 'stroke-width': 5, opacity: .8, 'stroke-linecap': 'round' }, world);
+  const front = flowBands(cam, BANDS, { cx: CX, cy: CY, ry: .22, a0: 0, a1: Math.PI, glow: .65, speed: 60, seed: 2 });
+  const hidden = (x, y) => Math.hypot(x - CX, y - CY) < R && y < CY;
+  const motes = glowMotes(cam, 9, { n: 80, orbit: { cx: CX, cy: CY, r0: 240, r1: 540, ry: .22 }, hide: hidden });
+  const pulse = pulseRing(cam, CX, CY, R + 6, { color: '#fff2cf' });
+  // a small probe crossing the frame with a blinking light
+  const probe = el('g', {}, svg);
+  for (let k = 0; k < 4; k++) el('rect', { x: -230 - k * 34, y: -10 + k * 6, width: 150 - k * 26, height: 3, rx: 2, fill: k % 2 ? '#ffb24a' : '#7ff0dc', opacity: .5 - k * .1 }, probe);
+  bloom(probe, (g, k) => el('ellipse', { cx: -64, rx: 26 * k, ry: 12 * k, fill: '#ffb24a' }, g), { blur: 'M', opacity: .9 });
+  el('path', { d: 'M-50,-16 L40,-16 Q78,-16 90,0 Q78,16 40,16 L-50,16Z', fill: '#e9f6f4' }, probe);
+  el('path', { d: 'M-50,7 L40,7 Q74,7 86,3 Q78,16 40,16 L-50,16Z', fill: '#7aa6b0', opacity: .6 }, probe);
+  el('path', { d: 'M40,16 Q78,16 90,0', fill: 'none', stroke: '#ffd59a', 'stroke-width': 3 }, probe);
+  el('rect', { x: -20, y: -52, width: 46, height: 30, fill: '#1f9fb0', stroke: '#bff7ec', 'stroke-width': 2 }, probe);
+  el('rect', { x: -20, y: 22, width: 46, height: 30, fill: '#1f9fb0', stroke: '#bff7ec', 'stroke-width': 2 }, probe);
+  el('circle', { cx: 52, cy: -2, r: 8, fill: '#2fd0c0' }, probe);
+  const nav = blinkLight(probe, -44, -24, { color: '#ff5a4f' });
+  // จุก floating in its helmet, lit by the ring
+  const mg = el('g', {}, svg);
+  const m = mascot(mg, 0, 0, 1.25), helm = spaceHelmet(m);
+  litPass(m.root);
+  const fg = depthFG(svg, 4, [[160, 1020, 130], [1830, 990, 150], [1480, 60, 70]], { fill: '#06202c', rim: '#ffb24a' });
+  const frame = glowFrame(svg);
+  const hud = el('g', {}, svg);
+  const tag = truthTag(hud, 'scale');
+  return t => {
+    bg(t); back(t); front(t); motes(t); cloudFlows.forEach(f => f(t)); nav(t); fg(t); frame(t);
+    const z = 1 + .05 * eio(clamp(t / 6));
+    set(cam, { transform: `translate(${CX},${CY}) scale(${z}) rotate(${(-2 + t * .35).toFixed(2)}) translate(${-CX},${-CY})` });
+    const u = t / 6;
+    set(probe, { transform: `translate(${(-280 + 2600 * u).toFixed(1)},${(200 - 60 * u + 6 * Math.sin(t * 3)).toFixed(1)}) rotate(-3)` });
+    set(mg, { transform: `translate(${(330 + 16 * Math.sin(t * .8)).toFixed(1)},${(820 - 20 * Math.sin(t * .6)).toFixed(1)}) rotate(${(-6 + 4 * Math.sin(t * .5)).toFixed(1)})` });
+    m.update(t, { in: .3, look: [1, -.4], blink: [1.6, 4.4], wide: 3.5, mouth: t > 3.6 ? 'o' : 'smile', bubble: { ch: '!', tIn: 3.7, tOut: 5.4 } });
+    helm.update(t);
+    pulse(t, 3.5);
+    tag.update(t, .6);
+  };
+}
+
+function earth() {
+  theme({ bg: ['#123a4a', '#0a1f33', '#040b16'], vig: '#020812', nebula: [[400, 300, 420, 240, '#2fd0c0', .12], [1500, 800, 460, 260, '#5aa8ff', .12]] });
+  const { svg } = stage();
+  finishDefs(svg, { rim: '#bff7ec', shade: '#041422' });
+  glowDefs(svg, {});
+  const bg = background(svg, 5);
+  const cam = el('g', {}, svg);
+  const CX = 960, CY = 560, R = 300;
+  bloom(cam, (g, k) => el('circle', { cx: CX, cy: CY, r: R * (k > 1 ? 1.06 : 1), fill: k > 1 ? '#5aa8ff' : 'none' }, g), { opacity: .45 });
+  const e = planet(cam, R, 'earth', 9);
+  e.state({ x: CX, y: CY });
+  litPass(e);
+  // jet streams: wavy flows wrapped over the globe, clipped to it, plus two outer streams that leave and re-enter
+  const streams = el('g', { 'clip-path': 'url(#eClip)' }, cam);
+  svg.querySelector('defs').insertAdjacentHTML('beforeend', `<clipPath id="eClip"><circle cx="${CX}" cy="${CY}" r="${R}"/></clipPath>`);
+  const flows = [-170, -90, 60, 150].map((y, i) => {
+    let d = `M${CX - R - 60},${CY + y}`;
+    for (let k = 1; k <= 8; k++) d += ` Q${CX - R - 60 + (k - .5) * (2 * R + 120) / 8},${CY + y + (k % 2 ? -28 : 28)} ${CX - R - 60 + k * (2 * R + 120) / 8},${CY + y}`;
+    return flowPath(streams, d, { color: i < 2 ? '#fff2cf' : '#7ff0dc', width: 6, opacity: .75, speed: 120 - 15 * i, dashes: 40 + i });
+  });
+  const outer = [[R + 70, '#ffb24a', 90], [R + 130, '#2fd0c0', -60]].map(([r, c, sp], i) =>
+    flowPath(cam, `M${CX - r},${CY} a${r},${r * .34} 0 1 0 ${2 * r},0 a${r},${r * .34} 0 1 0 ${-2 * r},0`, { color: c, width: 5, opacity: .7, speed: sp, dashes: [[260, 70], [120, 50], [340, 90]] }));
+  const motes = glowMotes(cam, 3, { n: 50, colors: ['#bff7ec', '#ffd27a'] });
+  const m = mascot(svg, 1560, 900, 1);
+  const g0 = miniPlanet(svg, 1560, 900, 220, '#16607e');
+  svg.insertBefore(g0, m.root);
+  const fg = depthFG(svg, 8, [[140, 980, 120], [1800, 120, 90]], { fill: '#06202c', rim: '#7ff0dc', vx: -40 });
+  const frame = glowFrame(svg);
+  return t => {
+    bg(t); flows.forEach(f => f(t)); outer.forEach(f => f(t)); motes(t); fg(t); frame(t);
+    camera(cam, 1 + .04 * eio(clamp(t / 6)));
+    m.update(t, { in: .4, look: [-1, -.5], blink: [2.2], hop: [4.0] });
+  };
+}
+
+const SCENES = { space, earth };
+let render = null;
+window.__ready = document.fonts.load('900 40px Kanit').then(() => document.fonts.load('700 40px Kanit'))
+  .then(() => { render = SCENES[NAME](); render(0); return true; });
+window.__seek = t => render(t);
+</script>
+</body></html>
