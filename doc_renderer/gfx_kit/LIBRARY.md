@@ -61,3 +61,28 @@ not presets to pick from.
 Record the choice in the plan as `visual_rules.art_direction` (palette, background, recurring metaphor, camera and
 motion language, topic characters) and make it visibly different from the last three episodes; see the
 producer-mode skill, sequence-and-review.md.
+
+## Paper-collage direction (`paper.js`)
+
+A second house look besides the flat SVG + finish layer (นน chose it on 2026-10-16 from the Hatshepsut S10/S14 test):
+torn-paper cut-outs with deckle edges, pencil hatch, papyrus fibre, "boil" (shapes re-jitter every 2 frames, backdrops
+every 6), drawn on a Canvas 2D layer under the kit's SVG. Pick it per episode as the art direction when cut, torn,
+pasted or rebuilt paper carries the story (erasure, archives, folk tales, history told as a scrapbook); it is not a
+default. The palette, props and characters are still the episode's own.
+
+| Call | Does | Notes |
+|---|---|---|
+| `paperStage(svg)` | canvas behind the `stage()` svg | right after `stage()`; the svg stays on top for `truthTag`, `counter`, `footer` |
+| `paperFrame(t)` → ctx | clears and sets the boil clocks | first line of `render(t)`; draw with `pctx` |
+| `paper(pts, fill, id, o)` | a torn cut-out | `o`: `edge`, `edgeW`, `edgeAmp`, `amp`, `tex`, `speck` (stone), `fiber` (papyrus), `slow` (backdrops) |
+| `pline(pts, color, w, id, o)` | hand-drawn stroke | carved grooves, cracks, trails; `dash` |
+| `ptag(text, x, y, k, id, o)` | label on a torn strip | `k` from `pop()`; Kanit 900 |
+| `pgrid(pts, step)` | graph-paper lines clipped to a sheet | work notes, plans, "a museum workroom" |
+| `pflame(x, y, s, t, id)` / `pnight(lights, o)` | cut-paper flame / darkness with light pools | `pnight` after the scene, before tags; keep pools small (r 350-550) or the night disappears |
+| `pfinish(o)` | paper grain + vignette | last |
+
+Rules that came out of the test: every `id` is unique per shape (it seeds the jitter); motion stays a pure function of
+`t` (`spring`, `kick` are in paper.js); build characters from separate pieces with pivots so they can act; keep the
+truth tags in the svg, not redrawn on paper. Check page: `paper_demo.html` (`night`, `day`). Worked example:
+`.mp/podcast_v2_hatshepsut-erased-pharaoh_20261015_165703_revision_v3gfx_01/graphics/paper/` (S10 erasure, S14 rebuild,
+side-by-side with v3 in `out/`). The grain and textures are rebuilt per page load, not per frame; draw static backdrops into an offscreen canvas if a long run renders slowly.
