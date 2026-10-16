@@ -116,6 +116,22 @@ class UploadPackTests(unittest.TestCase):
         self.assertLess(description.index("Source 5"), description.index("Source 0"))
         self.assertNotIn("Source 1", description)
 
+    def test_description_lists_source_names_without_links(self) -> None:
+        plan = _plan(upload_description="คำอธิบายสาธารณะ")
+        plan["research"]["sources"] = [
+            {"source_id": "src_a", "title": "NASA Science", "publisher": "NASA", "url": "https://science.nasa.gov/x"},
+            {"source_id": "src_b", "title": "Nature paper", "source_type": "journal"},
+        ]
+        plan["seo_packaging"]["description_source_ids"] = ["src_a", "src_b"]
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        episode_dir = Path(temp_dir.name)
+        write_upload_pack(episode_dir=episode_dir, plan=plan, final_qc={"status": "pass"}, render_props={})
+        description = (episode_dir / "upload_pack" / "description.txt").read_text(encoding="utf-8")
+        self.assertIn("- NASA Science (NASA)", description)
+        self.assertIn("- Nature paper (journal)", description)
+        self.assertNotIn("http", description)
+
     def test_blocks_a_thai_description_over_youtube_byte_limit(self) -> None:
         _, manifest = self._write_pack(
             upload_description="ดาวเคราะห์น้อย " * 120,       # ~1,800 characters but over 5,000 UTF-8 bytes

@@ -101,12 +101,13 @@ def _source_lines(research: dict[str, Any], *, source_ids: list[Any] | None = No
     for source in sources[:limit]:
         if not isinstance(source, dict):
             continue
-        title = _clean_text(source.get("title"), "Untitled source")
-        url = _clean_text(source.get("url") or source.get("source_url"))
+        # Names only: the public description carries no URLs.
+        title = _clean_text(source.get("title"))
+        if not title:
+            continue
         publisher = _clean_text(source.get("publisher") or source.get("source_type"))
-        if url:
-            publisher_label = f" ({publisher})" if publisher else ""
-            rows.append(f"- {title}{publisher_label}\n  {url}".strip())
+        publisher_label = f" ({publisher})" if publisher else ""
+        rows.append(f"- {title}{publisher_label}")
     return rows
 
 
