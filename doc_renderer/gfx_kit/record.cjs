@@ -2,6 +2,7 @@
 // The page must load kit.js, expose window.__ready (Promise) and window.__seek(t), and read ?g=<name>.
 //   node doc_renderer/gfx_kit/record.cjs <page.html> <name> <seconds> <out.mp4> [--fps 25]
 //   node doc_renderer/gfx_kit/record.cjs <page.html> <name> <seconds> <out_prefix> --stills 1.5,8,14
+//   --png writes the stills as lossless PNG (thumbnails) instead of JPEG
 //   --from -0.8 starts at page time -0.8 s (crossfade handles); window.__SFX is saved next to the MP4 as <out>.sfx.json
 //   --size 1080x1920 sets the viewport for a vertical page (the page calls kitSize(1080, 1920))
 // Record at the episode render rate (minimal_doc: 25 fps) and to the exact slot length.
@@ -38,7 +39,8 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
   if (stills) {
     for (const t of stills.split(',').map(Number)) {
       await page.evaluate(v => window.__seek(v), t);
-      await page.screenshot({ path: `${out}_${t}.jpg`, type: 'jpeg', quality: 85 });
+      if (process.argv.includes('--png')) await page.screenshot({ path: `${out}_${t}.png`, type: 'png' });   // thumbnails
+      else await page.screenshot({ path: `${out}_${t}.jpg`, type: 'jpeg', quality: 85 });
     }
   } else {
     const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
