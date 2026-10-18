@@ -11,6 +11,8 @@
 //   blinkLight(parent, x, y, o)     a blinking nav/status light with glow; update(t)
 //   pulseRing(parent, x, y, r, o)   an expanding light ring for a moment of impact or arrival; update(t, t0)
 //   glowFrame(svg, o)               vignette + film grain that changes every 2 frames; call last, before the HUD; update(t)
+//   litDisc(parent, r, o)           a planet/ball lit by crisp lines: flat terminator, rim stroke on the lit edge, no halo
+//   silhouette(svg, o)              filter url: a figure or prop as a dark backlit cut-out with a thin rim on the lit side
 // Colours come from the episode: theme() for the sky, glowDefs() for the light colours. The GLW defaults (mint and amber
 // on deep teal, จุก's colours) are only the fallback. Ids are prefixed `glw`.
 
@@ -131,4 +133,42 @@ function glowFrame(svg, { vignette = true, grain = GLW.grain, fps = 25 } = {}) {
   if (grain) el('rect', { width: KW, height: KH, filter: 'url(#glwGrain)', opacity: grain, style: 'mix-blend-mode:overlay', 'pointer-events': 'none' }, svg);
   const turb = svg.querySelector('#glwTurb');
   return t => turb && turb.setAttribute('seed', String(1 + Math.floor(t * fps / 2) % 8));   // grain changes on 2s
+}
+
+// A planet or any round body lit from one side by crisp lines instead of a blurred halo (big halos turn the frame muddy):
+// gradient body, two flat terminator crescents on the far side, a rim stroke plus a thin hot line on the lit edge.
+// o.stops = radial gradient stops [[offset, colour, opacity?], ...] lightest first; o.rot = light direction in degrees
+// (0 = from the right, 90 = from below); o.atmo = colour of a thin crisp atmosphere ring; o.draw(g, r) adds bands,
+// continents or clouds clipped to the disc (drawn in the rotated frame). Returns {g, state({x, y, s, o})}.
+let GLW_N = 0;
+function litDisc(parent, r, { stops, rot = 0, atmo = null, rim = GLW.warm, hot = GLW.hot, shade = GLW.deep, draw = null } = {}) {
+  const defs = parent.ownerSVGElement.querySelector('defs'), id = `glwDisc${GLW_N++}`;
+  defs.insertAdjacentHTML('beforeend', `<radialGradient id="${id}G" cx="64%" cy="50%" r="72%">` +
+    stops.map(([o, c, op = 1]) => `<stop offset="${o}" stop-color="${col(c)}" stop-opacity="${op}"/>`).join('') +
+    `</radialGradient><clipPath id="${id}C"><circle r="${r}"/></clipPath>`);
+  const g = el('g', {}, parent), b = el('g', { transform: `rotate(${rot})` }, g), f = v => (+v).toFixed(1);
+  if (atmo) el('circle', { r: f(r * 1.07), fill: 'none', stroke: col(atmo), 'stroke-width': f(r * .06), opacity: .4 }, b);
+  el('circle', { r, fill: `url(#${id}G)` }, b);
+  if (draw) draw(el('g', { 'clip-path': `url(#${id}C)` }, b), r);
+  el('path', { d: `M0,${-r} A${r},${r} 0 0 0 0,${r} A${f(r * .82)},${r} 0 0 1 0,${-r}Z`, fill: col(shade), opacity: .22 }, b);
+  el('path', { d: `M0,${-r} A${r},${r} 0 0 0 0,${r} A${f(r * .55)},${r} 0 0 1 0,${-r}Z`, fill: col(shade), opacity: .5 }, b);
+  const arc = (rr, d0, d1) => { const q = d => [f(rr * Math.cos(d * Math.PI / 180)), f(rr * Math.sin(d * Math.PI / 180))], [x0, y0] = q(d0), [x1, y1] = q(d1);
+    return `M${x0},${y0} A${f(rr)},${f(rr)} 0 0 1 ${x1},${y1}`; };
+  el('path', { d: arc(r, -70, 70), fill: 'none', stroke: col(rim), 'stroke-width': f(Math.max(3, r * .06)), 'stroke-linecap': 'round' }, b);
+  el('path', { d: arc(r * .93, -40, 40), fill: 'none', stroke: col(hot), 'stroke-width': f(Math.max(1.5, r * .02)), 'stroke-linecap': 'round', opacity: .8 }, b);
+  return { g, state({ x = 0, y = 0, s = 1, o = 1 } = {}) {
+    set(g, { transform: `translate(${f(x)},${f(y)}) scale(${Math.max(0, s).toFixed(4)})` }); show(g, o); } };
+}
+
+// Filter that turns whatever it is set on into a dark cut-out with a thin rim on the side facing the light: people,
+// a ledge, a dish standing in front of a bright source. dx/dy point AWAY from the light (light from the right: dx < 0).
+// Returns 'url(#...)'; set it on a group: el('g', {filter: silhouette(svg, {...})}, parent).
+function silhouette(svg, { fill = GLW.deep, rim = GLW.warm, dx = -5, dy = 2 } = {}) {
+  const defs = svg.querySelector('defs') || el('defs', {}, svg), id = `glwSil${GLW_N++}`;
+  defs.insertAdjacentHTML('beforeend', `<filter id="${id}" x="-10%" y="-10%" width="120%" height="120%">
+    <feFlood flood-color="${col(fill)}"/><feComposite in2="SourceAlpha" operator="in" result="sil"/>
+    <feOffset in="SourceAlpha" dx="${dx}" dy="${dy}" result="off"/><feComposite in="SourceAlpha" in2="off" operator="out" result="edge"/>
+    <feFlood flood-color="${col(rim)}"/><feComposite in2="edge" operator="in" result="rim"/>
+    <feMerge><feMergeNode in="sil"/><feMergeNode in="rim"/></feMerge></filter>`);
+  return `url(#${id})`;
 }

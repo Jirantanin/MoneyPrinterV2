@@ -72,7 +72,7 @@ instead when the story is about paper; a plain finish-only cut is still fine for
 | Call | Does | Notes |
 |---|---|---|
 | `glowDefs(svg, {hot, warm, accent, cool, deep, grain, vig, vigOpacity})` | blur filters, live grain, vignette | once, after `finishDefs()` |
-| `bloom(parent, draw, {blur, opacity})` | `draw(g, k)` runs twice: blurred screen-blended copy (k > 1, widen it) then the crisp shapes | every light source and hot shape; not on text |
+| `bloom(parent, draw, {blur, opacity})` | `draw(g, k)` runs twice: blurred screen-blended copy (k > 1, widen it) then the crisp shapes | small light sources and hot shapes; not on text, not on big bodies (use `litDisc`; see "Scenes, not diagrams") |
 | `flowPath(parent, d, {color, width, speed, dashes})` → `update(t)` | dashes travel along any path | currents, orbits, signals, wind, blood flow; `dashes` a seed or `[[dash, gap], …]` |
 | `flowBands(parent, bands, {cx, cy, ry, a0, a1, speed})` → `update(t)` | concentric glowing ribbons with flowing streaks | disks and rings: back half `a0: PI, a1: 2PI` before the body, front half `0..PI` after it |
 | `glowMotes(parent, seed, {n, orbit, hide})` → `update(t)` | particles with their own glow, drifting or orbiting an ellipse | `hide(x, y)` hides the ones behind a body |
@@ -86,6 +86,44 @@ rim light on characters from the scene's brightest source (`litPass`), and a ref
 seen (a visor, glass). Check page: `glow_demo.html` (`space`, `earth`). Worked example: the black-hole test in the
 2026-10-16 session (not in the repo). Renders are fast on the GPU (`PRODUCER_CHROME_GPU=1`, about 4-6 s per second of
 1080p for the demo); blur filters are the cost, so keep `bloom` to the bright pieces.
+
+## Scenes, not diagrams (the house default since 2026-10-18)
+
+นน approved this from the superhabitable s22 test (round 2): the graphics explain and compare, but every shot is a
+scene in a world, not a slide. It applies to every look (glow and paper alike).
+
+1. **A world, not objects on a plain background.** Every wide shot has a setting with layers: sky or far wall, far
+   props that belong to the episode (its metaphor, distant bodies, probes with light trails, debris), the subject, and a
+   foreground. Every corner has something to look at, and every piece serves the same story.
+2. **Comparisons are revealed by motion.** A size or quantity is shown by something happening: a body rising over a
+   horizon, the camera pulling back, a boundary travelling from one thing onto another, a container filling up. Never two
+   things lined up on a baseline with a dashed line between them.
+3. **Cause on screen.** When the narration says someone did something (a team set a threshold, a telescope measured),
+   show who does it: the boundary comes out of the team's tablet, the light goes into the telescope.
+4. **Crisp light, not blur.** Light the bodies with `litDisc` (flat terminator, rim stroke on the lit edge) or `rimForm`
+   and `litPass`. Keep `bloom` and blurred halos for small things that emit light (a beam, a tablet, a star's core); a big
+   blurred halo over a planet or a figure turns the frame muddy beige. Gradients shift hue (plum → rose → orange), never
+   go grey or brown.
+5. **Depth by value.** A dark foreground cut out against a bright source: `silhouette()` on figures, ledges and dishes
+   standing in front of the light, plus a few out-of-focus bokeh dots at a corner. The brightest part of the frame is
+   where the eye should go.
+6. **People and จุก carry the feeling.** Topic characters watch and act in the scene (seen from behind as silhouettes is
+   fine). At the emotional beat, cut to a close-up of จุก or a character for 1-2 s (face filling the frame, out-of-focus
+   background in the subject's colours, the subject reflected in the visor), then cut back.
+7. **Text and arrows.** Labels only for what hearing alone cannot carry (a name or term the first time, the scene's one
+   number, truth tags); the earlier ceiling still holds. No arrows pointing at things; a line on screen is something that
+   moves along it (`flowPath`, a beam, a trail).
+
+Budget: a dense hero shot like the worked example took about an hour for 19 s. Make one every 1-2 minutes of graphics;
+everything else still follows rules 2-5 and 7, which cost little.
+
+| Call (glow.js) | Does | Notes |
+|---|---|---|
+| `litDisc(parent, r, {stops, rot, atmo, rim, hot, shade, draw})` → `{g, state({x, y, s, o})}` | planet or ball lit by crisp lines: gradient body, flat terminator, rim on the lit edge | `rot` = light direction in degrees (0 from the right, 90 from below); `draw(g, r)` adds bands, continents, clouds clipped to the disc |
+| `silhouette(svg, {fill, rim, dx, dy})` → `'url(#…)'` | filter: dark cut-out with a thin rim on the side facing the light | set on a group of figures/props; `dx, dy` point away from the light |
+
+Worked example: `.mp/podcast_v2_superhabitable-hunt_20261017_085615/graphics/glow/scene_s22_v2.js`
+(`out/s22_v2_voice.mp4`; the slide-like original is `out/s22_old_voice.mp4`).
 
 ## Paper-collage direction (`paper.js`)
 
