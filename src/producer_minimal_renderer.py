@@ -23,7 +23,9 @@ Optional per-episode framing overrides live in ``minimal_render_overrides.json``
 
 ``opening`` marks an opening sting: the first slot(s) of scene 0 run before the narration (scene 0's
 audio carries that much lead silence). No chapter card shows during the sting; chapter 1's card and
-the chapter dip start at ``seconds``, which must be a shot boundary.
+the chapter dip start at ``seconds``, which must be a shot boundary. With ``"after_scene": N`` the
+video opens on the hook instead and the sting is the first slot(s) of scene N + 1 (that scene's audio
+carries the lead); the hook scenes and scene N + 1 share chapter 1, whose card starts after the sting.
 """
 
 from __future__ import annotations
@@ -37,6 +39,8 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageFilter, ImageStat
+
+from producer_breaths import opening_sting
 
 from producer_contract import file_hash, fingerprint, read_json
 
@@ -224,7 +228,9 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
     chapters: list[dict[str, Any]] = []
     cache: dict = {}
     t, k, previous_title = 0.0, 0, None
+    scene_starts: list[float] = []
     for scene, (scene_duration, title, count) in enumerate(zip(scene_durations, titles, counts)):
+        scene_starts.append(t)
         if title and title != previous_title:
             chapters.append({"no": len(chapters) + 1, "title": title, "start": round(t, 3), "scene": scene})
         previous_title = title
@@ -272,12 +278,17 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
         raise ValueError("render props contain no visual assets")
     shots[-1]["end"] = total                    # last image holds under the end card
 
-    opening = float((overrides.get("opening") or {}).get("seconds") or 0.0)
+    opening, opening_scene = opening_sting(overrides)
     if opening:
-        boundary = next((s["start"] for s in shots if abs(s["start"] - opening) < 0.02), None)
-        if boundary is None or not chapters or chapters[0]["start"] != 0.0:
-            raise ValueError(f"{OVERRIDES_FILE}: opening.seconds={opening} must be a shot boundary inside chapter 1")
-        chapters[0]["start"] = boundary          # chapter 1 begins when the story does, after the sting
+        if opening_scene >= len(scene_starts):
+            raise ValueError(f"{OVERRIDES_FILE}: opening.after_scene={opening_scene - 1} leaves no scene for the sting")
+        at = scene_starts[opening_scene] + opening
+        boundary = next((s["start"] for s in shots if abs(s["start"] - at) < 0.02), None)
+        if (boundary is None or not chapters or chapters[0]["start"] != 0.0
+                or (len(chapters) > 1 and chapters[1]["start"] <= boundary)):
+            raise ValueError(f"{OVERRIDES_FILE}: opening.seconds={opening} must end on a shot boundary inside chapter 1"
+                             " (the hook scenes and the sting's scene share chapter 1's title)")
+        chapters[0]["start"] = boundary          # chapter 1's card waits for the sting
 
     end_card = overrides.get("end_card") or {}
     sources = end_card.get("sources") if "sources" in end_card else end_card_sources(credits)

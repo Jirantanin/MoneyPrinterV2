@@ -43,6 +43,18 @@ class PadBreathsTests(unittest.TestCase):
             with wave.open(str(episode / "scene_00.wav"), "rb") as w:
                 self.assertEqual(w.readframes(10), b"\x00" * 20)        # the lead is silence before the voice
 
+    def test_sting_after_the_hook_leads_the_next_scene(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            episode = Path(temp)
+            (episode / "script.json").write_text(json.dumps([{}, {}, {}]), encoding="utf-8")
+            (episode / "minimal_render_overrides.json").write_text(
+                json.dumps({"opening": {"seconds": 3.0, "after_scene": 1}}), encoding="utf-8")
+            for i in range(3):
+                write_wav(episode / f"scene_{i:02d}.wav", 1.0)
+            result = pad_breaths(episode)
+            self.assertEqual([seconds(episode / f"scene_{i:02d}.wav") for i in range(3)], [1.0, 1.0, 4.0])
+            self.assertEqual(result["opening_scene"], 2)
+
     def test_no_overrides_means_no_lead(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             episode = Path(temp)

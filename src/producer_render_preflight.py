@@ -368,7 +368,7 @@ LABEL_MARKERS = ("AI", "CGI", "ไม่ใช่", "จำลอง")   # "not 
 
 def _chapter_caption_warnings(
     scene_titles: list[str], scene_image_counts: list[int], durations: list[float],
-    qualifications: list[str], image_paths: list[str], opening: float = 0.0,
+    qualifications: list[str], image_paths: list[str], opening: float = 0.0, opening_scene: int = 0,
 ) -> list[str]:
     """minimal_doc holds a chapter's first caption until the chapter card leaves (~6 s), so an AI/CGI/simulated
     image that opens a chapter plays without its "not real" label. Flag those shots."""
@@ -377,6 +377,9 @@ def _chapter_caption_warnings(
     for duration in durations:
         starts.append(t)
         t += duration
+    if opening:                     # absolute time the sting ends (it is the first slot of opening_scene)
+        lead_index = sum(scene_image_counts[:opening_scene])
+        opening = (starts[lead_index] if lead_index < len(starts) else t) + opening
     flagged, previous, first = [], None, 0
     for scene, (title, count) in enumerate(zip(scene_titles, scene_image_counts)):
         if title and title != previous and count:
@@ -643,9 +646,11 @@ def build_render_preflight(
             errors.append("minimal_doc does not support the scene_00.mp4 intro video; switch renderer or remove it")
         if producer_motion_graphics or glossary_entries:
             warnings.append("minimal_doc ignores producerMotionGraphics and glossaryEntries; they render as plain stills/captions")
-        opening = float(((read_json(episode_path / "minimal_render_overrides.json", {}) or {}).get("opening") or {}).get("seconds") or 0.0)
+        from producer_breaths import opening_sting
+        opening, opening_scene = opening_sting(read_json(episode_path / "minimal_render_overrides.json", {}))
         warnings.extend(message for message in _chapter_caption_warnings(
-            scene_titles, scene_image_counts, scene_asset_durations, scene_asset_qualifications, image_paths, opening)
+            scene_titles, scene_image_counts, scene_asset_durations, scene_asset_qualifications, image_paths, opening,
+            opening_scene)
             if message not in warnings)
     elif renderer != "remotion":
         errors.append(f"Unknown render_settings.renderer: {renderer}")

@@ -56,6 +56,13 @@ class ChapterCaptionWarningTests(unittest.TestCase):
         warnings = _chapter_caption_warnings(self.TITLES, self.COUNTS, self.DURS, quals, self.PATHS, opening=4.0)
         self.assertIn("real.jpg (scene 0)", warnings[0])
 
+    def test_sting_after_the_hook_moves_chapter_one_card_past_it(self) -> None:
+        quals = ["", "", "ภาพ CGI ประกอบ — ไม่ใช่ภาพถ่ายจริง", "", ""]     # hook scene 0, sting opens scene 1
+        warnings = _chapter_caption_warnings(["A", "A", "B"], [1, 2, 2], [4.0, 3.0, 5.0, 5.0, 5.0], quals,
+                                             ["hook.jpg", "sting.mp4", "cgi.png", "x.jpg", "y.jpg"],
+                                             opening=3.0, opening_scene=1)
+        self.assertIn("cgi.png (scene 0)", warnings[0])
+
 
 if __name__ == "__main__":
     unittest.main()

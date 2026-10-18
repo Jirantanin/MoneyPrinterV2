@@ -2,8 +2,9 @@
 
 scene_NN.wav is rebuilt from the raw TTS take (kept once in audio_raw/) on every run, so the step is idempotent:
   - script.json scene ``breath_after_seconds`` -> silence appended after that scene
-  - minimal_render_overrides.json ``opening.seconds`` -> silence prepended to scene 0, so the narration starts after
-    the opening sting (the same number marks the sting slot for the renderer)
+  - minimal_render_overrides.json ``opening.seconds`` -> silence prepended to the scene the opening sting opens, so
+    the narration starts after it (the same number marks the sting slot for the renderer). The sting opens scene 0
+    unless ``opening.after_scene`` names the last hook scene: then it plays between the hook and scene after_scene + 1.
 Run after produce-tts/audio-qc and before the speech map: scripts/producer_pad_breaths.py --plan <plan>.
 """
 from __future__ import annotations
@@ -17,10 +18,17 @@ from typing import Any
 from producer_contract import read_json
 
 
+def opening_sting(overrides: dict[str, Any] | None) -> tuple[float, int]:
+    """(sting seconds, index of the scene whose first slot is the sting and whose audio carries the lead)."""
+    opening = (overrides or {}).get("opening") or {}
+    after = opening.get("after_scene")
+    return float(opening.get("seconds") or 0.0), (int(after) + 1 if after is not None else 0)
+
+
 def pad_breaths(episode_dir: str | Path) -> dict[str, Any]:
     episode = Path(episode_dir)
     scenes = json.loads((episode / "script.json").read_text(encoding="utf-8"))
-    opening = float(((read_json(episode / "minimal_render_overrides.json", {}) or {}).get("opening") or {}).get("seconds") or 0.0)
+    opening, opening_scene = opening_sting(read_json(episode / "minimal_render_overrides.json", {}))
     raw_dir = episode / "audio_raw"
     raw_dir.mkdir(exist_ok=True)
     report = []
@@ -32,7 +40,7 @@ def pad_breaths(episode_dir: str | Path) -> dict[str, Any]:
         with wave.open(str(raw_path), "rb") as src:
             params = src.getparams()
             frames = src.readframes(params.nframes)
-        lead = opening if index == 0 else 0.0
+        lead = opening if index == opening_scene else 0.0
         pad = float(scene.get("breath_after_seconds") or 0.0)
         silence = lambda s: b"\x00" * (int(round(s * params.framerate)) * params.sampwidth * params.nchannels)
         with wave.open(str(wav_path), "wb") as dst:
@@ -40,6 +48,6 @@ def pad_breaths(episode_dir: str | Path) -> dict[str, Any]:
             dst.writeframes(silence(lead) + frames + silence(pad))
         report.append({"scene_index": index, "speech_seconds": round(params.nframes / params.framerate, 3),
                        "lead_seconds": lead, "breath_after_seconds": pad})
-    result = {"opening_seconds": opening, "scenes": report}
+    result = {"opening_seconds": opening, "opening_scene": opening_scene, "scenes": report}
     (episode / "breath_pauses.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return result

@@ -102,6 +102,15 @@ class TimelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):          # the sting must be its own slot
             build_timeline(props, narration_end=17.0, assets_dir=self.dir / "assets", overrides={"opening": {"seconds": 5.0}})
 
+    def test_sting_after_the_hook_moves_chapter_one_card_after_it(self):
+        props = props_for(self.images, counts=[1, 2, 1], scene_durations=[6.0, 6.0, 5.0], titles=["A", "A", "B"])
+        overrides = {"opening": {"seconds": 3.0, "after_scene": 0}}     # hook = scene 0, sting opens scene 1
+        tl = build_timeline(props, narration_end=17.0, assets_dir=self.dir / "assets", overrides=overrides)
+        self.assertEqual([(c["no"], c["start"]) for c in tl["chapters"]], [(1, 9.0), (2, 12.0)])
+        with self.assertRaises(ValueError):          # the hook and the sting's scene must share chapter 1
+            build_timeline(props_for(self.images, counts=[1, 2, 1], scene_durations=[6.0, 6.0, 5.0], titles=["A", "B", "C"]),
+                           narration_end=17.0, assets_dir=self.dir / "assets", overrides=overrides)
+
     def test_video_frames_play_once_and_short_clips_warn(self):
         clip = self.dir / "b.mp4"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30:duration=2",
