@@ -28,6 +28,8 @@ class HostVoiceDefaultsTests(unittest.TestCase):
         self.assertNotIn("male Thai host", prompt)
         self.assertIn("recurring metaphor", prompt)
         self.assertIn("สมมติว่า", prompt)
+        self.assertIn("เพราะ", prompt)
+        self.assertIn("at most one question", prompt)
 
 
 if __name__ == "__main__":
