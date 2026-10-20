@@ -17,9 +17,14 @@ clip is shorter, never looped). A separate scene-0 intro video is not supported.
 Optional per-episode framing overrides live in ``minimal_render_overrides.json``::
 
     {"assets": {"scene_00_2.jpg": {"kind": "cover", "anchor": [0.93, 0.12], "zoom": [1.32, 1.48],
-                                    "min_zoom": 1.07, "caption_title": "ดาวพฤหัสบดี"}},
+                                    "min_zoom": 1.07, "caption_title": "ดาวพฤหัสบดี"},
+                "clip.mp4": {"zoom": [1, 1.04], "caption_top": True}},
      "end_card": {"sources": ["..."], "note": "..."},
      "opening": {"seconds": 6.5}}
+
+``caption_top`` moves a full-frame (cover/video) caption to the top-left, for footage with its own text
+bottom-left. Slots shorter than 2.5 s bring their caption in at once (0.15 s, short fades) so a quick
+montage of named faces stays readable.
 
 ``opening`` marks an opening sting: the first slot(s) of scene 0 run before the narration (scene 0's
 audio carries that much lead silence). No chapter card shows during the sting; chapter 1's card and
@@ -243,7 +248,8 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
                 cap_title = str(override["caption_title"])
             common = {"i": j, "scene": scene, "start": round(start, 3), "end": round(start + durations[j], 3),
                       "name": source.name, "capTitle": cap_title, "capSub": cap_sub,
-                      "credit": str(credits[j] or "").strip(), "move": len(shots) % 4}
+                      "credit": str(credits[j] or "").strip(), "move": len(shots) % 4,
+                      **({"capTop": True} if override.get("caption_top") else {})}
             if types[j] == "video":
                 frames_dir, frame_count = _extract_video_frames(source, durations[j], assets_dir / "video_frames")
                 if frame_count < durations[j] * FPS:

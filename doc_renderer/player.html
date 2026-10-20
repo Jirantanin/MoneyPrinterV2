@@ -34,6 +34,7 @@
 
   .cap { position: absolute; left: 140px; color: var(--ink); opacity: 0; max-width: 860px; }
   .cap.low { bottom: 118px; }
+  .cap.top { top: 104px; }
   .cap.col { top: 50%; max-width: 540px; }
   .cap .rule { height: 1px; background: var(--gold); margin-bottom: 18px; width: 44px; }
   .cap .t { font-size: 29px; font-weight: 400; line-height: 1.55; }
@@ -150,7 +151,7 @@ window.__init = async (timeline, from, to) => {
     let cap = null;
     if (s.kind !== 'slide' && s.capTitle) {
       cap = document.createElement('div');
-      cap.className = 'cap sans ' + (s.kind === 'cover' || s.kind === 'video' ? 'low' : 'col');
+      cap.className = 'cap sans ' + (s.kind === 'cover' || s.kind === 'video' ? (s.capTop ? 'top' : 'low') : 'col');
       cap.innerHTML = `<div class="rule"></div><div class="t">${esc(s.capTitle)}</div>` + (s.capSub ? `<div class="s">${esc(s.capSub)}</div>` : '');
       capsEl.appendChild(cap);
     }
@@ -182,7 +183,8 @@ window.__seek = (t) => {
   gx.putImageData(tiles[Math.round(t * 25) % tiles.length], 0, 0);
   const ch = chapterAt(t);                // null during an opening sting
   const chA = ch ? ch.start + CH_IN(ch.start) : Infinity, chB = chA + CH_LEN;
-  const capHold = (s) => chapterStarts.has(s.start) ? chB - 0.2 : s.start + 0.7;   // captions wait for chapter cards
+  const isShort = (s) => s.end - s.start < 2.5;   // quick montage slots: caption in at once, short fades
+  const capHold = (s) => chapterStarts.has(s.start) ? chB - 0.2 : s.start + (isShort(s) ? 0.15 : 0.7);   // captions wait for chapter cards
 
   const endO = ease(ramp(t, TL.narrationEnd + 0.3, TL.narrationEnd + 1.4));
   for (const { s, el, mover, cap, credit } of live) {
@@ -219,14 +221,15 @@ window.__seek = (t) => {
     }
 
     if (cap) {
-      const a = capHold(s), b = s.end - 0.35;
+      const q = isShort(s), fi = q ? .3 : .8, fo = q ? .25 : .6;
+      const a = capHold(s), b = s.end - (q ? 0.1 : 0.35);
       const o = s._capFromPrev && s._capToNext ? 1
-              : s._capFromPrev ? 1 - ease(ramp(t, b - .6, b))
-              : s._capToNext ? ease(ramp(t, a, a + .8))
-              : win(t, a, b, .8, .6);
+              : s._capFromPrev ? 1 - ease(ramp(t, b - fo, b))
+              : s._capToNext ? ease(ramp(t, a, a + fi))
+              : win(t, a, b, fi, fo);
       const active = t >= (s._capFromPrev ? s.start : a) && t <= (s._capToNext ? s.end : b);
       cap.style.opacity = active ? o * (1 - endO) : 0;
-      const r = s._capFromPrev ? 1 : ease(ramp(t, a, a + .9));
+      const r = s._capFromPrev ? 1 : ease(ramp(t, a, a + (q ? .35 : .9)));
       cap.querySelector('.rule').style.width = 44 * r + 'px';
       cap.style.transform = cap.classList.contains('col') ? `translateY(${(1 - r) * 12}px)` : `translateY(${(1 - r) * 12}px)`;
     }
