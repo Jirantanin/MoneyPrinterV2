@@ -7,23 +7,23 @@
 
 | ทำเมื่อ | Topic | Episode artifact |
 |---|---|---|
-| 2026-05-25 | ดาวอังคารอาจเคยมีอารยธรรมเมื่อ 3,700 ล้านปีก่อนจริงไหม? หลักฐานชีวิตกับสิ่งที่เรายังไม่มีสิทธิ์สรุป | [.mp/podcast_v2_mars-civilization-3-7-billion-years_20260525_102807](.mp/podcast_v2_mars-civilization-3-7-billion-years_20260525_102807) |
-| 2026-06-02 | Solar storms and the fragile digital world: can the next geomagnetic storm disrupt satellites, GPS, and power grids? | [.mp/podcast_v2_space-weather-digital-world_rev2_20260602_085000](.mp/podcast_v2_space-weather-digital-world_rev2_20260602_085000) |
-| 2026-06-05 | มันเดินทางมา 11 พันล้านปี และเพิ่งผ่านโลกเรา \| สารคดีอวกาศ | [.mp/podcast_v2_3i-atlas-11-billion-years_20260605_102857](.mp/podcast_v2_3i-atlas-11-billion-years_20260605_102857) |
-| 2026-06-08 | ถ้ามนุษย์ไม่เคยเรียนรู้วิธีใช้ไฟ โลกตอนนี้จะเป็นยังไง? | [.mp/podcast_v2_no-fire-parallel-world_20260608_124131](.mp/podcast_v2_no-fire-parallel-world_20260608_124131) |
-| 2026-06-11 | 5 อันดับถ้ามนุษย์ไม่ครองโลก แล้วใครจะครอง | [.mp/podcast_v2_after-humans-top-5_20260611_162004](.mp/podcast_v2_after-humans-top-5_20260611_162004) |
-| 2026-06-16 | Outgassing ปัญหาลึกลับบนสถานีอวกาศ | [.mp/podcast_v2_outgassing-space-station_20260616_115646](.mp/podcast_v2_outgassing-space-station_20260616_115646) |
-| 2026-06-22 | ใต้ผืนน้ำแข็งแอนตาร์กติกา ซ่อนโลกอีกใบไว้จริงไหม? | [.mp/podcast_v2_antarctic-subglacial-world_20260622](.mp/podcast_v2_antarctic-subglacial-world_20260622) |
-| 2026-07-02 | 7 ภูเขาไฟวงแหวนแห่งไฟ ที่อันตรายที่สุดในปี 2026 | [.mp/podcast_v2_ring-of-fire-volcanoes-2026_20260702_114250](.mp/podcast_v2_ring-of-fire-volcanoes-2026_20260702_114250) |
-| 2026-07-07 | ดาวที่ซ่อนตัวในหมอกดำ: Barnard 68 | [.mp/podcast_v2_barnard-68-dark-nebula_20260707_181109](.mp/podcast_v2_barnard-68-dark-nebula_20260707_181109) |
-| 2026-07-15 | Biosphere 2: เมื่อมนุษย์สร้างโลกปิด แล้วออกซิเจนหายไปไหน | [.mp/podcast_v2_biosphere-2-closed-world-beats_20260715_115305](.mp/podcast_v2_biosphere-2-closed-world-beats_20260715_115305) |
-| 2026-07-20 | คำสัญญาที่เดินทางไกลกว่ามนุษย์ \| Voyager Golden Record | [.mp/podcast_v2_voyager-golden-record-promise_20260717_141324](.mp/podcast_v2_voyager-golden-record-promise_20260717_141324) |
-| 2026-08-04 | เราตายทุกวัน: คนที่ตื่นขึ้นมาอาจไม่ใช่คนเดิม | [.mp/podcast_v2_we-die-every-day_20260804_123115](.mp/podcast_v2_we-die-every-day_20260804_123115) |
-| 2026-08-17 | Denisovan ตัวใหญ่แค่ไหน? เบาะแสจากกระดูกขาใต้ทะเลไต้หวัน | [.mp/podcast_v2_denisovan-large-body-taiwan-20260817_20260817_171113](.mp/podcast_v2_denisovan-large-body-taiwan-20260817_20260817_171113) |
-| 2026-08-31 | ระเบิดฮิโรชิมาสร้างโลหะที่ไม่เคยพบมาก่อน? หลักฐานจิ๋วหลัง 80 ปี | [.mp/podcast_v2_hiroshimaite-alloy_20260831_104932](.mp/podcast_v2_hiroshimaite-alloy_20260831_104932) |
+| 2026-05-25 | ดาวอังคารอาจเคยมีอารยธรรมเมื่อ 3,700 ล้านปีก่อนจริงไหม? หลักฐานชีวิตกับสิ่งที่เรายังไม่มีสิทธิ์สรุป | [.mp/archive/podcast_v2_mars-civilization-3-7-billion-years_20260525_102807](.mp/archive/podcast_v2_mars-civilization-3-7-billion-years_20260525_102807) |
+| 2026-06-02 | Solar storms and the fragile digital world: can the next geomagnetic storm disrupt satellites, GPS, and power grids? | [.mp/archive/podcast_v2_space-weather-digital-world_rev2_20260602_085000](.mp/archive/podcast_v2_space-weather-digital-world_rev2_20260602_085000) |
+| 2026-06-05 | มันเดินทางมา 11 พันล้านปี และเพิ่งผ่านโลกเรา \| สารคดีอวกาศ | [.mp/archive/podcast_v2_3i-atlas-11-billion-years_20260605_102857](.mp/archive/podcast_v2_3i-atlas-11-billion-years_20260605_102857) |
+| 2026-06-08 | ถ้ามนุษย์ไม่เคยเรียนรู้วิธีใช้ไฟ โลกตอนนี้จะเป็นยังไง? | [.mp/archive/podcast_v2_no-fire-parallel-world_20260608_124131](.mp/archive/podcast_v2_no-fire-parallel-world_20260608_124131) |
+| 2026-06-11 | 5 อันดับถ้ามนุษย์ไม่ครองโลก แล้วใครจะครอง | [.mp/archive/podcast_v2_after-humans-top-5_20260611_162004](.mp/archive/podcast_v2_after-humans-top-5_20260611_162004) |
+| 2026-06-16 | Outgassing ปัญหาลึกลับบนสถานีอวกาศ | [.mp/archive/podcast_v2_outgassing-space-station_20260616_115646](.mp/archive/podcast_v2_outgassing-space-station_20260616_115646) |
+| 2026-06-22 | ใต้ผืนน้ำแข็งแอนตาร์กติกา ซ่อนโลกอีกใบไว้จริงไหม? | [.mp/archive/podcast_v2_antarctic-subglacial-world_20260622](.mp/archive/podcast_v2_antarctic-subglacial-world_20260622) |
+| 2026-07-02 | 7 ภูเขาไฟวงแหวนแห่งไฟ ที่อันตรายที่สุดในปี 2026 | [.mp/archive/podcast_v2_ring-of-fire-volcanoes-2026_20260702_114250](.mp/archive/podcast_v2_ring-of-fire-volcanoes-2026_20260702_114250) |
+| 2026-07-07 | ดาวที่ซ่อนตัวในหมอกดำ: Barnard 68 | [.mp/archive/podcast_v2_barnard-68-dark-nebula_20260707_181109](.mp/archive/podcast_v2_barnard-68-dark-nebula_20260707_181109) |
+| 2026-07-15 | Biosphere 2: เมื่อมนุษย์สร้างโลกปิด แล้วออกซิเจนหายไปไหน | [.mp/archive/podcast_v2_biosphere-2-closed-world-beats_20260715_115305](.mp/archive/podcast_v2_biosphere-2-closed-world-beats_20260715_115305) |
+| 2026-07-20 | คำสัญญาที่เดินทางไกลกว่ามนุษย์ \| Voyager Golden Record | [.mp/archive/podcast_v2_voyager-golden-record-promise_20260717_141324](.mp/archive/podcast_v2_voyager-golden-record-promise_20260717_141324) |
+| 2026-08-04 | เราตายทุกวัน: คนที่ตื่นขึ้นมาอาจไม่ใช่คนเดิม | [.mp/archive/podcast_v2_we-die-every-day_20260804_123115](.mp/archive/podcast_v2_we-die-every-day_20260804_123115) |
+| 2026-08-17 | Denisovan ตัวใหญ่แค่ไหน? เบาะแสจากกระดูกขาใต้ทะเลไต้หวัน | [.mp/archive/podcast_v2_denisovan-large-body-taiwan-20260817_20260817_171113](.mp/archive/podcast_v2_denisovan-large-body-taiwan-20260817_20260817_171113) |
+| 2026-08-31 | ระเบิดฮิโรชิมาสร้างโลหะที่ไม่เคยพบมาก่อน? หลักฐานจิ๋วหลัง 80 ปี | [.mp/archive/podcast_v2_hiroshimaite-alloy_20260831_104932](.mp/archive/podcast_v2_hiroshimaite-alloy_20260831_104932) |
 | 2026-09-17 | Webb เจอโลกน้ำแข็ง 27 ดวง — และพวกมันจำอดีตเมื่อ 4.6 พันล้านปีก่อนได้ | [.mp/podcast_v2_tno-remember-past_20260917](.mp/podcast_v2_tno-remember-past_20260917) |
 | 2026-09-24 | ดาวมวลสองเท่าดาวพฤหัสใน IC 348: Brown dwarf เกิดอย่างดาวฤกษ์ แต่มีจานที่อาจสร้างดาวเคราะห์ | [.mp/podcast_v2_two-jupiter-mass-brown-dwarf-ic348_20260924_150717](.mp/podcast_v2_two-jupiter-mass-brown-dwarf-ic348_20260924_150717) |
-| 2026-10-04 | วงแหวนที่ไม่มีใครถ่ายภาพได้ กำลังเปลี่ยนไปต่อหน้าเรา \| คาริคโล | [.mp/podcast_v2_chariklo-rings-changing_20261004_122050](.mp/podcast_v2_chariklo-rings-changing_20261004_122050) |
+| 2026-10-04 | วงแหวนที่ไม่มีใครถ่ายภาพได้ กำลังเปลี่ยนไปต่อหน้าเรา \| คาริคโล | [.mp/archive/podcast_v2_chariklo-rings-changing_20261004_122050](.mp/archive/podcast_v2_chariklo-rings-changing_20261004_122050) |
 | 2026-10-05 | ถ้าเกิดสงครามนิวเคลียร์ สิ่งที่คร่าชีวิตคนมากที่สุดอาจไม่ใช่ระเบิด \| Nuclear Winter | [.mp/podcast_v2_nuclear-winter-soot-not-blast_20261005_112716](.mp/podcast_v2_nuclear-winter-soot-not-blast_20261005_112716) |
 | 2026-10-09 | ถ้ามนุษย์ต้องอยู่บนดาวอังคาร ทำไมใต้ดินอาจเป็นที่เดียวที่รอดได้ \| อาณานิคมใต้ดิน | [.mp/podcast_v2_mars-underground-colony_20261009_102647](.mp/podcast_v2_mars-underground-colony_20261009_102647) |
 | 2026-10-11 | ทำไมเรายังไม่เจอมนุษย์ต่างดาว? บางทีเราอาจเป็นสิ่งมีชีวิตรุ่นแรกๆ ของเอกภพ | [.mp/podcast_v2_firstborn-cosmic-silence_20261011_221035_revision_kurz-gfx_02](.mp/podcast_v2_firstborn-cosmic-silence_20261011_221035_revision_kurz-gfx_02) |
