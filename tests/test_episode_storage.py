@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -229,6 +232,108 @@ class ConfirmAndRemoveTests(StorageTestCase):
         self.assertFalse(episode.exists())
         self.assertTrue(trash.name.endswith("-remove-podcast_v2_h_1"))
         self.assertTrue((trash / "final.mp4").exists())
+
+
+HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+
+
+class StillTimeTests(unittest.TestCase):
+    def test_still_times(self) -> None:
+        times = es.still_times(70.0, [{"start_seconds": 0}, {"start_seconds": 40}])
+        opening = [item for item in times if item[0].startswith("opening_")]
+        self.assertEqual(len(opening), 20)
+        self.assertEqual(opening[0], ("opening_000s.jpg", 0))
+        self.assertEqual(opening[-1], ("opening_057s.jpg", 57))
+        self.assertEqual(times[20:], [("chapter_01.jpg", 20.0), ("chapter_02.jpg", 55.0)])
+
+
+@unittest.skipUnless(HAS_FFMPEG, "ffmpeg/ffprobe not on PATH")
+class ArchiveTests(StorageTestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._video_dir = tempfile.TemporaryDirectory()
+        cls.video = Path(cls._video_dir.name) / "final.mp4"
+        subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=1", "-t", "70",
+                        "-pix_fmt", "yuv420p", str(cls.video)], check=True)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._video_dir.cleanup()
+
+    def _archivable(self, thumbnail_path: str | None = None) -> tuple[Path, Path, Path]:
+        mp = self._mp()
+        episode = _episode(mp)
+        shutil.copy(self.video, episode / "final.mp4")
+        _write(episode / "thumbnails" / "TH1.png", b"png")
+        _write(episode / "producer_plan.json", json.dumps({
+            "render_settings": {"renderer": "minimal_doc"},
+            "sections": [{"title": "เปิด"}, {"title": "กลาง"}]}, ensure_ascii=False))
+        _write(episode / "metadata.json", json.dumps({
+            "title": "ชื่อตอน", "chapters": [{"start_seconds": 0, "title": "เปิด"}, {"start_seconds": 40, "title": "กลาง"}]},
+            ensure_ascii=False))
+        _write(episode / "cost_report.json", json.dumps({"totals": {"new_cost_this_run_usd": 0.24}}))
+        _receipt(episode, "scheduled_verified", publishAt="2026-10-19T08:00:00Z",
+                 thumbnail_path=thumbnail_path or str(episode / "thumbnails" / "TH1.png"))
+        return mp, mp.parent, episode
+
+    def test_archive_keeps_reference_files_and_stages_the_rest(self) -> None:
+        mp, repo, episode = self._archivable()
+        name = episode.name
+        result = es.apply_archive(episode, mp, repo, NOW)
+        archive = mp / es.ARCHIVE_DIR / name
+        self.assertEqual(result.archive_dir, archive)
+        for rel in ("producer_plan.json", "graphics/glow/s1.js", "review/verdict.json", "thumbnail.png", "SUMMARY.md",
+                    "stills/opening_000s.jpg", "stills/chapter_02.jpg", "upload_pack/youtube_upload_receipt.json"):
+            self.assertTrue((archive / rel).exists(), rel)
+        self.assertEqual([p for p in archive.rglob("*") if p.suffix in {".mp4", ".wav"}], [])
+        self.assertFalse(episode.exists())
+        self.assertTrue((result.trash_dir / "final.mp4").exists())
+        self.assertRegex(result.trash_dir.name, rf"-archive-{name}$")
+        index = (mp / es.ARCHIVE_DIR / "INDEX.md").read_text(encoding="utf-8")
+        self.assertEqual(sum(1 for line in index.splitlines() if "watch?v=abc" in line), 1)
+        summary = (archive / "SUMMARY.md").read_text(encoding="utf-8")
+        for text in ("ชื่อตอน", "watch?v=abc", "minimal_doc", "เปิด", "กลาง"):
+            self.assertIn(text, summary)
+
+    def test_archive_repoints_live_docs_only(self) -> None:
+        mp, repo, episode = self._archivable()
+        line = f"Worked example: `.mp/{episode.name}/graphics/glow/s1.js`\n"
+        library = _write(repo / "doc_renderer" / "gfx_kit" / "LIBRARY.md", line)
+        postmortem = _write(repo / "docs" / "postmortems" / "x.md", line)
+        result = es.apply_archive(episode, mp, repo, NOW)
+        self.assertEqual(result.repointed, [library])
+        self.assertIn(f".mp/archive/{episode.name}/graphics/glow/s1.js", library.read_text(encoding="utf-8"))
+        self.assertEqual(postmortem.read_text(encoding="utf-8"), line)
+
+    def test_archive_refuses_existing_archive(self) -> None:
+        mp, repo, episode = self._archivable()
+        (mp / es.ARCHIVE_DIR / episode.name).mkdir(parents=True)
+        with self.assertRaises(ValueError):
+            es.apply_archive(episode, mp, repo, NOW)
+        self.assertTrue((episode / "final.mp4").exists())
+        self.assertFalse((mp / es.TRASH_DIR).exists())
+
+    def test_archive_failure_leaves_episode_intact(self) -> None:
+        mp, repo, episode = self._archivable()
+        with mock.patch.object(es, "extract_stills", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                es.apply_archive(episode, mp, repo, NOW)
+        self.assertTrue((episode / "final.mp4").exists())
+        self.assertFalse((mp / es.ARCHIVE_DIR / episode.name).exists())
+        self.assertFalse((mp / es.TRASH_DIR).exists())
+
+    def test_missing_thumbnail_is_noted(self) -> None:
+        mp, repo, episode = self._archivable(thumbnail_path="D:\\elsewhere\\TH9.png")
+        result = es.apply_archive(episode, mp, repo, NOW)
+        self.assertIn("thumbnail missing", result.notes)
+        self.assertIn("thumbnail missing", (result.archive_dir / "SUMMARY.md").read_text(encoding="utf-8"))
+
+    def test_archive_without_final_skips_stills(self) -> None:
+        mp, repo, episode = self._archivable()
+        (episode / "final.mp4").unlink()
+        result = es.apply_archive(episode, mp, repo, NOW)
+        self.assertFalse((result.archive_dir / "stills").exists())
+        self.assertIn("final.mp4 already gone, no stills", result.notes)
 
 
 if __name__ == "__main__":
