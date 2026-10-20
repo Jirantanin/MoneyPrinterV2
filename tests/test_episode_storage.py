@@ -149,6 +149,15 @@ class PruneTests(StorageTestCase):
         self.assertEqual(_rel(plan.unclassified, episode), {"expanded_broll/big.mp4"})
         self.assertEqual(plan.remove_bytes, len(PRUNED))
 
+    def test_prune_rules_stop_at_folder_boundaries(self) -> None:
+        episode = self._mp() / "podcast_v2_y_1"
+        kept = ("sfx/source/pia25657.wav", "score/src/stem.wav", "graphics/glow/m87.jpg", "audio_raw/scene_01.wav")
+        removed = ("graphics/glow/pieces/s00.mp4", "minimal_render/abc/stills/f.jpg", "review/sub/x.jpg",
+                   "sfx/whoosh.wav", "shorts_promo_gfx/sfx/hit.wav")
+        for rel in kept + removed:
+            _write(episode / rel)
+        self.assertEqual(_rel(es.prune_plan(episode).remove, episode), set(removed))
+
     def test_apply_prune_requires_proof(self) -> None:
         mp = self._mp()
         episode = _episode(mp)
@@ -320,6 +329,26 @@ class ArchiveTests(StorageTestCase):
         self.assertEqual(result.repointed, [library])
         self.assertIn(f".mp/archive/{episode.name}/graphics/glow/s1.js", library.read_text(encoding="utf-8"))
         self.assertEqual(postmortem.read_text(encoding="utf-8"), line)
+
+    def test_archive_leaves_links_to_a_longer_sibling_name_alone(self) -> None:
+        mp, repo, episode = self._archivable()
+        sibling = f"Worked example: `.mp/{episode.name}_revision_v3gfx_01/graphics/v3/`\n"
+        library = _write(repo / "doc_renderer" / "gfx_kit" / "LIBRARY.md", sibling)
+        self.assertEqual(es.referenced_by(repo, episode.name), [])
+        result = es.apply_archive(episode, mp, repo, NOW)
+        self.assertEqual(result.repointed, [])
+        self.assertEqual(library.read_text(encoding="utf-8"), sibling)
+
+    def test_archive_rolls_back_when_the_move_to_trash_fails(self) -> None:
+        mp, repo, episode = self._archivable()
+        with mock.patch.object(es.os, "replace", side_effect=PermissionError("final.mp4 is open")):
+            with self.assertRaises(PermissionError):
+                es.apply_archive(episode, mp, repo, NOW)
+        self.assertTrue((episode / "final.mp4").exists())
+        self.assertFalse((mp / es.ARCHIVE_DIR / episode.name).exists())
+        index = mp / es.ARCHIVE_DIR / "INDEX.md"
+        self.assertFalse(index.exists() and episode.name in index.read_text(encoding="utf-8"))
+        self.assertEqual(list((mp / es.TRASH_DIR).glob("*")) if (mp / es.TRASH_DIR).exists() else [], [])
 
     def test_archive_refuses_existing_archive(self) -> None:
         mp, repo, episode = self._archivable()

@@ -8,11 +8,12 @@ recorded confirmation in the producer's own words.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from fnmatch import fnmatch
+from fnmatch import fnmatchcase
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
@@ -119,16 +120,27 @@ def classify(mp_root: Path, topics_file: Path, now: datetime) -> list[FolderStat
     return statuses
 
 
-# Regenerable from the files prune keeps. Each pattern also matches inside sub-folders such as shorts_promo_gfx/.
+# Regenerable from the files prune keeps. Patterns match path segments (`*` never crosses a folder, `**` spans any
+# depth) from the episode root or from a top-level `shorts*` folder; `sfx/*.wav` leaves downloaded `sfx/source/` alone.
 PRUNE_REMOVE = (
-    "graphics/*.mp4", "minimal_render/*", "merged_audio*.wav", "score/*.wav", "sfx/*.wav", "audio_rejected/*",
-    "final_rev_*.mp4", "final_video_only.mp4", "rejected/*", "rejected_renders/*", "review/*.mp4", "review/*.jpg",
-    "review/*.png", "review/*.wav", "review/*.mp3", "duplicate_frame_audit_v*/*",
+    "graphics/**/*.mp4", "minimal_render/**", "merged_audio*.wav", "score/*.wav", "sfx/*.wav", "audio_rejected/**",
+    "final_rev_*.mp4", "final_video_only.mp4", "rejected/**", "rejected_renders/**", "review/**/*.mp4",
+    "review/**/*.jpg", "review/**/*.png", "review/**/*.wav", "review/**/*.mp3", "duplicate_frame_audit_v*/**",
 )
 
 
+def _match_parts(parts: list[str], pattern: list[str]) -> bool:
+    if not pattern:
+        return not parts
+    if pattern[0] == "**":
+        return any(_match_parts(parts[index:], pattern[1:]) for index in range(len(parts) + 1))
+    return bool(parts) and fnmatchcase(parts[0].lower(), pattern[0].lower()) and _match_parts(parts[1:], pattern[1:])
+
+
 def matches(rel: str, patterns: tuple[str, ...]) -> bool:
-    return any(fnmatch(rel, pattern) or fnmatch(rel, "*/" + pattern) for pattern in patterns)
+    parts = rel.split("/")
+    roots = [parts, parts[1:]] if len(parts) > 1 and parts[0].lower().startswith("shorts") else [parts]
+    return any(_match_parts(root, pattern.split("/")) for root in roots for pattern in patterns)
 
 
 @dataclass
@@ -166,13 +178,15 @@ def stage_to_trash(episode: Path, paths: list[Path], stage: str, mp_root: Path, 
     if trash.exists():
         raise FileExistsError(f"trash folder already exists: {trash}")
     trash.parent.mkdir(parents=True, exist_ok=True)
+    # os.replace is a rename on the same drive, never copy-then-delete: a locked file fails the move instead of
+    # leaving a half-copied folder behind.
     if paths == [episode]:
-        shutil.move(str(episode), str(trash))
+        os.replace(episode, trash)
         return trash
     for path in paths:
         target = trash / path.relative_to(episode)
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(path), str(target))
+        os.replace(path, target)
     return trash
 
 
@@ -205,9 +219,14 @@ def reference_files(repo_root: Path) -> list[Path]:
     return [path for path in [*fixed, *skills] if path.is_file()]
 
 
+def _reference_pattern(name: str) -> re.Pattern[str]:
+    """`.mp/<name>` not followed by more name characters, so a base never matches its `_revision_*` sibling."""
+    return re.compile(re.escape(f".mp/{name}") + r"(?![\w.-])")
+
+
 def referenced_by(repo_root: Path, name: str) -> list[Path]:
-    needle = f".mp/{name}"
-    return [path for path in reference_files(repo_root) if needle in path.read_text(encoding="utf-8")]
+    pattern = _reference_pattern(name)
+    return [path for path in reference_files(repo_root) if pattern.search(path.read_text(encoding="utf-8"))]
 
 
 def apply_remove(episode: Path, mp_root: Path, repo_root: Path, now: datetime) -> Path:
@@ -226,8 +245,8 @@ def apply_remove(episode: Path, mp_root: Path, repo_root: Path, now: datetime) -
 ARCHIVE_KEEP = (
     "producer_plan.json", "script.json", "draft_v*.md", "research_dossier.md", "sequence_plan.md", "metadata.json",
     "cost_report.json", "final_qc.json", "review_check.json", "spoken_thai_review.json", "sequence_review.json",
-    "review/*.json", "upload_pack/*.json", "upload_pack/*.txt", "upload_pack/*.md",
-    "graphics/*.js", "graphics/*.json", "graphics/*.md",
+    "review/**/*.json", "upload_pack/*.json", "upload_pack/*.txt", "upload_pack/*.md",
+    "graphics/**/*.js", "graphics/**/*.json", "graphics/**/*.md",
 )
 INDEX_HEADER = "# Episode archive\n\n| Published | Title | Folder | YouTube | Style |\n|---|---|---|---|---|\n"
 
@@ -327,12 +346,12 @@ def append_index(archive_root: Path, row: dict[str, Any]) -> Path:
 
 
 def repoint_references(repo_root: Path, name: str) -> list[Path]:
-    old, new = f".mp/{name}", f".mp/{ARCHIVE_DIR}/{name}"
+    pattern, new = _reference_pattern(name), f".mp/{ARCHIVE_DIR}/{name}"
     changed = []
     for path in reference_files(repo_root):
         text = path.read_text(encoding="utf-8")
-        if old in text:
-            path.write_text(text.replace(old, new), encoding="utf-8")
+        if pattern.search(text):
+            path.write_text(pattern.sub(new, text), encoding="utf-8")
             changed.append(path)
     return changed
 
@@ -395,11 +414,11 @@ def apply_archive(episode: Path, mp_root: Path, repo_root: Path, now: datetime) 
         else:
             notes.append("final.mp4 already gone, no stills")
         write_summary(episode, archive_dir, proof, stills, notes, duration)
-        append_index(mp_root / ARCHIVE_DIR, {"published": proof.get("published"), "title": _metadata(episode).get("title"),
-                                             "folder": f"`{ARCHIVE_DIR}/{episode.name}`", "url": proof.get("url"),
-                                             "style": _style(episode)})
+        row = {"published": proof.get("published"), "title": _metadata(episode).get("title"),
+               "folder": f"`{ARCHIVE_DIR}/{episode.name}`", "url": proof.get("url"), "style": _style(episode)}
+        trash = stage_to_trash(episode, [episode], "archive", mp_root, now)
     except BaseException:
-        shutil.rmtree(archive_dir)  # only the copies made above
+        shutil.rmtree(archive_dir)  # only the copies made above; the episode has not moved
         raise
-    trash = stage_to_trash(episode, [episode], "archive", mp_root, now)
+    append_index(mp_root / ARCHIVE_DIR, row)
     return ArchiveResult(archive_dir, trash, repoint_references(repo_root, episode.name), notes)
