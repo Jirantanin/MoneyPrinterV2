@@ -167,3 +167,43 @@ def apply_prune(episode: Path, mp_root: Path, now: datetime) -> tuple[StoragePla
     require_proof(episode, "prune")
     plan = prune_plan(episode)
     return plan, stage_to_trash(episode, plan.remove, "prune", mp_root, now)
+
+
+DECISIONS = ("keep", "prune", "archive", "remove")
+
+
+def confirm(episode: Path, user_message: str, url: str | None = None, decision: str | None = None) -> dict[str, Any]:
+    """Record the producer's own words: that the episode is on YouTube, or what to do with an undecided folder."""
+    if not user_message.strip():
+        raise ValueError("user_message must be the producer's actual words")
+    if decision is not None and decision not in DECISIONS:
+        raise ValueError(f"decision must be one of {', '.join(DECISIONS)}")
+    record = {"kind": "producer_decision" if decision else "manual_upload", "user_message": user_message,
+              "url": url, "decision": decision, "confirmed_at": utc_now()}
+    (episode / "upload_pack").mkdir(exist_ok=True)
+    write_json(episode / "upload_pack" / CONFIRMATION_NAME, record)
+    return record
+
+
+def reference_files(repo_root: Path) -> list[Path]:
+    """Live reference docs whose episode paths follow an archive. Historical specs, plans and postmortems are left alone."""
+    fixed = [repo_root / "completed_topics.md", repo_root / "doc_renderer" / "gfx_kit" / "LIBRARY.md"]
+    skills = sorted(repo_root.glob(".claude/skills/moneyprinter-*/**/*.md"))
+    return [path for path in [*fixed, *skills] if path.is_file()]
+
+
+def referenced_by(repo_root: Path, name: str) -> list[Path]:
+    needle = f".mp/{name}"
+    return [path for path in reference_files(repo_root) if needle in path.read_text(encoding="utf-8")]
+
+
+def apply_remove(episode: Path, mp_root: Path, repo_root: Path, now: datetime) -> Path:
+    """Move a whole folder to trash with no archive record. Only on the producer's explicit "remove" decision."""
+    decision = read_json(episode / "upload_pack" / CONFIRMATION_NAME)
+    if decision.get("kind") != "producer_decision" or decision.get("decision") != "remove":
+        raise NotProven(f"{episode.name}: removing a whole folder needs the producer's recorded remove decision")
+    references = referenced_by(repo_root, episode.name)
+    if references:
+        names = ", ".join(str(path.relative_to(repo_root)) for path in references)
+        raise ValueError(f"{episode.name} is referenced by {names}; archive it instead of removing it")
+    return stage_to_trash(episode, [episode], "remove", mp_root, now)

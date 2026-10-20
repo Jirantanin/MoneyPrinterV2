@@ -185,5 +185,51 @@ class PruneTests(StorageTestCase):
         self.assertEqual(len(list((mp / es.TRASH_DIR).iterdir())), 1)
 
 
+class ConfirmAndRemoveTests(StorageTestCase):
+    def test_confirm_writes_user_words(self) -> None:
+        episode = _episode(self._mp())
+        es.confirm(episode, "ตอนนี้ลงแล้ว", url="https://youtu.be/x")
+        record = json.loads((episode / "upload_pack" / es.CONFIRMATION_NAME).read_text(encoding="utf-8"))
+        self.assertEqual(record["kind"], "manual_upload")
+        self.assertEqual(record["user_message"], "ตอนนี้ลงแล้ว")
+        self.assertEqual(record["url"], "https://youtu.be/x")
+        self.assertEqual(es.upload_proof(episode)["kind"], "manual_upload")
+
+    def test_confirm_rejects_empty_message_and_unknown_decision(self) -> None:
+        episode = _episode(self._mp())
+        with self.assertRaises(ValueError):
+            es.confirm(episode, "  ")
+        with self.assertRaises(ValueError):
+            es.confirm(episode, "ลบ", decision="burn")
+        self.assertFalse((episode / "upload_pack" / es.CONFIRMATION_NAME).exists())
+
+    def test_remove_refuses_referenced_folder(self) -> None:
+        mp = self._mp()
+        repo = mp.parent
+        episode = _episode(mp, "podcast_v2_h_1")
+        _write(repo / "doc_renderer" / "gfx_kit" / "LIBRARY.md", "Worked example: `.mp/podcast_v2_h_1/graphics/v3/`.\n")
+        es.confirm(episode, "ลบทิ้งเลย", decision="remove")
+        with self.assertRaisesRegex(ValueError, "LIBRARY.md"):
+            es.apply_remove(episode, mp, repo, NOW)
+        self.assertTrue(episode.exists())
+
+    def test_remove_needs_the_producer_decision_not_a_receipt(self) -> None:
+        mp = self._mp()
+        episode = _episode(mp, "podcast_v2_h_1")
+        _receipt(episode)
+        with self.assertRaises(es.NotProven):
+            es.apply_remove(episode, mp, mp.parent, NOW)
+        self.assertTrue(episode.exists())
+
+    def test_remove_stages_whole_folder(self) -> None:
+        mp = self._mp()
+        episode = _episode(mp, "podcast_v2_h_1")
+        es.confirm(episode, "ลบทิ้งเลย", decision="remove")
+        trash = es.apply_remove(episode, mp, mp.parent, NOW)
+        self.assertFalse(episode.exists())
+        self.assertTrue(trash.name.endswith("-remove-podcast_v2_h_1"))
+        self.assertTrue((trash / "final.mp4").exists())
+
+
 if __name__ == "__main__":
     unittest.main()
