@@ -234,7 +234,23 @@ class ConfirmAndRemoveTests(StorageTestCase):
         self.assertTrue((trash / "final.mp4").exists())
 
 
-HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+class ResolveTests(StorageTestCase):
+    def test_resolve_episode_accepts_name_and_paths(self) -> None:
+        mp = self._mp()
+        episode = mp / "podcast_v2_a_1"
+        episode.mkdir()
+        (mp / "fonts").mkdir()
+        previous = os.getcwd()
+        os.chdir(mp.parent)
+        self.addCleanup(os.chdir, previous)
+        for value in ("podcast_v2_a_1", str(episode), str(episode) + "/", ".mp/podcast_v2_a_1", ".mp\\podcast_v2_a_1\\"):
+            self.assertEqual(es.resolve_episode(value, mp), episode.resolve(), value)
+        for value in ("nope", "fonts", str(mp), str(mp.parent)):
+            with self.assertRaisesRegex(ValueError, "no episode folder"):
+                es.resolve_episode(value, mp)
+
+
+HAS_FFMPEG =bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 
 
 class StillTimeTests(unittest.TestCase):

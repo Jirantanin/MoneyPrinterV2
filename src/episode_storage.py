@@ -36,6 +36,18 @@ class NotProven(ValueError):
     """The episode has no proof of upload (or no producer decision) for the requested action."""
 
 
+def resolve_episode(value: str, mp_root: Path) -> Path:
+    """Accept a bare folder name or any path to a direct child of `.mp/` that is not a reserved folder."""
+    cleaned = value.strip().rstrip("/\\")
+    direct = Path(cleaned)
+    candidate = direct if cleaned and direct.exists() else mp_root / cleaned
+    resolved = candidate.resolve()
+    if (not cleaned or not resolved.is_dir() or resolved.parent != mp_root.resolve()
+            or resolved.name in SKIP_DIRS):
+        raise ValueError(f"no episode folder {value!r} under .mp/")
+    return resolved
+
+
 def upload_proof(episode: Path) -> dict[str, Any] | None:
     """A verified receipt wins; otherwise the producer's recorded confirmation; otherwise None."""
     receipt = read_json(episode / "upload_pack" / RECEIPT_NAME)
