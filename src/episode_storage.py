@@ -9,7 +9,9 @@ recorded confirmation in the producer's own words.
 from __future__ import annotations
 
 import re
+import shutil
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -102,3 +104,66 @@ def classify(mp_root: Path, topics_file: Path, now: datetime) -> list[FolderStat
         else:
             status.bucket = "undecided"
     return statuses
+
+
+# Regenerable from the files prune keeps. Each pattern also matches inside sub-folders such as shorts_promo_gfx/.
+PRUNE_REMOVE = (
+    "graphics/*.mp4", "minimal_render/*", "merged_audio*.wav", "score/*.wav", "sfx/*.wav", "audio_rejected/*",
+    "final_rev_*.mp4", "final_video_only.mp4", "rejected/*", "rejected_renders/*", "review/*.mp4", "review/*.jpg",
+    "review/*.png", "review/*.wav", "review/*.mp3", "duplicate_frame_audit_v*/*",
+)
+
+
+def matches(rel: str, patterns: tuple[str, ...]) -> bool:
+    return any(fnmatch(rel, pattern) or fnmatch(rel, "*/" + pattern) for pattern in patterns)
+
+
+@dataclass
+class StoragePlan:
+    episode: Path
+    stage: str
+    remove: list[Path]
+    unclassified: list[Path]
+    remove_bytes: int
+
+
+def prune_plan(episode: Path) -> StoragePlan:
+    remove: list[Path] = []
+    unclassified: list[Path] = []
+    for path in sorted(_files(episode)):
+        if matches(path.relative_to(episode).as_posix(), PRUNE_REMOVE):
+            remove.append(path)
+        elif path.name != "final.mp4" and path.stat().st_size > LARGE_BYTES:
+            unclassified.append(path)
+    return StoragePlan(episode, "prune", remove, unclassified, sum(path.stat().st_size for path in remove))
+
+
+def require_proof(episode: Path, action: str) -> dict[str, Any]:
+    proof = upload_proof(episode)
+    if proof is None or (proof["kind"] == "producer_decision" and proof.get("decision") != action):
+        raise NotProven(f"{episode.name}: no upload receipt or producer confirmation for {action}")
+    return proof
+
+
+def stage_to_trash(episode: Path, paths: list[Path], stage: str, mp_root: Path, now: datetime) -> Path | None:
+    """Move `paths` (files inside `episode`, or `[episode]` itself) into a fresh `.mp/_trash/` folder."""
+    if not paths:
+        return None
+    trash = mp_root / TRASH_DIR / f"{now:%Y%m%d-%H%M%S}-{stage}-{episode.name}"
+    if trash.exists():
+        raise FileExistsError(f"trash folder already exists: {trash}")
+    trash.parent.mkdir(parents=True, exist_ok=True)
+    if paths == [episode]:
+        shutil.move(str(episode), str(trash))
+        return trash
+    for path in paths:
+        target = trash / path.relative_to(episode)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(path), str(target))
+    return trash
+
+
+def apply_prune(episode: Path, mp_root: Path, now: datetime) -> tuple[StoragePlan, Path | None]:
+    require_proof(episode, "prune")
+    plan = prune_plan(episode)
+    return plan, stage_to_trash(episode, plan.remove, "prune", mp_root, now)
