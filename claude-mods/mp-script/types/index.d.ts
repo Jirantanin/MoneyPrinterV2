@@ -27,10 +27,6 @@ declare module 'claude-code' {
   interface PluginState {
     'mp-script': {
       review: Review | null
-      /** When the session first started: drafts older than this were never this session's. */
-      since: number
-      /** Each draft path handled, by the mtime it was handled at. */
-      seen: Record<string, number>
       view: View
     }
   }

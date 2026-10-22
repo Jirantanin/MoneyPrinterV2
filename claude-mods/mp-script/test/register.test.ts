@@ -37,6 +37,35 @@ test('files older than the session, and other files, are left alone', async ($, 
   expect(h.read(MD)).toBeUndefined()
 })
 
+test('a read-only Bash call opens no draft, however old', async ($, on) => {
+  const h = harness(on)
+  h.put(`${EP}/narration_v2.json`, draft(TEXTS), START / 4)
+  h.put(`${EP}/narration_v4.json`, draft(TEXTS), START / 2)
+  await h.start($)
+  // Written after the session started, but by no tool call of it.
+  h.put(`${EP}/narration_v7.json`, draft(TEXTS))
+  for (const command of [`ls ${EP}`, `python -c "import json; json.load(open('${EP}/narration_v7.json'))"`, `ls .mp/${EP.split('/').pop()}`]) {
+    const ran = await h.bashTool($, command)
+    expect(ran.context).toBeUndefined()
+  }
+  expect(h.opened).toEqual([])
+  expect(h.runs).toEqual([])
+  expect(h.read(MD)).toBeUndefined()
+})
+
+test('drafts from before the session stay closed when the session started outside the repo', async ($, on) => {
+  const h = harness(on)
+  h.put(`${EP}/narration_v6.json`, draft(TEXTS), START / 2)
+  await $.session.start({ cwd: 'C:/Users/me', surface: 'terminal', isInteractive: true })
+  const read = await h.bashTool($, `cat ${EP}/narration_v6.json`)
+  expect(read.context).toBeUndefined()
+  expect(h.read(MD)).toBeUndefined()
+  // A draft the command writes still opens.
+  const wrote = await h.bashTool($, `python draft.py ${EP}`, () => h.put(`${EP}/narration_v8.json`, draft(['ใหม่', 'ใหม่'])))
+  expect(wrote.context?.at(-1)).toMatch(/narration_v8\.json is open/)
+  expect(h.read(MD)).toContain('## [1] ตอน 1\n\nใหม่')
+})
+
 test('edits in script_edit.md show as a diff and send back as a new _nn version', async ($, on) => {
   const h = harness(on)
   await h.start($)

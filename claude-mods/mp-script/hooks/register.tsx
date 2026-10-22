@@ -14,8 +14,6 @@ const TICK_MS = 1500
 const WRITERS = new Set(['Bash', 'PowerShell', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 
 const review = atom({ plugin: 'mp-script', key: 'review' } as const, null)
-const since = atom({ plugin: 'mp-script', key: 'since' } as const, 0)
-const seen = atom({ plugin: 'mp-script', key: 'seen' } as const, {})
 const view = atom({ plugin: 'mp-script', key: 'view' } as const, { showAll: false, editing: null })
 
 let ticker: { cancel: () => void } | undefined
@@ -48,10 +46,8 @@ async function writeMd($: EngineInterface, r: Review, texts: readonly string[]):
 type Opened = 'opened' | 'busy'
 
 /** Loads a draft into script_edit.md and the pane; `force` drops edits นน has not sent. */
-async function startReview($: EngineInterface, dir: string, file: string, mtimeMs: number, force: boolean): Promise<Opened | undefined> {
-  const path = `${dir}/${file}`
-  await update($, seen, s => ({ ...s, [path]: mtimeMs }))
-  const base = parseNarration((await $.fs.read(path)) as string)
+async function startReview($: EngineInterface, dir: string, file: string, force: boolean): Promise<Opened | undefined> {
+  const base = parseNarration((await $.fs.read(`${dir}/${file}`)) as string)
   if (base === undefined) {
     $.ui.log(`mp-script: ${file} is no narration list; left alone`)
     return undefined
@@ -80,22 +76,42 @@ async function startReview($: EngineInterface, dir: string, file: string, mtimeM
   return 'opened'
 }
 
-/** The newest draft in the named episodes written this session and not yet handled. */
-async function newestDraft($: EngineInterface, root: string, names: readonly string[]) {
-  const from = await read($, since)
-  const handled = await read($, seen)
-  let best: { dir: string; file: string; mtimeMs: number } | undefined
+type Draft = { dir: string; file: string; mtimeMs: number }
+
+/** Every narration draft in the named episodes, by path. */
+async function listDrafts($: EngineInterface, root: string, names: readonly string[]) {
+  const out = new Map<string, Draft>()
   for (const name of names) {
     const dir = `${root}/.mp/${name}`
-    const entries = await $.fs.list(dir).catch(() => [])
-    for (const f of entries) {
-      if (f.kind !== 'file' || !isDraft(f.name) || f.mtimeMs < from) continue
-      if (f.mtimeMs <= (handled[`${dir}/${f.name}`] ?? 0)) continue
-      if (best === undefined || f.mtimeMs > best.mtimeMs) best = { dir, file: f.name, mtimeMs: f.mtimeMs }
+    for (const f of await $.fs.list(dir).catch(() => [])) {
+      if (f.kind === 'file' && isDraft(f.name)) out.set(`${dir}/${f.name}`, { dir, file: f.name, mtimeMs: f.mtimeMs })
     }
   }
 
+  return out
+}
+
+/** The newest draft a tool call wrote: one not there `before` it ran, or there with another mtime. */
+function newestWritten(before: ReadonlyMap<string, Draft>, after: ReadonlyMap<string, Draft>) {
+  let best: Draft | undefined
+  for (const [path, d] of after) {
+    if (before.get(path)?.mtimeMs === d.mtimeMs) continue
+    if (best === undefined || d.mtimeMs > best.mtimeMs) best = d
+  }
+
   return best
+}
+
+/** The drafts a tool call could write: in the episodes it names and the one under review. */
+async function watchedDrafts($: EngineInterface, e: unknown) {
+  const cwd = await $.session.cwd()
+  const root = repoRoot(cwd)
+  if (root === undefined) return undefined
+  const r = await read($, review)
+  const names = new Set(episodeNames(`${JSON.stringify(e)} ${cwd}`))
+  if (r !== null) names.add(r.episodeDir.split('/').pop()!)
+
+  return { root, names: [...names], drafts: await listDrafts($, root, [...names]) }
 }
 
 /** Reads script_edit.md back when it changed on disk. */
@@ -190,8 +206,7 @@ async function quickEdit($: EngineInterface, i: number, value: string) {
 async function loadNewer($: EngineInterface) {
   const r = await read($, review)
   if (r?.newer === undefined) return
-  const stat = await $.fs.stat(`${r.episodeDir}/${r.newer}`)
-  await startReview($, r.episodeDir, r.newer, stat.mtimeMs, true)
+  await startReview($, r.episodeDir, r.newer, true)
 }
 
 /** For /script with nothing under review: the newest draft of the most recently touched episode. */
@@ -234,10 +249,6 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     if (repoRoot(e.cwd) !== undefined) {
       await $.command.register({ name: 'script', description: 'Open the narration editor pane for the latest MoneyPrinter draft' })
-      if ((await read($, since)) === 0) {
-        const now = await $.clock.now()
-        await update($, since, () => now)
-      }
       ensureTicker($)
     }
 
@@ -249,7 +260,7 @@ export const register: Register = on => {
       const root = repoRoot(await $.session.cwd())
       const found = root === undefined ? undefined : await latestDraft($, root)
       if (found === undefined) return { text: 'ยังไม่มีไฟล์ narration_v*.json ในตอนไหนเลย' }
-      await startReview($, found.dir, found.file, found.mtimeMs, false)
+      await startReview($, found.dir, found.file, false)
 
       return { text: `เปิด ${found.file} ให้แก้แล้ว` }
     }
@@ -258,20 +269,20 @@ export const register: Register = on => {
     return { text: opened.isPlaced ? 'เปิดหน้าแก้บทแล้ว' : `หน้าแก้บทรอที่ว่าง: ${opened.reason}` }
   })
 
-  // After a tool that writes, look for a new narration draft in the episodes it named.
+  // Open a narration draft only when this very tool call wrote it: drafts already on disk,
+  // however recent, are left alone, so reading an episode never opens its old versions.
   on('tool.call', async ($, e, next) => {
+    if (!WRITERS.has(e.tool)) return next(e)
+    const before = await watchedDrafts($, e).catch((err: unknown) => {
+      $.ui.log(`mp-script: could not list narration drafts: ${String(err)}`)
+      return undefined
+    })
     const ran = await next(e)
-    if (!WRITERS.has(e.tool) || ran.deny !== undefined || ran.isError === true) return ran
+    if (before === undefined || ran.deny !== undefined || ran.isError === true) return ran
     try {
-      const cwd = await $.session.cwd()
-      const root = repoRoot(cwd)
-      if (root === undefined) return ran
-      const r = await read($, review)
-      const names = new Set(episodeNames(`${JSON.stringify(e)} ${cwd}`))
-      if (r !== null) names.add(r.episodeDir.split('/').pop()!)
-      const found = await newestDraft($, root, [...names])
+      const found = newestWritten(before.drafts, await listDrafts($, before.root, before.names))
       if (found === undefined) return ran
-      const outcome = await startReview($, found.dir, found.file, found.mtimeMs, false)
+      const outcome = await startReview($, found.dir, found.file, false)
       if (outcome === undefined) return ran
 
       return { ...ran, context: [...(ran.context ?? []), notice(outcome, found.file, await read($, review))] }

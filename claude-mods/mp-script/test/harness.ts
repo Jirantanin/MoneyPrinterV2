@@ -30,6 +30,8 @@ export function harness(on: On) {
   const clock = mock.clock(on, { now: START })
   // Every write lands later than the last, as on disk.
   let stamp = START + 1000
+  // What the next Bash call does to the files: nothing, as a read-only command.
+  let bashRuns = () => {}
 
   const stat = (f: File) => ({ kind: 'file' as const, size: f.text.length, mtimeMs: f.mtimeMs, isLink: false })
   const key = (p: string) => p.replace(/\\/g, '/')
@@ -81,6 +83,11 @@ export function harness(on: On) {
     put(e.file_path, e.content)
     return { result: { type: 'create', filePath: e.file_path, content: e.content, structuredPatch: [], originalFile: null }, text: 'ok' }
   })
+  on('tool.call', { tool: 'Bash' }, () => {
+    bashRuns()
+    bashRuns = () => {}
+    return { result: { stdout: '', stderr: '', interrupted: false }, text: '' }
+  })
 
   return {
     files,
@@ -94,6 +101,11 @@ export function harness(on: On) {
     start: ($: Engine) => $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true }),
     /** The model writing a file with the Write tool. */
     writeTool: ($: Engine, path: string, content: string) => $.tool.call({ tool: 'Write', file_path: path, content }),
+    /** The model running a shell command; `runs` is what it writes, if anything. */
+    bashTool: ($: Engine, command: string, runs = () => {}) => {
+      bashRuns = runs
+      return $.tool.call({ tool: 'Bash', command })
+    },
     tick: async () => {
       await clock.advance(1500)
       await clock.settle()
