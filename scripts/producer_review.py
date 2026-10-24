@@ -23,10 +23,12 @@ def write_json(path: Path, payload: object) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("check", "scaffold", "prepare", "authorize"))
+    parser.add_argument("action", choices=("check", "scaffold", "sequence-review", "prepare", "authorize"))
     parser.add_argument("--plan", required=True)
     parser.add_argument("--user-message", help="Actual explicit user render authorization; never invent it")
     parser.add_argument("--output", help="Optional report path; check otherwise writes nothing")
+    parser.add_argument("--review", help="sequence-review: JSON with reviewer, decisions[], unresolved_issues[], "
+                                         "unreviewed[], scope{} written after inspecting the current slots")
     args = parser.parse_args()
     plan_path = Path(args.plan).resolve()
     folder = plan_path.parent
@@ -55,6 +57,27 @@ def main() -> int:
                                  "redundancy_review": None, "claim_coverage_review": None},
         })
         print(f"Pending review template: {scaffold}")
+        return 0
+    if args.action == "sequence-review":
+        # Bind the producer's written review to the slots render-preflight produced; the review text stays the producer's.
+        if not args.review:
+            parser.error("sequence-review needs --review <json>")
+        preflight = read_json(folder / "render_preflight.json", {})
+        if not preflight.get("render_slots_revision"):
+            parser.error("Run render-preflight first; render_preflight.json has no render_slots_revision")
+        body = read_json(Path(args.review), {})
+        missing = [k for k in ("reviewer", "decisions") if not body.get(k)]
+        if missing:
+            parser.error(f"--review is missing {', '.join(missing)}")
+        unresolved = list(body.get("unresolved_issues") or [])
+        record = {"schema_version": 1, "stage": "sequence_review", "status": "review" if unresolved else "pass",
+                  "reviewer": body["reviewer"], "reviewed_at": now,
+                  "render_slots_revision": preflight["render_slots_revision"],
+                  "scope": body.get("scope") or {"slot_count": len(preflight.get("render_slots") or [])},
+                  "decisions": list(body["decisions"]), "unresolved_issues": unresolved,
+                  "unreviewed": list(body.get("unreviewed") or [])}
+        write_json(folder / "sequence_review.json", record)
+        print(f"sequence_review.json {record['status']} for slots {record['render_slots_revision'][:12]}")
         return 0
     if args.action == "prepare":
         if report["status"] != "pass":

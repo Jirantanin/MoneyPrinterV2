@@ -314,7 +314,8 @@ def visual_policy_report(
         review_warnings.append({"category": "graphic_run", "message": f"More than {run_max} consecutive graphics; review the explanatory purpose of this sequence."})
     if time_exposure["coverage"] == "complete":
         for category, cap in (("graphic", graphic_ratio), ("generated_image", generated_ratio)):
-            actual = time_exposure["category_ratios"].get(category, 0)
+            seconds = time_exposure["category_seconds"]
+            actual = seconds.get(category, 0.0) / (sum(seconds.values()) or 1.0)   # unrounded: 0.800013 must exceed 0.8
             if actual > cap:
                 review_warnings.append({"category": f"{category}_screen_time", "actual_ratio": actual,
                                         "message": f"{category} occupies {actual:.1%} of screen time; review against slot ceiling {cap:.1%}."})

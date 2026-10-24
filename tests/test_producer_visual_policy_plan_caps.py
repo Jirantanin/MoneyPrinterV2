@@ -60,3 +60,12 @@ class ExplainerDefaultTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScreenTimeRoundingTests(unittest.TestCase):
+    def test_graphic_time_just_over_the_cap_is_flagged(self) -> None:
+        # 8 graphic slots of 6 s and 2 footage slots of 5.99952 s: 80.0013% graphics, rounds to 0.8
+        entries = ([{"provider": "remotion_graphic", "media_type": "video", "slot_duration_seconds": 6.0}] * 8
+                   + [{"provider": "official_media", "media_type": "image", "slot_duration_seconds": 5.99952}] * 2)
+        report = visual_policy_report(entries, policy=explainer_visual_source_policy())
+        self.assertTrue(any(w["category"] == "graphic_screen_time" for w in report["review_warnings"]))

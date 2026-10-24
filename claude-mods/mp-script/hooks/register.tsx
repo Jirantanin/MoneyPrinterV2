@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Review } from '../types'
-import { diffText } from './diff'
+import { changeCount, diffText } from './diff'
 import { episodeNames, episodeSlug, fromMarkdown, isDraft, nextEditName, parseNarration, toMarkdown, withTexts } from './narration'
 import { sentMessage, statusLine, summary } from './view'
 
@@ -10,6 +10,8 @@ const PANE = 'mp-script'
 const REPO = /^(.*?[\\/]MoneyPrinterV2)(?:[\\/]|$)/i
 const MD = 'script_edit.md'
 const TICK_MS = 1500
+// A draft this close to the version นน already approved is a typo fix: reported, not reopened for review.
+const TYPO_CHARS = 12
 // Tools that can leave a new narration draft behind.
 const WRITERS = new Set(['Bash', 'PowerShell', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 
@@ -77,6 +79,24 @@ async function startReview($: EngineInterface, dir: string, file: string, force:
 }
 
 type Draft = { dir: string; file: string; mtimeMs: number }
+
+/** Characters changed against the draft นน last approved, when `found` is only a small fix of it. */
+async function typoFix($: EngineInterface, found: Draft): Promise<{ approved: string; chars: number } | undefined> {
+  const r = await read($, review)
+  if (r === null || r.status !== 'sent' || r.episodeDir !== found.dir) return undefined
+  const approved = r.sentAs ?? r.file
+  if (approved === found.file) return undefined
+  const was = parseNarration((await $.fs.read(`${found.dir}/${approved}`).catch(() => '')) as string)
+  const now = parseNarration((await $.fs.read(`${found.dir}/${found.file}`)) as string)
+  if (was === undefined || now === undefined || was.length !== now.length) return undefined
+  let chars = 0
+  for (const [i, p] of was.entries()) {
+    const c = changeCount(diffText(p.text, now[i]!.text))
+    chars += c.added + c.removed
+  }
+
+  return chars > 0 && chars <= TYPO_CHARS ? { approved, chars } : undefined
+}
 
 /** Every narration draft in the named episodes, by path. */
 async function listDrafts($: EngineInterface, root: string, names: readonly string[]) {
@@ -282,6 +302,15 @@ export const register: Register = on => {
     try {
       const found = newestWritten(before.drafts, await listDrafts($, before.root, before.names))
       if (found === undefined) return ran
+      const fix = await typoFix($, found)
+      if (fix !== undefined) {
+        const note =
+          `mp-script: ${found.file} changes ${fix.chars} characters from ${fix.approved}, which นน already approved, ` +
+          'so it was not reopened for review. Tell นน in one line what you fixed and carry on.'
+        await update($, review, x => (x === null ? x : { ...x, sentAs: found.file }))
+
+        return { ...ran, context: [...(ran.context ?? []), note] }
+      }
       const outcome = await startReview($, found.dir, found.file, false)
       if (outcome === undefined) return ran
 

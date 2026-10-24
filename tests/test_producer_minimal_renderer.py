@@ -64,7 +64,8 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual([(c["no"], c["title"], c["start"]) for c in tl["chapters"]], [(1, "A", 0.0), (2, "B", 15.0)])
         self.assertEqual(tl["shots"][-1]["end"], 23.0)
         self.assertEqual(tl["narrationEnd"], 20.0)
-        self.assertEqual((tl["shots"][0]["capTitle"], tl["shots"][0]["capSub"]), ("ภาพจำลอง", "ไม่ใช่ภาพจริง"))
+        self.assertEqual((tl["shots"][0]["capTitle"], tl["shots"][0]["capSub"]), ("ภาพจำลอง", ""))   # qualification stays off screen
+        self.assertTrue(any("qualification word" in w for w in tl["warnings"]))
         self.assertEqual((tl["sources"], tl["endNote"]), ([], ""))   # no end card by default
         self.assertTrue(all(Path(s["src"].replace("file:///", "")).is_file() for s in tl["shots"]))
 

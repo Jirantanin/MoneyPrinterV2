@@ -152,3 +152,17 @@ test('discard puts the draft back', async ($, on) => {
   expect(h.read(MD)).toContain('มีเปลือกหินสีดำ')
   expect(await ui.find({ type: 'Text', text: 'ยังไม่ได้แก้' })).toBeDefined()
 })
+
+test('a small fix of an approved draft is reported, not reopened', async ($, on) => {
+  const h = harness(on)
+  await h.start($)
+  await h.writeTool($, `${EP}/narration_v0.json`, draft(TEXTS))
+  const ui = await mount($, 'desktop')
+  await ui.press({ key: 'skip' })
+  const before = h.opened.length
+  const fixed = await h.writeTool($, `${EP}/narration_v1.json`, draft([TEXTS[0]!.replace('สีดำ', 'สีดํา'), TEXTS[1]!]))
+  expect(fixed.context?.at(-1)).toMatch(/not reopened for review/)
+  expect(h.opened.length).toBe(before)
+  const rewrite = await h.writeTool($, `${EP}/narration_v2.json`, draft(['บทใหม่ทั้งย่อหน้า ไม่ใช่แค่คำผิด', TEXTS[1]!]))
+  expect(rewrite.context?.at(-1)).toMatch(/Stop here/)
+})

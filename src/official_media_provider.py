@@ -30,7 +30,8 @@ NASA_MEDIA_LICENSE_NOTE = (
 )
 
 HTTP_HEADERS = {
-    "User-Agent": "Mozilla/5.0",
+    # Wikimedia's policy wants a named client with contact info; a bare browser-like UA gets an error page.
+    "User-Agent": "MoneyPrinterV2/1.0 (https://github.com/Jirantanin/MoneyPrinterV2; documentary research)",
     "Accept-Language": "en-US,en;q=0.9",
 }
 REQUEST_TIMEOUT = (8, 25)

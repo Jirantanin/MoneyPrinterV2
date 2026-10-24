@@ -9,6 +9,8 @@ A short lives in its own folder, usually .mp/<episode>/shorts_promo_gfx/, holdin
 
 Steps (repo root, project venv):
   python scripts/producer_gfx_short.py tts    --dir <short>   Gemini TTS per beat -> audio_raw/<id>.wav (paid; existing files are kept)
+  python scripts/producer_gfx_short.py split  --dir <short> --take <wav/mp3>   instead of tts: one take from นน -> audio_raw/<id>.wav
+  python scripts/producer_gfx_short.py tighten --dir <short>  optional: shrink pauses >0.25 s to 0.15 s + atempo 1.06 (original kept in audio_tts_orig/)
   python scripts/producer_gfx_short.py align  --dir <short>   trim + place beats -> narration.wav, timing.js/json, subtitle.srt
   python scripts/producer_gfx_short.py stills --dir <short> --at 1,5,9  -> stills/s_<t>.jpg + stills/sheet.jpg
   python scripts/producer_gfx_short.py record --dir <short>   1080x1920 30 fps -> video_silent.mp4 (+ .sfx.json from the page)
@@ -77,6 +79,86 @@ def cmd_tts(d: Path, force: bool) -> None:
         tts.synthesize_gemini(s["narration"], str(out), scene_index=i, total_scenes=len(scenes), tone_preset="host_dry")
         print("tts", out.name, round(read_wav(out)[0].size / read_wav(out)[1], 2), "s")
         time.sleep(7)  # Tier 1 allows 10 requests a minute
+
+
+def cmd_split(d: Path, take: Path, model_size: str, cuts_at: str) -> None:
+    """One recorded take (e.g. นน's ElevenLabs read) -> audio_raw/<id>.wav per beat, cut at the quietest
+    point between beats. Override a cut with --cuts "3=39.29" (index 1 = between beat 1 and 2) after
+    checking both sides with Gemini; Whisper can miss a run-on join."""
+    from faster_whisper import WhisperModel
+    spec = load(d)
+    wav = d / "source_take.wav"
+    if take.resolve() != wav.resolve():
+        run(["ffmpeg", "-y", "-v", "error", "-i", str(take), "-ac", "1", "-ar", "48000", str(wav)])
+    a, sr = read_wav(wav)
+    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    segs, _ = model.transcribe(str(wav), language="th", beam_size=5, word_timestamps=True, vad_filter=True,
+                               condition_on_previous_text=False)
+    words = [(w.word, w.start, w.end) for seg in segs for w in (seg.words or [])]
+    (d / "take_whisper_words.json").write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+    heard, times = "", []
+    for w, t0, t1 in words:
+        k = len(squash(w)); heard += squash(w)
+        times += [t0 + (t1 - t0) * i / max(1, k) for i in range(k)]
+    script = "".join(squash(s["narration"]) for s in spec["scenes"])
+    sm = difflib.SequenceMatcher(None, script, heard, autojunk=False)
+    known: dict[int, float] = {}
+    for i1, j1, size in sm.get_matching_blocks():
+        for i in range(size):
+            known[i1 + i] = times[j1 + i]
+    keys = sorted(known)
+    if len(keys) < 2:
+        raise SystemExit("the take does not match script.json; check the take is the right one")
+    ct = [float(np.interp(i, keys, [known[k] for k in keys])) for i in range(len(script))]
+    print("match ratio", round(sm.ratio(), 3))
+    bounds, pos = [], 0
+    for s in spec["scenes"]:
+        n = len(squash(s["narration"]))
+        bounds.append((s["id"], ct[pos], ct[pos + n - 1])); pos += n
+    hop = int(sr * .01)
+    rms = np.sqrt((a[: len(a) // hop * hop].reshape(-1, hop) ** 2).mean(1))
+    cuts = [0.0]
+    for (_, _, end_a), (_, start_b, _) in zip(bounds, bounds[1:]):
+        lo, hi = int(end_a / .01), max(int(start_b / .01), int(end_a / .01) + 1)
+        cuts.append((lo + int(np.argmin(rms[lo:hi]))) * .01)
+    cuts.append(len(a) / sr)
+    for item in filter(None, cuts_at.split(",")):
+        i, v = item.split("="); cuts[int(i)] = float(v)
+    (d / "audio_raw").mkdir(exist_ok=True)
+    for (sid, t0, t1), c0, c1 in zip(bounds, cuts, cuts[1:]):
+        write_mono(d / "audio_raw" / f"{sid}.wav", a[int(c0 * sr): int(c1 * sr)], sr)
+        print(f"{sid}: speech {t0:6.2f}-{t1:6.2f}  cut {c0:6.2f}-{c1:6.2f}  ({c1 - c0:5.2f}s)")
+
+
+def cmd_tighten(d: Path, gap_over: float, max_gap: float, tempo: float, silence_db: float) -> None:
+    """Tighten every beat: pauses longer than gap_over shrink to max_gap, then atempo. Always works from
+    audio_tts_orig/ (filled from audio_raw/ on the first run), so it can be re-run with other values."""
+    raw, orig = d / "audio_raw", d / "audio_tts_orig"
+    if not orig.exists():
+        shutil.copytree(raw, orig)
+    for src in sorted(orig.glob("*.wav")):
+        a, sr = read_wav(src)
+        hop = int(sr * .01); n = len(a) // hop
+        db = 20 * np.log10(np.sqrt((a[: n * hop].reshape(n, hop) ** 2).mean(1)) + 1e-9)
+        quiet = db < silence_db   # TTS pauses sit near digital silence; -62 dBFS matched the deep-sea hand edit
+        keep, i = [], 0
+        while i < n:
+            j = i
+            while j < n and quiet[j]:
+                j += 1
+            if j > i and (j - i) * .01 > gap_over and 0 < i and j < n:   # inner pause only; edges stay for align
+                half = int(max_gap / .01 / 2)
+                keep += list(range(i, i + half)) + list(range(j - half, j))
+            else:
+                keep += list(range(i, max(j, i + 1)))
+            i = max(j, i + 1)
+        out = np.concatenate([a[k * hop:(k + 1) * hop] for k in keep] + [a[n * hop:]])
+        write_mono(raw / src.name, out, sr)
+        if abs(tempo - 1) > 1e-3:
+            tmp = raw / f"_{src.name}"
+            run(["ffmpeg", "-y", "-v", "error", "-i", str(raw / src.name), "-filter:a", f"atempo={tempo}", str(tmp)])
+            tmp.replace(raw / src.name)
+        print(f"{src.name}: {len(a) / sr:.2f} -> {read_wav(raw / src.name)[0].size / sr:.2f} s")
 
 
 # ---------------------------------------------------------------- align
@@ -330,14 +412,24 @@ def cmd_mux(d: Path) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("step", choices=["tts", "align", "stills", "record", "audio", "mux"])
+    ap.add_argument("step", choices=["tts", "split", "tighten", "align", "stills", "record", "audio", "mux"])
     ap.add_argument("--dir", required=True, type=Path)
     ap.add_argument("--force", action="store_true", help="tts: re-synthesize existing beats")
-    ap.add_argument("--model", default="medium", help="align: faster-whisper size")
+    ap.add_argument("--model", default="medium", help="split/align: faster-whisper size")
+    ap.add_argument("--take", type=Path, help="split: the single recorded take (any format ffmpeg reads)")
+    ap.add_argument("--cuts", default="", help='split: override cuts, e.g. "3=39.29"')
+    ap.add_argument("--gap-over", type=float, default=0.25, help="tighten: pauses longer than this (s) shrink")
+    ap.add_argument("--max-gap", type=float, default=0.15, help="tighten: ...to this (s)")
+    ap.add_argument("--tempo", type=float, default=1.06, help="tighten: atempo factor (1 = keep)")
+    ap.add_argument("--silence-db", type=float, default=-62.0, help="tighten: level (dBFS) counted as pause")
     ap.add_argument("--at", default="1,4,8,12,16,20", help="stills: page times")
     a = ap.parse_args()
     d = a.dir.resolve()
-    {"tts": lambda: cmd_tts(d, a.force), "align": lambda: cmd_align(d, a.model), "stills": lambda: cmd_stills(d, a.at),
+    if a.step == "split" and not a.take:
+        ap.error("split needs --take")
+    {"tts": lambda: cmd_tts(d, a.force), "split": lambda: cmd_split(d, a.take, a.model, a.cuts),
+     "tighten": lambda: cmd_tighten(d, a.gap_over, a.max_gap, a.tempo, a.silence_db),
+     "align": lambda: cmd_align(d, a.model), "stills": lambda: cmd_stills(d, a.at),
      "record": lambda: cmd_record(d), "audio": lambda: cmd_audio(d), "mux": lambda: cmd_mux(d)}[a.step]()
     return 0
 

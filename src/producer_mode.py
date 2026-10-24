@@ -4542,6 +4542,40 @@ def write_checkpoint_html(episode_dir: str | Path, plan: dict[str, Any]) -> Path
     return path
 
 
+REVISION_SKIP_DIRS = {"minimal_render", "__pycache__", "_trash", "node_modules"}
+REVISION_SKIP_FILES = ("final.mp4", "render_authorization.json", "prepared_revision.json")
+
+
+def create_revision(source_dir: str | Path, name: str) -> Path:
+    """Copy an episode into <source>_revision_<name> for a new cut. Files are copied, never hard-linked
+    (ffmpeg -y rewrites a linked file in place), and the old folder name is replaced in every JSON file
+    so episode_id and absolute paths point at the copy. The render gate and the old final stay behind."""
+    import shutil
+
+    source = Path(source_dir).resolve()
+    if not (source / "producer_plan.json").is_file():
+        raise FileNotFoundError(f"not an episode folder (no producer_plan.json): {source}")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name or ""):
+        raise ValueError("--name must be ASCII letters, digits, - or _")
+    target = source.with_name(f"{source.name}_revision_{name}")
+    if target.exists():
+        raise FileExistsError(f"revision folder exists: {target}")
+
+    def skip(folder: str, names: list[str]) -> set[str]:
+        return {n for n in names if n in REVISION_SKIP_DIRS or n in REVISION_SKIP_FILES}
+
+    shutil.copytree(source, target, ignore=skip, copy_function=shutil.copy2)
+    changed = 0
+    for path in target.rglob("*.json"):
+        text = path.read_text(encoding="utf-8-sig", errors="strict")
+        new = text.replace(source.name, target.name)   # episode_id and every path into the folder
+        if new != text:
+            path.write_text(new, encoding="utf-8")
+            changed += 1
+    print(f"[OK] copied {source.name} -> {target.name}; updated {changed} JSON files")
+    return target
+
+
 def init_checkpoint(topic: str, episode_dir: str | Path | None = None, slug: str | None = None) -> tuple[Path, Path]:
     target_dir = Path(episode_dir) if episode_dir else make_episode_dir(topic, slug=slug)
     plan = default_producer_plan(topic, target_dir, slug=slug)
@@ -4890,6 +4924,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Network timeout for live provider smoke checks",
     )
 
+    revision = sub.add_parser("revision", help="Copy an episode into <episode>_revision_<name> for a new cut")
+    revision.add_argument("--from", dest="source", required=True, help="Source episode folder")
+    revision.add_argument("--name", required=True, help="ASCII revision name, e.g. v3gfx_01")
+
     checkpoint = sub.add_parser("checkpoint", help="Render checkpoint.html from producer_plan.json")
     checkpoint.add_argument("--plan", required=True, help="Path to producer_plan.json")
     checkpoint.add_argument("--out", help="Optional output HTML path")
@@ -4911,6 +4949,10 @@ def main(argv: list[str] | None = None) -> int:
         plan_path, html_path = init_checkpoint(args.topic, args.episode_dir, slug=args.slug)
         print(f"[OK] wrote {plan_path}")
         print(f"[OK] wrote {html_path}")
+        return 0
+
+    if args.command == "revision":
+        create_revision(args.source, args.name)
         return 0
 
     if args.command == "research":

@@ -4,7 +4,6 @@ import {
   Easing,
   interpolate,
   OffthreadVideo,
-  Sequence,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
@@ -27,6 +26,8 @@ const containsKeyword = (text: string, keywords: string[] = []) => {
   return keywords.some((keyword) => keyword && lower.includes(keyword.toLowerCase()));
 };
 
+// The 16:9 episode frame is shown whole across the width, over a blurred, darker copy that fills 9:16;
+// a full-height cover crop keeps only the middle third and cuts off labels and figures.
 const BackgroundVideo: React.FC<Pick<ClipShortProps, "videoPath" | "startAtSeconds">> = ({
   videoPath,
   startAtSeconds,
@@ -34,7 +35,7 @@ const BackgroundVideo: React.FC<Pick<ClipShortProps, "videoPath" | "startAtSecon
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const startFrom = Math.max(0, Math.floor((startAtSeconds || 0) * fps));
-  const zoom = interpolate(frame, [0, durationInFrames], [1.04, 1.14], {
+  const zoom = interpolate(frame, [0, durationInFrames], [1.0, 1.05], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.16, 1, 0.3, 1),
@@ -45,25 +46,33 @@ const BackgroundVideo: React.FC<Pick<ClipShortProps, "videoPath" | "startAtSecon
       <OffthreadVideo
         src={staticFile(videoPath)}
         startFrom={startFrom}
+        muted
         style={{
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          transform: `scale(${zoom})`,
-          filter: "contrast(1.14) saturate(0.92) brightness(0.72)",
+          transform: "scale(1.15)",
+          filter: "blur(36px) brightness(0.45) saturate(1.1)",
         }}
       />
+      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
+        <OffthreadVideo
+          src={staticFile(videoPath)}
+          startFrom={startFrom}
+          style={{
+            width: "100%",
+            height: "auto",
+            aspectRatio: "16 / 9",
+            objectFit: "contain",
+            transform: `scale(${zoom})`,
+            boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
+          }}
+        />
+      </AbsoluteFill>
       <AbsoluteFill
         style={{
           background:
-            "radial-gradient(circle at 50% 34%, rgba(94,199,255,0.16), rgba(0,0,0,0) 30%), linear-gradient(to bottom, rgba(0,0,0,0.34), rgba(0,0,0,0.1) 32%, rgba(0,0,0,0.88) 100%)",
-        }}
-      />
-      <AbsoluteFill
-        style={{
-          background:
-            "linear-gradient(to right, rgba(0,0,0,0.52), rgba(0,0,0,0.05) 42%, rgba(0,0,0,0.42))",
-          mixBlendMode: "multiply",
+            "linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0) 26%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.7) 100%)",
         }}
       />
     </AbsoluteFill>
@@ -231,37 +240,6 @@ const ProgressBar: React.FC = () => {
   );
 };
 
-const ColdOpenStamp: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const opacity = interpolate(frame, [0.5 * fps, 1.0 * fps, 4.2 * fps, 4.8 * fps], [0, 1, 1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  return (
-    <Sequence from={0} durationInFrames={5 * fps} premountFor={fps}>
-      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", opacity }}>
-        <div
-          style={{
-            color: GOLD,
-            fontFamily: "Arial, sans-serif",
-            fontSize: 34,
-            fontWeight: 900,
-            letterSpacing: 4,
-            padding: "12px 22px",
-            border: `2px solid ${GOLD}`,
-            borderRadius: 4,
-            background: "rgba(0,0,0,0.62)",
-            transform: "rotate(-2deg)",
-          }}
-        >
-          BILLION-DOLLAR ANTI-AGING RACE
-        </div>
-      </AbsoluteFill>
-    </Sequence>
-  );
-};
-
 export const ClipShort: React.FC<ClipShortProps> = (props) => {
   const entries = parseSrt(props.srtContent || "");
 
@@ -269,7 +247,6 @@ export const ClipShort: React.FC<ClipShortProps> = (props) => {
     <AbsoluteFill style={{ width: 1080, height: 1920, backgroundColor: "#020204" }}>
       <BackgroundVideo videoPath={props.videoPath} startAtSeconds={props.startAtSeconds || 0} />
       <Header title={props.title} subtitle={props.subtitle} />
-      <ColdOpenStamp />
       <Captions entries={entries} keywords={props.keywordHighlights} />
       <ProgressBar />
     </AbsoluteFill>

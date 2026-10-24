@@ -6,7 +6,7 @@ prepared render props and audio, so the revision/authorization gate is unchanged
 
 Look: restrained documentary styling — slow Ken Burns on full-frame images, framed "plates" for
 portrait/square/low-resolution images, research figures on a paper card, chapter cards when the scene
-title changes, and captions built from each asset's on-screen qualification. The outro hold shows no
+title changes, and captions naming each asset (the part of its qualification before " — "). The outro hold shows no
 end card unless the episode's overrides ask for one (sources live in the YouTube description).
 
 Rendering: ``doc_renderer/player.html`` is driven frame-by-frame in headless Chrome by
@@ -120,12 +120,12 @@ def classify_asset(fit: str, width: int, height: int, mean_luma: float) -> str:
     return "cover"
 
 
-def split_caption(qualification: str) -> tuple[str, str]:
-    text = str(qualification or "").strip()
-    if " — " in text:
-        title, sub = text.split(" — ", 1)
-        return title.strip(), sub.strip()
-    return text, ""
+QUALIFICATION_WORDS = ("จำลอง", "ภาพประกอบ", "เปรียบเทียบ", "ภาพเทียบ")
+
+
+def caption_name(qualification: str) -> str:
+    """The on-screen caption: only the name before " — "; the qualification after it stays off screen (นน 2026-10-24)."""
+    return str(qualification or "").split(" — ", 1)[0].strip()
 
 
 def _file_url(path: Path) -> str:
@@ -217,11 +217,12 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
         for j in range(k, k + count):
             source = paths[j]
             override = asset_overrides.get(source.name) or {}
-            cap_title, cap_sub = split_caption(quals[j])
-            if override.get("caption_title"):
-                cap_title = str(override["caption_title"])
+            cap_title = str(override.get("caption_title") or caption_name(quals[j]))
+            if any(word in cap_title for word in QUALIFICATION_WORDS):
+                warnings.append(f"{source.name}: caption '{cap_title}' shows a qualification word on screen; "
+                                "set caption_title to the name only unless the word is part of the name")
             common = {"i": j, "scene": scene, "start": round(start, 3), "end": round(start + durations[j], 3),
-                      "name": source.name, "capTitle": cap_title, "capSub": cap_sub,
+                      "name": source.name, "capTitle": cap_title, "capSub": "",
                       "credit": str(credits[j] or "").strip(), "move": len(shots) % 4,
                       **({"capTop": True} if override.get("caption_top") else {})}
             if types[j] == "video":
