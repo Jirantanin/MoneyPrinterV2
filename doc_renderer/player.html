@@ -258,7 +258,7 @@ window.__seek = (t) => {
 
   // end card
   const endA = TL.narrationEnd + 0.3;
-  const eo = ease(ramp(t, endA, endA + 1.4));
+  const eo = TL.sources.length || TL.endNote ? ease(ramp(t, endA, endA + 1.4)) : 0;   // no card, no shade
   document.getElementById('end').style.opacity = eo;
   document.getElementById('end').style.transform = `translateY(${(1 - eo) * 14}px)`;
 

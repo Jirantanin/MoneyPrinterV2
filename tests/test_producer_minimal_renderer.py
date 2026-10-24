@@ -14,7 +14,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from producer_contract import render_revision
-from producer_minimal_renderer import OVERRIDES_FILE, build_timeline, classify_asset, end_card_sources
+from producer_minimal_renderer import OVERRIDES_FILE, build_timeline, classify_asset
 import producer_minimal_renderer
 import producer_renderer
 
@@ -49,21 +49,6 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(classify_asset("contain", 850, 500, 230), "figure")    # light research figure
 
 
-class EndCardTests(unittest.TestCase):
-    def test_citations_deduplicated_and_agencies_collected(self):
-        lines = end_card_sources([
-            "K. L. Luhman; C. Alves de Oliveira (2025), Fig. 1 | CC BY 4.0",
-            "Luhman & Alves de Oliveira (2025), ApJL 986 L14, Fig. 12",
-            "Richard J. Parker; Catarina Alves de Oliveira (2026), Fig. 5",
-            "NASA, ESA, CSA, STScI",
-            "NASA/JPL-Caltech/UCLA",
-            "",
-        ])
-        self.assertEqual(lines, ["Luhman & Alves de Oliveira (2025), ApJL 986 L14",
-                                 "Richard J. Parker; Catarina Alves de Oliveira (2026)",
-                                 "NASA · ESA · CSA · STScI · JPL-Caltech"])
-
-
 class TimelineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -80,7 +65,7 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(tl["shots"][-1]["end"], 23.0)
         self.assertEqual(tl["narrationEnd"], 20.0)
         self.assertEqual((tl["shots"][0]["capTitle"], tl["shots"][0]["capSub"]), ("ภาพจำลอง", "ไม่ใช่ภาพจริง"))
-        self.assertTrue(tl["endNote"])
+        self.assertEqual((tl["sources"], tl["endNote"]), ([], ""))   # no end card by default
         self.assertTrue(all(Path(s["src"].replace("file:///", "")).is_file() for s in tl["shots"]))
 
     def test_overrides_apply(self):

@@ -6,8 +6,8 @@ prepared render props and audio, so the revision/authorization gate is unchanged
 
 Look: restrained documentary styling — slow Ken Burns on full-frame images, framed "plates" for
 portrait/square/low-resolution images, research figures on a paper card, chapter cards when the scene
-title changes, captions built from each asset's on-screen qualification, and a sources end card in
-the outro hold.
+title changes, and captions built from each asset's on-screen qualification. The outro hold shows no
+end card unless the episode's overrides ask for one (sources live in the YouTube description).
 
 Rendering: ``doc_renderer/player.html`` is driven frame-by-frame in headless Chrome by
 ``doc_renderer/render.cjs``; frames are encoded in resumable chunks. Video b-roll is pre-extracted
@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -54,8 +53,6 @@ OVERRIDES_FILE = "minimal_render_overrides.json"
 FPS = 25
 KINDS = ("cover", "plate", "figure", "slide", "video")
 CROSSFADE_MARGIN_SECONDS = 2.0   # player dissolves start up to 0.8 s before a slot; extract a little extra
-KNOWN_AGENCIES = ("NASA", "ESA", "CSA", "STScI", "JPL-Caltech", "GSFC", "ESO", "NOIRLab", "JAXA", "NOAA", "USGS")
-DEFAULT_END_NOTE = "ภาพประกอบบางส่วนเป็นภาพจำลองหรือภาพจากระบบอื่นเพื่อใช้เปรียบเทียบ ตามที่ระบุไว้บนจอ"
 
 
 def renderer_dir(root_dir: Path) -> Path:
@@ -125,33 +122,6 @@ def split_caption(qualification: str) -> tuple[str, str]:
         title, sub = text.split(" — ", 1)
         return title.strip(), sub.strip()
     return text, ""
-
-
-def end_card_sources(credits: list[str]) -> list[str]:
-    """Research citations (one line per paper) plus one line of known agencies."""
-    citations: dict[tuple[str, str], str] = {}
-    agencies: list[str] = []
-    for credit in credits:
-        credit = str(credit or "").strip()
-        year = re.search(r"\((\d{4})\)", credit)
-        if year:
-            first_author = re.split(r"[;&,]", credit[:year.start()])[0].split()
-            if not first_author:
-                continue
-            key = (first_author[-1], year.group(1))
-            clean = re.sub(r",?\s*(Fig\.?|Figure)\s*\d+.*$", "", credit)
-            clean = re.sub(r"\s*\|.*$", "", clean)
-            clean = re.sub(r",\s*stag\w*.*$", "", clean).strip(" ,")
-            if len(clean) > len(citations.get(key, "")):
-                citations[key] = clean
-            continue
-        for agency in KNOWN_AGENCIES:
-            if re.search(rf"(?<![A-Za-z]){re.escape(agency)}(?![A-Za-z])", credit) and agency not in agencies:
-                agencies.append(agency)
-    lines = [citations[key] for key in sorted(citations, key=lambda k: (k[1], k[0]))]
-    if agencies:
-        lines.append(" · ".join(a for a in KNOWN_AGENCIES if a in agencies))
-    return lines
 
 
 def _file_url(path: Path) -> str:
@@ -297,9 +267,7 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
         chapters[0]["start"] = boundary          # chapter 1's card waits for the sting
 
     end_card = overrides.get("end_card") or {}
-    sources = end_card.get("sources") if "sources" in end_card else end_card_sources(credits)
-    note = end_card.get("note") if "note" in end_card else (
-        DEFAULT_END_NOTE if any("ไม่ใช่" in str(q) for q in quals) else "")
+    sources, note = end_card.get("sources"), end_card.get("note")   # no end card unless an episode asks for one
     return {"fps": FPS, "total": total, "narrationEnd": round(min(narration_end, total), 3), "opening": opening,
             "shots": shots, "chapters": chapters, "sources": list(sources or []), "endNote": note or "",
             "warnings": warnings}
