@@ -178,7 +178,7 @@ def render_revision(episode_dir: Path, preflight: dict[str, Any], root_dir: Path
     plan = read_json(episode_dir / "producer_plan.json", {})
     paths = {episode_dir / name for name in ("script.json", "asset_manifest.json", "render_asset_manifest.json", "tts_manifest.json", "speech_map.json", "sequence_review.json")}
     paths.update(episode_dir.glob("scene_*.wav"))
-    for raw in [*props.get("imagePaths", []), props.get("audioPath"), props.get("scene0VideoPath")]:
+    for raw in [*props.get("imagePaths", []), props.get("audioPath"), props.get("scene0VideoPath"), props.get("endCtaPath")]:
         if raw:
             path = Path(str(raw))
             paths.add(path if path.is_absolute() else root_dir / path)

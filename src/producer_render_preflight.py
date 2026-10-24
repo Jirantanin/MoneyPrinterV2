@@ -635,10 +635,17 @@ def build_render_preflight(
         props_preview["scene0VideoPath"] = str(scene0_video.resolve())
 
     # Renderer choice is part of the props, so it is bound into the prepared revision.
-    renderer = str(((read_json(episode_path / "producer_plan.json", {}) or {}).get("render_settings") or {}).get("renderer") or "remotion")
+    render_settings = (read_json(episode_path / "producer_plan.json", {}) or {}).get("render_settings") or {}
+    renderer = str(render_settings.get("renderer") or "remotion")
     if renderer == "minimal_doc":
-        from producer_minimal_renderer import environment_checks as minimal_checks
+        from producer_minimal_renderer import environment_checks as minimal_checks, resolve_end_cta
         props_preview["renderer"] = renderer
+        try:   # the sign-off clip is a render input, so it goes into the props (and the revision)
+            end_cta = resolve_end_cta(root_path, render_settings)
+            if end_cta:
+                props_preview["endCtaPath"] = str(end_cta)
+        except ValueError as exc:
+            errors.append(str(exc))
         for check in minimal_checks(root_path):
             if check["status"] != "pass":
                 errors.append(f"minimal_doc renderer missing {check['name']} (run npm install in doc_renderer/)")
@@ -654,6 +661,8 @@ def build_render_preflight(
             if message not in warnings)
     elif renderer != "remotion":
         errors.append(f"Unknown render_settings.renderer: {renderer}")
+    if renderer != "minimal_doc" and "end_cta" in render_settings:
+        warnings.append("render_settings.end_cta is only appended by the minimal_doc renderer")
 
     status = _status_from_issues(
         missing_audio=missing_audio,

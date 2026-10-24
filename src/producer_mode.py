@@ -61,6 +61,8 @@ PRONUNCIATION_GUIDE_FILENAME = "pronunciation_guide.md"
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = ROOT_DIR / ".mp"
+# The channel sign-off (ลุงปุย + จุก, like/subscribe) appended to every new episode; source in .mp/characters_20261024.
+END_CTA_CLIP = ".mp/end_cta/end_cta_v5.mp4"
 
 THAI_CHARS_NO_SPACE_MIN = THAI_MIN
 THAI_CHARS_NO_SPACE_TARGET_MIN = THAI_MIN
@@ -558,7 +560,7 @@ def default_producer_plan(
         "updated_at": now,
         "episode_spec": default_episode_spec(),
         # Documentary look used since the Chariklo episode; Remotion VideoPodcast stays opt-in.
-        "render_settings": {"renderer": "minimal_doc"},
+        "render_settings": {"renderer": "minimal_doc", "end_cta": {"path": END_CTA_CLIP}},
         "episode": {
             "topic": clean_topic,
             "slug": episode_slug,

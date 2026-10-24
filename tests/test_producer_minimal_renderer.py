@@ -165,6 +165,61 @@ class RevisionAndDispatchTests(unittest.TestCase):
             self.assertEqual(calls["narration_end"], 10.0)
 
 
+def probe(path: Path, stream: str) -> tuple[float, int]:
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", stream, "-count_packets", "-show_entries",
+                          "stream=duration,nb_read_packets", "-of", "csv=p=0", str(path)],
+                         capture_output=True, text=True, check=True).stdout.strip().split(",")
+    return float(out[0]), int(out[1])
+
+
+class EndCtaTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def ff(self, *args):
+        subprocess.run(["ffmpeg", "-v", "error", "-y", *args], check=True)
+
+    def test_sign_off_clip_joins_after_exactly_the_episode(self):
+        video, audio, cta = self.dir / "video.mp4", self.dir / "mix.wav", self.dir / "cta.mp4"
+        # the episode as render.cjs encodes it, its audio a little longer than the frames, a CTA at another size
+        self.ff("-f", "lavfi", "-i", "testsrc=size=320x180:rate=25:duration=2", "-c:v", "libx264", "-preset", "medium",
+                "-crf", "16", "-pix_fmt", "yuv420p", "-r", "25", str(video))
+        self.ff("-f", "lavfi", "-i", "sine=frequency=440:duration=2.3:sample_rate=48000", "-ac", "2", str(audio))
+        self.ff("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=1", "-f", "lavfi", "-i",
+                "sine=frequency=660:duration=1:sample_rate=44100", "-c:v", "libx264", "-c:a", "aac", "-shortest", str(cta))
+        joined_video, joined_audio = producer_minimal_renderer.append_end_cta(
+            video, audio, cta, seconds=2.0, work=self.dir, log_path=self.dir / "log.txt")
+        self.assertEqual(probe(joined_video, "v:0")[1], 75)          # 50 episode frames + 25 CTA frames
+        self.assertAlmostEqual(probe(joined_audio, "a:0")[0], 3.0, delta=0.03)
+
+    def test_end_cta_setting_resolves_and_fails_loudly(self):
+        cta = self.dir / "cta.mp4"
+        cta.write_bytes(b"0")
+        resolve = producer_minimal_renderer.resolve_end_cta
+        self.assertIsNone(resolve(self.dir, {"renderer": "minimal_doc"}))
+        self.assertEqual(resolve(self.dir, {"end_cta": {"path": "cta.mp4"}}), cta.resolve())
+        for bad in ({"end_cta": {"path": "missing.mp4"}}, {"end_cta": {}}, {"end_cta": "cta.mp4"}):
+            with self.assertRaises(ValueError):
+                resolve(self.dir, bad)
+
+    def test_new_plans_end_with_the_sign_off_clip(self):
+        from producer_mode import END_CTA_CLIP, default_producer_plan
+        settings = default_producer_plan("t", self.dir)["render_settings"]
+        self.assertEqual(settings, {"renderer": "minimal_doc", "end_cta": {"path": END_CTA_CLIP}})
+
+    def test_end_cta_file_is_bound_into_revision(self):
+        cta = self.dir / "cta.mp4"
+        cta.write_bytes(b"a")
+        preflight = {"props_preview": {"imagePaths": [], "renderer": "minimal_doc", "endCtaPath": str(cta)}, "summary": {}}
+        before = render_revision(self.dir, preflight, ROOT)
+        cta.write_bytes(b"b")
+        self.assertNotEqual(render_revision(self.dir, preflight, ROOT), before)
+
+
 class RelativeEpisodePathTests(unittest.TestCase):
     def test_node_receives_absolute_paths_for_a_relative_episode_dir(self):
         calls = []

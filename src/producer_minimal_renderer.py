@@ -31,6 +31,10 @@ audio carries that much lead silence). No chapter card shows during the sting; c
 the chapter dip start at ``seconds``, which must be a shot boundary. With ``"after_scene": N`` the
 video opens on the hook instead and the sting is the first slot(s) of scene N + 1 (that scene's audio
 carries the lead); the hook scenes and scene N + 1 share chapter 1, whose card starts after the sting.
+
+``producer_plan.json`` -> ``render_settings.end_cta.path`` (repo-relative or absolute) appends the channel's sign-off
+clip after the outro hold: it is re-encoded with render.cjs's x264 settings at the episode's size and joined by stream
+copy, and its audio follows exactly the episode's frames. New plans get the current clip (producer_mode init).
 """
 
 from __future__ import annotations
@@ -275,6 +279,43 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
 
 # ---- render -----------------------------------------------------------------------------------
 
+def resolve_end_cta(root_dir: str | Path, render_settings: Any) -> Path | None:
+    """The sign-off clip from render_settings.end_cta, or None; a set but unusable value is an error, not a skip."""
+    if not isinstance(render_settings, dict) or "end_cta" not in render_settings:
+        return None
+    cta = render_settings["end_cta"]
+    raw = str(cta.get("path") or "").strip() if isinstance(cta, dict) else ""
+    if not raw:
+        raise ValueError('render_settings.end_cta must be {"path": "<clip.mp4>"}')
+    path = Path(raw) if Path(raw).is_absolute() else Path(root_dir) / raw
+    if not path.is_file():
+        raise ValueError(f"render_settings.end_cta clip not found: {raw}")
+    return path.resolve()
+
+
+def append_end_cta(video: Path, audio: Path, cta: Path, *, seconds: float, work: Path,
+                   log_path: Path) -> tuple[Path, Path]:
+    """Join the sign-off clip after the episode: video by stream copy, audio after exactly ``seconds``."""
+    size = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+                           "-of", "csv=p=0:s=x", str(video)], capture_output=True, text=True, check=True).stdout.strip()
+    cta_video, joined_video, joined_audio = work / "end_cta.mp4", work / "video_end_cta.mp4", work / "audio_end_cta.wav"
+    # the same encoder settings as render.cjs chunks, so the concat demuxer can copy both streams
+    _run(["ffmpeg", "-y", "-v", "error", "-i", str(cta), "-an", "-vf", f"scale={size.replace('x', ':')},fps={FPS}",
+          "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p", "-r", str(FPS), str(cta_video)],
+         log_path=log_path)
+    listing = work / "end_cta_concat.txt"
+    listing.write_text("".join(f"file '{p.resolve().as_posix()}'\n" for p in (video, cta_video)), encoding="utf-8")
+    _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy",
+          str(joined_video)], log_path=log_path)
+    fmt = "aformat=sample_rates=48000:channel_layouts=stereo"
+    _run(["ffmpeg", "-y", "-v", "error", "-i", str(audio), "-i", str(cta), "-filter_complex",
+          f"[0:a]{fmt},atrim=0:{seconds},apad=whole_dur={seconds}[a0];[1:a]{fmt}[a1];[a0][a1]concat=n=2:v=0:a=1",
+          "-c:a", "pcm_s16le", str(joined_audio)], log_path=log_path)
+    cta_video.unlink(missing_ok=True)
+    listing.unlink(missing_ok=True)
+    return joined_video, joined_audio
+
+
 def _run(args: list[str], *, log_path: Path, timeout_seconds: int | None = None, cwd: Path | None = None) -> None:
     with log_path.open("a", encoding="utf-8", errors="replace") as log:
         log.write(f"\nRUN {' '.join(args)}\n")
@@ -334,13 +375,19 @@ def render_minimal_doc(*, root_dir: str | Path, episode_dir: str | Path, raw_pro
     _run(["node", str(renderer_dir(root_path) / "render.cjs"), "--timeline", str(timeline_path), "--work", str(work),
           "--out", str(video_only), "--chrome", str(find_chrome(root_path)), "--workers", str(_workers())],
          log_path=log_path, timeout_seconds=timeout_seconds, cwd=renderer_dir(root_path))
-    output = Path(str(raw_props["outputPath"]))
-    _run(["ffmpeg", "-y", "-v", "error", "-i", str(video_only), "-i", str(raw_props["audioPath"]),
+    output, audio, end_cta = Path(str(raw_props["outputPath"])), Path(str(raw_props["audioPath"])), raw_props.get("endCtaPath")
+    if end_cta:
+        joined = append_end_cta(video_only, audio, Path(end_cta), seconds=timeline["total"], work=work, log_path=log_path)
+        video_only.unlink(missing_ok=True)
+        video_only, audio = joined
+    _run(["ffmpeg", "-y", "-v", "error", "-i", str(video_only), "-i", str(audio),
           "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "alac", "-shortest", str(output)], log_path=log_path)
+    if end_cta:
+        audio.unlink(missing_ok=True)
     for leftover in (work / "chunks", work / "profiles", base / "assets" / "video_frames"):
         shutil.rmtree(leftover, ignore_errors=True)
     video_only.unlink(missing_ok=True)
     return {"renderer": RENDERER_ID, "output_path": str(output), "work_dir": str(work),
             "timeline_path": str(timeline_path), "shots": len(timeline["shots"]),
             "chapters": len(timeline["chapters"]), "video_shots": sum(s["kind"] == "video" for s in timeline["shots"]),
-            "warnings": timeline["warnings"], "overrides_applied": sorted((overrides.get("assets") or {}).keys())}
+            "warnings": timeline["warnings"], "end_cta": end_cta, "overrides_applied": sorted((overrides.get("assets") or {}).keys())}
