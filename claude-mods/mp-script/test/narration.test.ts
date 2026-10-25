@@ -61,3 +61,16 @@ test('the diff keeps both sides whole', async () => {
   expect(d[0]).toEqual({ op: 'same', text: expect.stringContaining('นักวิทยาศาสตร์') })
   expect(diffText('ก', 'ก')).toEqual([{ op: 'same', text: 'ก' }])
 })
+
+test('reads and writes back a [scene id] text draft', async () => {
+  const txt = '[S00B01] หินจากอวกาศ\nก้อนหนึ่ง\n\n[S00B02] ไดโนเสาร์รอด\n'
+  expect(parseNarration(txt)).toEqual([
+    { label: 'S00B01', text: 'หินจากอวกาศ ก้อนหนึ่ง' },
+    { label: 'S00B02', text: 'ไดโนเสาร์รอด' },
+  ])
+  expect(withTexts(txt, ['ก', 'ข'])).toBe('[S00B01] ก\n\n[S00B02] ข\n')
+  expect(parseNarration('บทที่ไม่มีรหัสฉาก\n\n[S00B02] ข')).toBeUndefined()
+  expect(['narration_v2.txt', 'narration_v0.txt'].every(isDraft)).toBe(true)
+  expect(['narration_v3_nn.txt', 'narration_v1_spoken_proposal.txt', 'notes.txt'].some(isDraft)).toBe(false)
+  expect(nextEditName(['narration_v1.txt', 'narration_v2.txt'], 'narration_v2.txt')).toBe('narration_v3_nn.txt')
+})

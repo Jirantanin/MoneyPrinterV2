@@ -184,7 +184,7 @@ async function send($: EngineInterface) {
   const s = summary(r)
   if (s.changed.length === 0) return skip($)
   const names = (await $.fs.list(r.episodeDir)).map(f => f.name)
-  const savedAs = nextEditName(names)
+  const savedAs = nextEditName(names, r.file)
   const json = (await $.fs.read(`${r.episodeDir}/${r.file}`)) as string
   await $.fs.write(`${r.episodeDir}/${savedAs}`, withTexts(json, r.texts))
   await update($, review, x => (x === null ? x : { ...x, status: 'sent' as const, sentAs: savedAs }))
@@ -279,7 +279,7 @@ export const register: Register = on => {
     if ((await read($, review)) === null) {
       const root = repoRoot(await $.session.cwd())
       const found = root === undefined ? undefined : await latestDraft($, root)
-      if (found === undefined) return { text: 'ยังไม่มีไฟล์ narration_v*.json ในตอนไหนเลย' }
+      if (found === undefined) return { text: 'ยังไม่มีไฟล์ narration_v*.json หรือ .txt ในตอนไหนเลย' }
       await startReview($, found.dir, found.file, false)
 
       return { text: `เปิด ${found.file} ให้แก้แล้ว` }

@@ -1,11 +1,35 @@
 import type { Paragraph } from '../types'
 
-// Episode narration files Producer Mode writes; the mod's own `_nn` saves never count as a new draft.
-const NARRATION = /^narration(?:_spoken)?_v(\d+)(?:_[a-z]+)?\.json$/
+// Episode narration files Producer Mode writes, as JSON or as `[scene id] text` paragraphs;
+// the mod's own `_nn` saves never count as a new draft.
+const NARRATION = /^narration(?:_spoken)?_v(\d+)(?:_[a-z]+)?\.(json|txt)$/
 const LABEL_KEYS = ['scene_title', 'section_title', 'title'] as const
 const HEADING = /^##\s*\[(\d+)\]/
+const SCENE = /^\[([^\]\r\n]+)\][ \t]*/
 
-export const isDraft = (name: string) => NARRATION.test(name) && !/_nn\.json$/.test(name)
+export const isDraft = (name: string) => NARRATION.test(name) && !/_nn\.(json|txt)$/.test(name)
+
+/** The `[scene id] text` paragraphs of a text draft, split on blank lines. */
+function sceneBlocks(text: string): { id: string; text: string }[] | undefined {
+  const blocks = text.split(/\r?\n[ \t]*\r?\n/).map(b => b.trim()).filter(b => b !== '')
+  if (blocks.length === 0) return undefined
+  const out: { id: string; text: string }[] = []
+  for (const b of blocks) {
+    const m = SCENE.exec(b)
+    if (m === null) return undefined
+    out.push({ id: m[1]!, text: b.slice(m[0].length).replace(/\s+/g, ' ').trim() })
+  }
+
+  return out
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}
 
 /** Where a paragraph's text sits in its entry: an array element or an object key. */
 type Slot = number | string
@@ -28,14 +52,10 @@ function slotOf(entry: unknown): { slot: Slot; paragraph: Paragraph } | undefine
   return undefined
 }
 
-/** The paragraphs of a narration file: a list of `[.., title, text]` rows or `{ narration }` scenes. */
+/** The paragraphs of a narration file: a list of `[.., title, text]` rows or `{ narration }` scenes, or `[scene id] text` paragraphs. */
 export function parseNarration(json: string): Paragraph[] | undefined {
-  let data: unknown
-  try {
-    data = JSON.parse(json)
-  } catch {
-    return undefined
-  }
+  const data = parseJson(json)
+  if (data === undefined) return sceneBlocks(json)?.map(b => ({ label: b.id, text: b.text }))
   if (!Array.isArray(data) || data.length === 0) return undefined
   const out: Paragraph[] = []
   for (const entry of data) {
@@ -49,7 +69,13 @@ export function parseNarration(json: string): Paragraph[] | undefined {
 
 /** The same file with each paragraph's text replaced, laid out as Python's `json.dump(indent=n)` laid it. */
 export function withTexts(json: string, texts: readonly string[]): string {
-  const data = JSON.parse(json) as unknown[]
+  const parsed = parseJson(json)
+  if (parsed === undefined) {
+    const blocks = sceneBlocks(json)!
+
+    return blocks.map((b, i) => `[${b.id}] ${texts[i]!}`).join('\n\n') + (json.endsWith('\n') ? '\n' : '')
+  }
+  const data = parsed as unknown[]
   const next = data.map((entry, i) => {
     const s = slotOf(entry)!
     const text = texts[i]!
@@ -98,11 +124,12 @@ export function fromMarkdown(md: string, count: number): { texts: string[] } | {
   return { texts: texts as string[] }
 }
 
-/** `narration_v<highest + 1>_nn.json`: the next version, marked as นน's edit. */
-export function nextEditName(names: readonly string[]): string {
+/** `narration_v<highest + 1>_nn.<ext>`: the next version, marked as นน's edit, in the format of the `edited` draft. */
+export function nextEditName(names: readonly string[], edited = 'narration.json'): string {
   const top = Math.max(-1, ...names.map(n => Number(NARRATION.exec(n)?.[1] ?? -1)))
+  const ext = edited.endsWith('.txt') ? 'txt' : 'json'
 
-  return `narration_v${top + 1}_nn.json`
+  return `narration_v${top + 1}_nn.${ext}`
 }
 
 /** Episode folder names a tool call mentions: `.mp/<name>` or a bare `podcast_v2_*` / `producer_cut_*`. */
