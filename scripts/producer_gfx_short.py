@@ -317,7 +317,7 @@ def sfx_sound(fx, kind: str, o: dict) -> np.ndarray:
             b = fx.bell(m, 1.6, .5); k = int(i * .12 * fx.SR); out[k:k + len(b)] += b
         return out
     if kind in ("whoosh", "rise", "fall"):
-        return fx.whoosh(o.get("d", .8), lvl=.4, rise=kind != "fall")
+        return fx.whoosh(o.get("d", .8), lvl=o.get("lvl", .4), rise=kind != "fall")
     if kind == "thump":
         return fx.thump(.7)
     if kind == "boom":
@@ -339,7 +339,7 @@ def cmd_audio(d: Path) -> None:
     import producer_sfx_synth as fx
     from producer_score import render_score, write_wav
     spec, tm = load(d), timing(d)
-    dur, levels = tm["dur"], {"score_db": -17.0, "sfx_db": -13.0, **spec.get("mix", {})}
+    dur, levels = tm["dur"], {"score_db": -17.0, "sfx_db": -16.0, **spec.get("mix", {})}
     # narration -> 48 kHz stereo
     run(["ffmpeg", "-v", "error", "-y", "-i", str(d / "narration.wav"), "-ar", "48000", "-ac", "2", str(d / "narr48.wav")])
     # score, loudness-matched to the narration before the bed gain

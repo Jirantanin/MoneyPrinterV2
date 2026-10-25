@@ -54,15 +54,24 @@ def pluck(m, d=.5, lvl=.5):
     return (np.sin(2 * np.pi * f * t) + .3 * np.sin(4 * np.pi * f * t) * np.exp(-t * 8)) * np.exp(-t * 8) * np.minimum(1, t / .004) * lvl
 
 
+def sweep_lp(x, fc):
+    """Two-pole low-pass whose cutoff follows the array fc, filter state carried across the sweep (no zipper clicks)."""
+    a = np.exp(-2 * np.pi * np.asarray(fc, float) / SR)
+    y = np.empty_like(x); s1 = s2 = 0.0
+    for i in range(len(x)):
+        s1 = (1 - a[i]) * x[i] + a[i] * s1; s2 = (1 - a[i]) * s1 + a[i] * s2; y[i] = s2
+    return y
+
+
 def whoosh(d, lvl=.4, rise=True):
+    """Soft air movement: noise swept 250-1600 Hz (two-pole, rumble removed), not bright hiss. Peak = lvl * 1.2."""
     t = tt(d)
     env = np.sin(np.pi * t / d) ** 2
-    fc = (600 + 4000 * (t / d)) if rise else (4600 - 4000 * (t / d))
-    x = rng.standard_normal(len(t))
-    out = np.zeros_like(x); seg = 2400
-    for i in range(0, len(x), seg):  # piecewise one-pole sweep
-        out[i:i + seg] = lp(x[i:i + seg], float(fc[i]))
-    return out * env * lvl * 1.6
+    fc = (250 + 1350 * (t / d)) if rise else (1600 - 1350 * (t / d))
+    x = sweep_lp(rng.standard_normal(len(t)), fc)
+    x = x - lp(x, 120)
+    x = x * env
+    return x / (np.abs(x).max() + 1e-9) * lvl * 1.2
 
 
 def thump(lvl=.6):
