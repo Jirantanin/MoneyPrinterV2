@@ -26,6 +26,15 @@ An explicit Claude model routes to Anthropic. Calls without an explicit Claude m
 
 Provider use depends on the selected plan and asset. Missing optional stock or image keys should not be replaced with placeholder credentials.
 
+## Facebook Page Reels
+
+`scripts/facebook_upload.py` posts a finished Short as a Reel on the channel's Facebook Page through the Graph API (`video_reels` start, `rupload.facebook.com` bytes, finish as `SCHEDULED` or `PUBLISHED`). It reads two keys from `config.json`:
+
+- `facebook_page_id`: the numeric Page id.
+- `facebook_page_access_token`: a long-lived Page access token for that Page, from a Meta app with `pages_show_list`, `pages_read_engagement` and `pages_manage_posts`, granted by an account that can create content on the Page.
+
+The user creates the Meta app and the token and pastes them into `config.json` themselves. The tool sends the token only in the `Authorization` header and never prints or writes it. Reels must be 3-90 seconds, and a schedule must be more than 10 minutes and at most 29 days ahead. See the `moneyprinter-youtube-upload` skill for the steps.
+
 ## Local requirements
 
 Install Python dependencies from `requirements.txt`. Remotion rendering also requires Node.js and dependencies installed under `remotion/`. The local preflight checks configuration and tool presence only; it does not send API requests or spend credits.
