@@ -8,8 +8,7 @@
 <style>
 @font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Bold.ttf");font-weight:700}
 @font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Black.ttf");font-weight:900}
-@font-face{font-family:Fredoka;src:url("../../.mp/fonts/Fredoka-SemiBold.ttf");font-weight:600}
-@font-face{font-family:Fredoka;src:url("../../.mp/fonts/Fredoka-Bold.ttf");font-weight:700}
+@font-face{font-family:Fredoka;src:url("../../.mp/fonts/Fredoka%5Bwdth%2Cwght%5D.ttf");font-weight:300 700}
 @font-face{font-family:Mitr;src:url("../../.mp/fonts/Mitr-Medium.ttf");font-weight:500}
 @font-face{font-family:Mitr;src:url("../../.mp/fonts/Mitr-SemiBold.ttf");font-weight:600}
 html,body{margin:0;background:#081d2c;overflow:hidden}
@@ -40,7 +39,7 @@ function demo() {
   const ring = YC(0, 0, 1, 'none', Y.cam, { stroke: '#ffffff', 'stroke-width': 4 });
   const pinG = el('g', {}, Y.cam);
   rigShape(pinG, 'M0,0 C-10,-26 -40,-46 -40,-74 A40,40 0 1 1 40,-74 C40,-46 10,-26 0,0Z', '#ff5a5f', 'B'); YC(0, -74, 15, '#ffffff', pinG);
-  const tag = riseLine(Y.cam, 0, 0, 42, [['ประเทศไทย', 'th', 'white']], 4.6);
+  const tag = riseLine(Y.cam, 0, 0, 42, [['ประเทศไทย', 'th', 'white']], 4.6, { anchor: 'start' });
   const j = jook(Y.cam, { helmet: true });
   const cdLabel = riseLine(Y.hud, 1560, 120, 34, [['LAST LIGHT', 'latin', 'teal']], 5.4);
   const cd = digits(Y.hud, 1700, 250, 150, { align: 'right' });
@@ -63,7 +62,7 @@ function demo() {
     const e = enter(t, 4.0, 'drop');
     set(pinG, { transform: `translate(${PIN[0] + e.dx},${PIN[1] + e.dy}) scale(${e.sx.toFixed(3)},${e.sy.toFixed(3)})` }); show(pinG, e.o);
     const rk = p(t, 4.25, 4.95); set(ring, { cx: PIN[0], cy: PIN[1], r: (8 + 90 * eo(rk)).toFixed(1), 'stroke-width': 4 / c.z }); show(ring, rk > 0 && rk < 1 ? 1 - rk : 0);
-    tag.update(t, c.z); set(tag.g, { transform: `translate(${PIN[0] + 120 / c.z},${PIN[1] - 130 / c.z}) ${screenScale(c.z)}` });
+    tag.update(t, c.z); set(tag.g, { transform: `translate(${PIN[0] + 40 + 48 / c.z},${PIN[1] - 74 + 15 / c.z}) ${screenScale(c.z)}` });
     j.update(t, { x: 1180, y: 742, s: .8, look: t < 3.75 ? [-.6, -.2] : [-1, -.8], hop: [6.8], wide: 3.8,
       mouth: t > 6.8 ? 'big' : 'smile', bubble: { ch: '!', tIn: 6.85, tOut: 7.8 } });
     cdLabel.update(t);

@@ -15,5 +15,8 @@ run(async () => {
   await withPage('', async page => {
     const loads = await page.evaluate(() => window.__fontLoads);
     for (const f of NEED) assert(loads.includes(f), `motion_demo waits for ${f} (${loads})`);
+    // the faces really load from .mp/fonts (a missing file only shows as a quiet fallback face)
+    const faces = await page.evaluate(() => [...document.fonts].filter(f => /Fredoka|Mitr/.test(f.family)).map(f => `${f.family} ${f.weight} ${f.status}`));
+    assert(faces.length >= 3 && faces.every(f => / loaded$/.test(f)), faces.join(' | '));
   }, { url: 'motion_demo.html', onNew: spy });
 });
