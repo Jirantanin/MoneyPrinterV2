@@ -10,6 +10,9 @@
 <style>
 @font-face{font-family:Kanit;src:url("../../fonts/Kanit-Bold.ttf");font-weight:700}
 @font-face{font-family:Kanit;src:url("../../fonts/Kanit-Black.ttf");font-weight:900}
+@font-face{font-family:Fredoka;src:url("../../fonts/Fredoka%5Bwdth%2Cwght%5D.ttf");font-weight:300 700}
+@font-face{font-family:Mitr;src:url("../../fonts/Mitr-Medium.ttf");font-weight:500}
+@font-face{font-family:Mitr;src:url("../../fonts/Mitr-SemiBold.ttf");font-weight:600}
 html,body{margin:0;background:#0c0a24;overflow:hidden}
 svg{display:block}
 text{font-family:Kanit,'Leelawadee UI',sans-serif}
@@ -18,7 +21,15 @@ text{font-family:Kanit,'Leelawadee UI',sans-serif}
 <script src="../../../doc_renderer/gfx_kit/library.js"></script>
 <script src="../../../doc_renderer/gfx_kit/finish.js"></script>
 <script src="../../../doc_renderer/gfx_kit/glow.js"></script>
+<script src="../../../doc_renderer/gfx_kit/paper.js"></script>
+<script src="../../../doc_renderer/gfx_kit/flat.js"></script>
+<script src="../../../doc_renderer/gfx_kit/cast.js"></script>
+<script src="../../../doc_renderer/gfx_kit/motion.js"></script>
+<script src="../../../doc_renderer/gfx_kit/cam.js"></script>
+<script src="../../../doc_renderer/gfx_kit/type.js"></script>
+<script src="../../../doc_renderer/gfx_kit/cast_rig.js"></script>
 <script>
+PAPER.font = 'Mitr';   // new pages: Thai on paper strips in Mitr (paper.js keeps Kanit for older pages)
 // theme({ bg: [...], nebula: [...], palette: {...} });   // this episode's art direction (visual_rules.art_direction)
 const NAME = new URLSearchParams(location.search).get('g');
 
@@ -46,7 +57,8 @@ function demo() {
 
 const SCENES = { demo };
 let render = null;
-window.__ready = document.fonts.load('900 40px Kanit').then(() => document.fonts.load('700 40px Kanit'))
+window.__MBLUR = 2;   // motion blur for this page's MP4s (record.cjs); list hard steps in window.__CUTS = [t, ...]
+window.__ready = typeReady()
   .then(() => { render = SCENES[NAME](); render(0); return true; });
 window.__seek = t => render(t);
 </script>

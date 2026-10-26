@@ -28,6 +28,15 @@ const pop = (t, a, d = .45) => t < a ? 0 : back(p(t, a, a + d));
 const lerp = (a, b, k) => a + (b - a) * k;
 const lerpPt = (A, B, k) => [lerp(A[0], B[0], k), lerp(A[1], B[1], k)];
 const bump = (t, a, d = .35) => Math.sin(Math.PI * p(t, a, a + d));            // 0 -> 1 -> 0 over [a, a + d]
+// spring(t, zeta, hz): 0 -> 1 with overshoot, pure in t (zeta 1 no bounce, .7 calm, .45 peak energy; motion.js ENERGY)
+function spring(t, zeta = .7, hz = 2) {
+  if (t <= 0) return 0; const w = 2 * Math.PI * hz;
+  if (zeta >= 1) return 1 - Math.exp(-w * t) * (1 + w * t);
+  const wd = w * Math.sqrt(1 - zeta * zeta);
+  return 1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + (zeta * w / wd) * Math.sin(wd * t));
+}
+// kick(t, amp): a decaying wobble that starts at t = 0 (impacts, landings, shakes)
+const kick = (t, amp, decay = 5, hz = 3) => t <= 0 ? 0 : amp * Math.exp(-t * decay) * Math.sin(t * hz * 2 * Math.PI);
 const mixColor = (a, b, k) => { const h = c => [1, 3, 5].map(i => parseInt(col(c).slice(i, i + 2), 16));
   const A = h(a), B = h(b); return '#' + A.map((v, i) => Math.round(lerp(v, B[i], clamp(k))).toString(16).padStart(2, '0')).join(''); };
 // track([[t0, v0], [t1, v1], ...], t): piecewise-linear value, held flat before the first and after the last key

@@ -1,0 +1,43 @@
+// record.cjs motion blur: subframes centred on the frame time, blended by ffmpeg; stills never blur
+const assert = require('assert');
+const path = require('path');
+const os = require('os');
+const fs = require('fs');
+const { execFileSync } = require('child_process');
+const { KIT, run } = require('./harness.cjs');
+
+// one row of frame n as gray bytes
+const row = (mp4, n) => execFileSync('ffmpeg', ['-v', 'error', '-i', mp4, '-vf', `select=eq(n\\,${n}),crop=1920:2:0:540`, '-vsync', '0', '-frames:v', '1',
+  '-f', 'rawvideo', '-pix_fmt', 'gray', '-'], { maxBuffer: 1 << 24 }).subarray(0, 1920);   // 4:2:0 needs an even crop
+const centroid = r => { let s = 0, w = 0; r.forEach((v, i) => { s += v * i; w += v; }); return s / w; };
+const soft = r => r.filter(v => v > 40 && v < 215).length;
+
+run(async () => {
+  const { subframeTimes } = require('../record.cjs');
+  assert.deepStrictEqual(subframeTimes(10, 25, 0).map(v => +v.toFixed(4)), [.394, .406]);
+  assert.deepStrictEqual(subframeTimes(0, 25, -.8, { sub: 1 }), [-.8]);
+  assert.strictEqual(+subframeTimes(10, 25, 0, { sub: 3 }).reduce((a, b) => a + b, 0).toFixed(6), 1.2, 'centred on the frame');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mblur-')), page = path.join(KIT, 'tests/fixture.html');
+  for (const bad of [['--shutter', 'abc'], ['--shutter', '1.5'], ['--mblur', '2.5'], ['--mblur', 'x']]) {
+    const r = require('child_process').spawnSync('node', [path.join(KIT, 'record.cjs'), page, 'x&run=whip', '1', path.join(dir, 'bad.mp4'), ...bad], { encoding: 'utf8' });
+    assert(r.status !== 0 && /--(shutter|mblur)/.test(r.stderr), `${bad.join(' ')} is refused: ${r.stderr.slice(0, 200)}`);
+  }
+  const rec = (out, extra) => execFileSync('node', [path.join(KIT, 'record.cjs'), page, 'x&run=whip', '1', out, ...extra], { stdio: 'pipe' });
+  rec(path.join(dir, 'default.mp4'), []);
+  rec(path.join(dir, 'blur.mp4'), ['--mblur', '2']); rec(path.join(dir, 'sharp.mp4'), ['--mblur', '0']);
+  const d = row(path.join(dir, 'default.mp4'), 12);
+  assert(soft(d) <= soft(row(path.join(dir, 'sharp.mp4'), 12)) + 2, 'no blur unless asked: old pages re-record as before');
+  const b = row(path.join(dir, 'blur.mp4'), 12), s = row(path.join(dir, 'sharp.mp4'), 12);
+  assert(soft(b) > soft(s) + 6, `blurred edges are wider (${soft(b)} vs ${soft(s)})`);
+  assert(Math.abs(centroid(b) - centroid(s)) < 2, `no time shift (${centroid(b)} vs ${centroid(s)})`);
+  assert(Math.abs(centroid(s) - (300 + 600 * .48 + 100)) < 2, 'frame 12 is t = 0.48');
+  // a page can opt in with window.__MBLUR, and frames on a declared cut (window.__CUTS) are not double-exposed
+  const mean = r => r.reduce((a, b) => a + b, 0) / r.length;
+  const recCut = (out, q) => execFileSync('node', [path.join(KIT, 'record.cjs'), page, 'x&run=cut' + q, '1', out], { stdio: 'pipe' });
+  recCut(path.join(dir, 'ghost.mp4'), '&mblur=2'); recCut(path.join(dir, 'clean.mp4'), '&mblur=2&cuts=1');
+  const g = mean(row(path.join(dir, 'ghost.mp4'), 12)), c = mean(row(path.join(dir, 'clean.mp4'), 12));
+  assert(g > 60 && g < 200, `the page's own __MBLUR blurs: frame 12 is a double exposure without __CUTS (${g})`);
+  assert(c < 20, `a declared cut is clean (${c})`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

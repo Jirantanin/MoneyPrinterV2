@@ -39,6 +39,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from producer_word_times import char_times, squash  # noqa: E402  (shared with scripts/beat_word_times.py)
+
 THAI_MARKS = re.compile("[\u0e31\u0e34-\u0e3a\u0e47-\u0e4e]")
 
 
@@ -179,29 +181,6 @@ def chunks(text: str, max_base: int = 17) -> list[str]:
         else:
             out.append(tok)
     return out
-
-
-def squash(s: str) -> str:
-    return re.sub(r"[\s?!.,]", "", s)
-
-
-def char_times(script: str, words: list[tuple[str, float, float]], dur: float) -> list[float]:
-    """Time of each non-space script character, by aligning it to Whisper's word-timed characters."""
-    heard, times = "", []
-    for text, t0, t1 in words:
-        w = squash(text)
-        for k in range(len(w)):
-            times.append(t0 + (t1 - t0) * k / max(1, len(w)))
-        heard += w
-    s = squash(script)
-    known: dict[int, float] = {}
-    for a, b, size in difflib.SequenceMatcher(None, s, heard, autojunk=False).get_matching_blocks():
-        for k in range(size):
-            known[a + k] = times[b + k]
-    keys = sorted(known)
-    if len(keys) < 2:
-        return [dur * i / max(1, len(s)) for i in range(len(s))]
-    return [float(np.interp(i, keys, [known[k] for k in keys])) for i in range(len(s))]
 
 
 def cmd_align(d: Path, model_size: str) -> None:

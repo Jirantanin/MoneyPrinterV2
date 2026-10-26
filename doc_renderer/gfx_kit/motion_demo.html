@@ -1,0 +1,82 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Demo world for the motion spec (LIBRARY.md "Looks" ... "Beat sheet and contact sheet"): look B, cam.js moves, motion.js
+     entrances, type.js lines and counters, the rigged cast. Beats in motion_demo.beats.md.
+       node doc_renderer/gfx_kit/contact_sheet.cjs doc_renderer/gfx_kit/motion_demo.html demo doc_renderer/gfx_kit/motion_demo.beats.md <outdir>
+       node doc_renderer/gfx_kit/record.cjs doc_renderer/gfx_kit/motion_demo.html demo 8 <out.mp4>
+     ?play loops it live. -->
+<style>
+@font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Bold.ttf");font-weight:700}
+@font-face{font-family:Kanit;src:url("../../.mp/fonts/Kanit-Black.ttf");font-weight:900}
+@font-face{font-family:Fredoka;src:url("../../.mp/fonts/Fredoka%5Bwdth%2Cwght%5D.ttf");font-weight:300 700}
+@font-face{font-family:Mitr;src:url("../../.mp/fonts/Mitr-Medium.ttf");font-weight:500}
+@font-face{font-family:Mitr;src:url("../../.mp/fonts/Mitr-SemiBold.ttf");font-weight:600}
+html,body{margin:0;background:#081d2c;overflow:hidden}
+svg{display:block}
+text{font-family:Mitr,Kanit,'Leelawadee UI',sans-serif}
+</style></head><body>
+<script src="kit.js"></script>
+<script src="library.js"></script>
+<script src="finish.js"></script>
+<script src="glow.js"></script>
+<script src="paper.js"></script>
+<script src="flat.js"></script>
+<script src="cast.js"></script>
+<script src="motion.js"></script>
+<script src="cam.js"></script>
+<script src="type.js"></script>
+<script src="cast_rig.js"></script>
+<script>
+const Q = new URLSearchParams(location.search), DUR = 8;
+const EARTH = [960, 540], PIN = [905, 452], SUN = [-900, 540];
+
+function demo() {
+  Y_init({ style: 'B', vig: '#04041a', vigOpacity: .45, grain: .04 });
+  el('rect', { x: -4000, y: -3000, width: 9000, height: 7000, fill: Y_lgrad([[0, '#081d2c'], [1, '#102348']]) }, Y.bg);
+  const far = Y_layer(Y.bg), R = rng(41), stars = [];
+  for (let i = 0; i < 260; i++) stars.push(YC(-2600 + R() * 5200, -1600 + R() * 3600, .8 + R() * R() * 3, R() < .2 ? '#ffe9b0' : '#cfe6ff', far));
+  const sunR = castSun(Y.cam, 300), earthR = earth(Y.cam, 220, { light: 180 });
+  const ring = YC(0, 0, 1, 'none', Y.cam, { stroke: '#ffffff', 'stroke-width': 4 });
+  const pinG = el('g', {}, Y.cam);
+  rigShape(pinG, 'M0,0 C-10,-26 -40,-46 -40,-74 A40,40 0 1 1 40,-74 C40,-46 10,-26 0,0Z', '#ff5a5f', 'B'); YC(0, -74, 15, '#ffffff', pinG);
+  const tag = riseLine(Y.cam, 0, 0, 42, [['ประเทศไทย', 'th', 'white']], 4.6, { anchor: 'start' });
+  const j = jook(Y.cam, { helmet: true });
+  const cdLabel = riseLine(Y.hud, 1560, 120, 34, [['LAST LIGHT', 'latin', 'teal']], 5.4);
+  const cd = digits(Y.hud, 1700, 250, 150, { align: 'right' });
+  const cam = camPath([
+    { t: 0, x: 960, y: 540, z: 2.2, move: 'cut' },
+    { t: .9, x: 960, y: 540, z: 2.4, move: 'punch' },
+    { t: 3.7, x: 60, y: 540, z: .45, move: 'pull' },
+    { t: 4.0, x: 60, y: 540, z: .45, move: 'hold' },
+    { t: 5.0, x: 900, y: 470, z: 1.6, move: 'dive' },
+    { t: 5.4, x: 900, y: 470, z: 1.6, move: 'hold' },
+    { t: 5.9, x: 900, y: 470, z: 1.75, move: 'punch' },
+  ]);
+  return t => {
+    const c = cam(t);
+    camApply(c, [{ g: Y.bg, depth: .25 }, { g: Y.cam, depth: 1 }]);
+    stars.forEach((s, i) => show(s, .5 + .45 * Math.sin(t * 2.2 + i)));
+    const pulse = 1 + .06 * Math.sin(Math.PI * p(t, .4, .62)) - .04 * Math.sin(Math.PI * p(t, .62, .95));
+    sunR.state({ x: SUN[0], y: SUN[1], s: pulse, t });
+    earthR.state({ x: EARTH[0], y: EARTH[1], spin: t * .55 });
+    const e = enter(t, 4.0, 'drop');
+    set(pinG, { transform: `translate(${PIN[0] + e.dx},${PIN[1] + e.dy}) scale(${e.sx.toFixed(3)},${e.sy.toFixed(3)})` }); show(pinG, e.o);
+    const rk = p(t, 4.25, 4.95); set(ring, { cx: PIN[0], cy: PIN[1], r: (8 + 90 * eo(rk)).toFixed(1), 'stroke-width': 4 / c.z }); show(ring, rk > 0 && rk < 1 ? 1 - rk : 0);
+    tag.update(t, c.z); set(tag.g, { transform: `translate(${PIN[0] + 40 + 48 / c.z},${PIN[1] - 74 + 15 / c.z}) ${screenScale(c.z)}` });
+    j.update(t, { x: 1180, y: 742, s: .8, look: t < 3.75 ? [-.6, -.2] : [-1, -.8], hop: [6.8], wide: 3.8,
+      mouth: t > 6.8 ? 'big' : 'smile', bubble: { ch: '!', tIn: 6.85, tOut: 7.8 } });
+    cdLabel.update(t);
+    const left = 500 - Math.floor(Math.max(0, t - 5.6)); cd.set(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
+    set(cd.g, { transform: `translate(1600,200) scale(${slam(t, 5.4).toFixed(4)}) translate(-1600,-200)`, opacity: t < 5.4 ? 0 : 1 });
+    Y.frameU(t);
+  };
+}
+
+let render = null;
+window.__MBLUR = 2;                     // record.cjs blends 2 subframes per frame for this page
+window.__CUTS = [4.0, 5.4, 6.6, 7.6];   // steps (pin and counter appear, counter ticks): never blended
+window.__ready = typeReady().then(() => { render = demo(); render(Q.has('t') ? +Q.get('t') : 0); return true; });
+window.__seek = t => render(t);
+if (Q.has('play')) window.__ready.then(() => { const t0 = performance.now(); const loop = () => { render(((performance.now() - t0) / 1000) % DUR); requestAnimationFrame(loop); }; loop(); });
+</script>
+</body></html>

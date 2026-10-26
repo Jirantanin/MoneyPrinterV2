@@ -20,15 +20,7 @@ let pctx = null, pcv = null, PBOIL = 0, PSLOW = 0, PTEX = null;
 function prng(...k) { let h = 2166136261; for (const v of k) { h ^= Math.round(v * 977) | 0; h = Math.imul(h, 16777619); } return rng(h); }
 const pbez = (p0, p1, p2, u) => [(1 - u) * (1 - u) * p0[0] + 2 * u * (1 - u) * p1[0] + u * u * p2[0],
                                  (1 - u) * (1 - u) * p0[1] + 2 * u * (1 - u) * p1[1] + u * u * p2[1]];
-// spring(t, zeta, hz): 0 -> 1 with overshoot, pure in t (zeta 1 no bounce, .7 premium, .5 playful)
-function spring(t, zeta = .7, hz = 2) {
-  if (t <= 0) return 0; const w = 2 * Math.PI * hz;
-  if (zeta >= 1) return 1 - Math.exp(-w * t) * (1 + w * t);
-  const wd = w * Math.sqrt(1 - zeta * zeta);
-  return 1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + (zeta * w / wd) * Math.sin(wd * t));
-}
-// kick(t, amp): a decaying wobble that starts at t = 0 (impacts, landings, shakes)
-const kick = (t, amp, decay = 5, hz = 3) => t <= 0 ? 0 : amp * Math.exp(-t * decay) * Math.sin(t * hz * 2 * Math.PI);
+// spring() and kick() live in kit.js (moved 2026-10-26 so every look can use them)
 const ellPts = (cx, cy, rx, ry = rx, n = 30, a0 = 0, a1 = Math.PI * 2) => Array.from({ length: n }, (_, i) => {
   const a = a0 + (a1 - a0) * i / (Math.abs(a1 - a0 - Math.PI * 2) < 1e-6 ? n : n - 1); return [cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]; });
 const starPts = (cx, cy, R, r = R * .42) => Array.from({ length: 10 }, (_, i) => {
