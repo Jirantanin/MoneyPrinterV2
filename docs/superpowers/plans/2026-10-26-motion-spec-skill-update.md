@@ -33,3 +33,9 @@ Replace
 with
 
 > Write each world's beat sheet (`<world>.beats.md` from `doc_renderer/gfx_kit/beats_template.md`: DIRECTION, BEATS with `time | peak | trigger | story move | camera | what changes | text | sound`, GOTCHAS; every row names a story move 1–12 and a camera move, every world has a scale reveal and a make-it-personal; trigger times from `python scripts/beat_word_times.py … --write`), then render `node doc_renderer/gfx_kit/contact_sheet.cjs <page> "<scene&f=…>" <world>.beats.md <outdir>` and send นน `contact.html`; record the world only after นน approves it (นน 2026-10-26). Write this design anchored to speech times anyway,
+
+## 4. `references/sequence-and-review.md` (same paragraph, after item 2)
+
+Add
+
+> New pages load the kit's `cast.js`; do not copy `cast.js` into the episode folder any more (a second copy redeclares `const Y` and the page fails to load). Episode-only helpers go in their own file with their own names.

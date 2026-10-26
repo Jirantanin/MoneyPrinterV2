@@ -1,7 +1,8 @@
 # <world name> beat sheet
 
-Copy next to the world's code as `<world>.beats.md`. Times are scene seconds (speech-map time; fill them with
-`python scripts/beat_word_times.py … --write`). Check with
+Copy next to the world's code as `<world>.beats.md`. Times are world seconds, the page time the world is recorded at
+(start from the speech-map phrase times, then run `python scripts/beat_word_times.py <scene.wav> <scene_script.txt>
+<world>.beats.md --offset <scene start in the world> --write` once per scene). Check with
 `node doc_renderer/gfx_kit/contact_sheet.cjs <page.html> "<scene&f=…>" <world>.beats.md <outdir>` and send นน
 `<outdir>/contact.html` before recording (LIBRARY.md "Beat sheet and contact sheet").
 

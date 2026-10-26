@@ -16,7 +16,7 @@ sticker, or swapping a default, are per-episode choices: ask นน. Set it with
 **Shared cast identity, every look.** จุก keeps its body outline, sprout, proportions, white eyes, `#14103a` pupils, two
 highlight dots per eye and opaque `#ff8aa6` cheeks (reference: the channel avatar, `.mp/channel_logo_20261021/jook.js`);
 Earth keeps its ocean and land colours; the Sun keeps `#fff3b0 → #ffd23f → #ff8a3d`. A look changes only how bodies are
-painted and lit. Use the rigged cast in `cast_rig.js` (`jook`, `earth`, `sun`, painted per look).
+painted and lit. Use the rigged cast in `cast_rig.js` (`jook`, `earth`, `castSun`, painted per look).
 
 Every look's shape spec fills the same headings:
 
@@ -39,7 +39,7 @@ module: `motion_demo.html` (+ `motion_demo.beats.md`).
 |---|---|---|
 | Tools the viewer never sees: easing, `lerpPt`, `bump`, `mixColor`, `track`, `camera`, `chip`, `burst` | `kit.js` | Always |
 | Finish: light and depth on whatever the episode draws (rim light, shade band, glow, light shaft, dust, vignette, grain) | `finish.js` | Always, coloured per episode |
-| Shared cast, the same thing every time: Earth, the Sun, จุก, truth tags, the number counter, the rock generator | new pages: `cast_rig.js` (`jook`, `earth`, `sun`); older pages: `kit.js` (`planet(…, 'earth')`, `mascot()`), `library.js` | Yes, unchanged |
+| Shared cast, the same thing every time: Earth, the Sun, จุก, truth tags, the number counter, the rock generator | new pages: `cast_rig.js` (`jook`, `earth`, `castSun`); older pages: `kit.js` (`planet(…, 'earth')`, `mascot()`), `library.js` | Yes, unchanged |
 | Motion, camera and type tools: springs, entrances, camera moves, rising lines, digit slots | `kit.js` (`spring`, `kick`), `motion.js`, `cam.js`, `type.js` | Always (new pages) |
 | The episode's own: recurring metaphor, props (traffic light, hourglass, calendar, buildings, mountains), topic characters, layouts, palette | the episode's page | Never copied from another episode; draw it fresh in this episode's style |
 
@@ -52,7 +52,7 @@ episode needs it.
 | Piece | Call | Use when | Not when |
 |---|---|---|---|
 | Earth | new pages `earth(parent, r, {paint, light, seed})` (cast_rig.js); older pages `planet(parent, r, 'earth', seed)` (kit.js) | Earth itself | a generic planet: use `planet(…, 'rock'/'warm'/'gold')` or draw one |
-| Sun | `sun(parent, r)`, `.state({x, y, s, o, t})`; on new pages cast_rig.js's `sun(parent, r, {paint})` replaces it (loaded after library.js) | our Sun | another star: draw it in the episode's palette |
+| Sun | `sun(parent, r)`, `.state({x, y, s, o, t})`; on new pages the rigged `castSun(parent, r, {paint})` (cast_rig.js) | our Sun | another star: draw it in the episode's palette |
 | จุก | new pages `jook(parent, {paint, arms, helmet})`, `.update(t, {x, y, s, look, blink, hop, bubble, mouth, wide, armL, armR, squash})` (cast_rig.js); older pages `mascot(parent, x, y, scale)` (kit.js) | the viewer's reaction: look, blink, hop, `!`/`?` | stating facts, narrating, or appearing in every beat |
 | จุก's space helmet | `spaceHelmet(m)`, `.update(t, o)` | จุก in space; the same helmet every time (decided 2026-10-13) | a scene on Earth; a gimmick in every beat |
 | จุก's other outfits | draw on `m.back` / `m.front` (behind / over the body; they follow hops and breathing) | a setting change worth a visual joke: diving gear underwater, a hard hat in a mine | an outfit that claims something the narration does not (จุก down where no one can go) or hides the eyes |
@@ -182,7 +182,7 @@ side-by-side with v3 in `out/`). The grain and textures are rebuilt per page loa
 ## Type (since 2026-10-26)
 
 `type.js`. **Fredoka 600/700 for numbers and Latin, Mitr for Thai** (files in `.mp/fonts`; `template.html` loads them;
-new pages set `PAPER.font = 'Mitr'`). Colours teal `#8fd8e6`, gold `#ffd98a` (the scene's one prominent number), white.
+new pages set `PAPER.font = 'Mitr'` and build only after `await typeReady()`). Colours teal `#8fd8e6`, gold `#ffd98a` (the scene's one prominent number), white.
 
 | Call | Does | Notes |
 |---|---|---|
@@ -238,8 +238,10 @@ always in log space; a slow drift during holds so the camera is never fully stil
 | shake | 0.3–0.5 s | a damped kick on an impact; at most 1–2 per world |
 
 **Energy (นน):** full-energy camera and springs only in the hook and at each world's peak; explanation stretches use
-drift, push and track, with the story moves at a calmer pace. `record.cjs` blends 2 subframes per MP4 frame by default
-(`--mblur 0` turns it off; about twice the record time).
+drift, push and track, with the story moves at a calmer pace. Motion blur: a new page sets `window.__MBLUR = 2` and
+`record.cjs` blends 2 subframes per MP4 frame (about twice the record time; `--mblur 0` turns it off); list hard steps
+(cuts, counter ticks, caption swaps) in `window.__CUTS` so those frames are never double-exposed. Older pages record
+sharp, as before.
 
 ## Motion (since 2026-10-26)
 

@@ -36,7 +36,7 @@ function demo() {
   el('rect', { x: -4000, y: -3000, width: 9000, height: 7000, fill: Y_lgrad([[0, '#081d2c'], [1, '#102348']]) }, Y.bg);
   const far = Y_layer(Y.bg), R = rng(41), stars = [];
   for (let i = 0; i < 260; i++) stars.push(YC(-2600 + R() * 5200, -1600 + R() * 3600, .8 + R() * R() * 3, R() < .2 ? '#ffe9b0' : '#cfe6ff', far));
-  const sunR = sun(Y.cam, 300), earthR = earth(Y.cam, 220, { light: 180 });
+  const sunR = castSun(Y.cam, 300), earthR = earth(Y.cam, 220, { light: 180 });
   const ring = YC(0, 0, 1, 'none', Y.cam, { stroke: '#ffffff', 'stroke-width': 4 });
   const pinG = el('g', {}, Y.cam);
   rigShape(pinG, 'M0,0 C-10,-26 -40,-46 -40,-74 A40,40 0 1 1 40,-74 C40,-46 10,-26 0,0Z', '#ff5a5f', 'B'); YC(0, -74, 15, '#ffffff', pinG);
@@ -74,7 +74,9 @@ function demo() {
 }
 
 let render = null;
-window.__ready = document.fonts.load('500 40px Mitr').catch(() => {}).then(() => { render = demo(); render(Q.has('t') ? +Q.get('t') : 0); return true; });
+window.__MBLUR = 2;                     // record.cjs blends 2 subframes per frame for this page
+window.__CUTS = [4.0, 5.4, 6.6, 7.6];   // steps (pin and counter appear, counter ticks): never blended
+window.__ready = typeReady().then(() => { render = demo(); render(Q.has('t') ? +Q.get('t') : 0); return true; });
 window.__seek = t => render(t);
 if (Q.has('play')) window.__ready.then(() => { const t0 = performance.now(); const loop = () => { render(((performance.now() - t0) / 1000) % DUR); requestAnimationFrame(loop); }; loop(); });
 </script>

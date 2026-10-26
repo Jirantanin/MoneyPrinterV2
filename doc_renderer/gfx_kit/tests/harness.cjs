@@ -1,6 +1,7 @@
 // Test helpers for the gfx kit (Node 16: plain scripts with assert, run by tests/test_gfx_kit_js.py).
 //   loadPure(files, names)        run kit files in a vm (no DOM) and return the named globals
-//   withPage(query, fn, {url})    open <gfx_kit>/<url>?<query> in headless Chrome, fail on pageerror, await __ready
+//   withPage(query, fn, {url, onNew})  open <gfx_kit>/<url>?<query> in headless Chrome, fail on pageerror, await __ready;
+//                                 onNew runs in the page before its scripts (spies)
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -11,13 +12,14 @@ function loadPure(files, names) {
   return vm.runInNewContext(`${src}\n;({${names.join(',')}})`, { console }, { filename: files.join('+') });
 }
 
-async function withPage(query, fn, { url = 'tests/fixture.html', size = [1920, 1080] } = {}) {
+async function withPage(query, fn, { url = 'tests/fixture.html', size = [1920, 1080], onNew = null } = {}) {
   const { launch } = require('../chrome.cjs');
   const { browser, cleanup } = await launch();
   const errors = [];
   try {
     const page = await browser.newPage();
     page.on('pageerror', e => errors.push(e.message));
+    if (onNew) await page.evaluateOnNewDocument(onNew);   // runs before the page's own scripts
     await page.setViewport({ width: size[0], height: size[1] });
     await page.goto('file:///' + path.join(KIT, url).split(path.sep).join('/') + (query ? '?' + query : ''), { waitUntil: 'networkidle0' });
     await page.evaluate(() => window.__ready);

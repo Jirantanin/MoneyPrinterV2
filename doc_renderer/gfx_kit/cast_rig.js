@@ -4,7 +4,7 @@
 //     st: kit mascot() fields (in, look, blink, hop, bubble, mouth, wide, sleep) plus x, y, s, rot,
 //         armL/armR [deg, reach] (0 = straight out sideways, positive = up), squash (-1..1)
 //   earth(parent, r, {paint, light, seed}) -> {g, state({x, y, s, o, spin})}
-//   sun(parent, r, {paint}) -> {g, state({x, y, s, o, t})}
+//   castSun(parent, r, {paint}) -> {g, state({x, y, s, o, t})}   (its own name: library.js sun() stays for stage() pages)
 // paint: 'A' gradients + rim (finForm) · 'B' three tones in the body's own hue, no blur · 'C' 6 px ink outlines and an
 // offset sticker shadow · 'D' the B paint (paper is for the episode's own props). Defaults to Y.look.style.
 // จุก's face never changes between paints: white eyes, #14103a pupils, two highlight dots each, opaque #ff8aa6 cheeks.
@@ -153,7 +153,7 @@ function earth(parent, r, { paint, light = 215, seed = 9 } = {}) {
 }
 
 // ---------------------------------------------------------------- the Sun (no flares or loops on the edge)
-function sun(parent, r, { paint } = {}) {
+function castSun(parent, r, { paint } = {}) {
   const P = rigPaint(paint), S = CAST_ID.sun;
   const g = el('g', {}, parent), halo = el('g', {}, g);
   [1.23, 1.48, 1.76].forEach((k, i) => YC(0, 0, r * k, S.mid, halo, { opacity: [.16, .1, .06][i], filter: P === 'A' ? Y_blurF(8) : null }));

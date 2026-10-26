@@ -8,11 +8,15 @@
 //   digits(parent, cx, y, size, {color, weight, align}) -> {g, set(str, color?)}   fixed-width slots, so a ticking number
 //     never jitters; align 'right' pins the last slot at cx (counters whose digit count changes)
 //   slam(t, t0, energy) -> scale    a number slams from 1.7x to 1x on a spring
+//   typeReady() -> Promise          load every face first; build the page after it resolves
 // Letter-spacing only on Latin caps; never on Thai (the marks detach from their consonants).
 const TYPE = { teal: '#8fd8e6', gold: '#ffd98a', white: '#ffffff', pill: 'rgb(6,20,40)', pillOpacity: .62, th: 'Mitr', num: 'Fredoka',
   thWeight: 500, thHeadWeight: 600, numWeight: 700, latinWeight: 600, tracking: 5,
   onLight: { white: '#3a2230', teal: '#1f7f8f', gold: '#a8740c' } };   // C and D put dark ink on a light container
 const TYPE_CONTAINER = { A: 'underline', B: 'pill', C: 'sticker', D: 'paper' };
+// every face riseLine may measure; a page awaits typeReady() before building (containers are sized at build time)
+const TYPE_FACES = ['600 40px Fredoka', '700 40px Fredoka', '500 40px Mitr', '600 40px Mitr'];
+const typeReady = () => Promise.all([...TYPE_FACES, '700 40px Kanit', '900 40px Kanit'].map(f => document.fonts.load(f, 'ก1').catch(() => [])));
 let TYPE_N = 0;
 
 function riseLine(parent, x, y, size, runs, t0, { anchor = 'middle', container, padX = 30, energy = 'peak' } = {}) {

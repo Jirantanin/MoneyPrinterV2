@@ -3,6 +3,11 @@ const assert = require('assert');
 const { withPage, run } = require('./harness.cjs');
 
 run(async () => {
+  // library.js sun() keeps working on pages built with stage(); the rigged one is castSun()
+  await withPage('run=libsun', async page => {
+    const r = await page.evaluate(() => window.LIBSUN);
+    assert.strictEqual(r.castSun, 'function'); assert(r.circles >= 3);
+  });
   for (const paint of ['A', 'B', 'C', 'D']) await withPage(`run=rig&paint=${paint}`, async page => {
     const r = await page.evaluate(() => window.RIG_FACTS);
     const m = `paint ${paint}`;

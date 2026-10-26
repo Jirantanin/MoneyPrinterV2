@@ -9,7 +9,7 @@ FIXTURES.lookB = litFixture('B');
 FIXTURES.rig = () => {
   const paint = Q.get('paint') || 'B';
   Y_init({ style: paint });
-  const j = jook(Y.cam, { arms: true }), e = earth(Y.cam, 220, { seed: 9 }), s = sun(Y.cam, 160);
+  const j = jook(Y.cam, { arms: true }), e = earth(Y.cam, 220, { seed: 9 }), s = castSun(Y.cam, 160);
   e.state({ x: 1300, y: 500 }); s.state({ x: 200, y: 300, t: 1 });
   const parts = n => [...Y.cam.querySelectorAll(`[data-part="${n}"]`)];
   const yOf = n => parts(n)[0].getCTM().f;
@@ -72,4 +72,11 @@ FIXTURES.cut = () => {
   if (Q.get('cuts')) window.__CUTS = [.48];
   if (Q.get('mblur')) window.__MBLUR = +Q.get('mblur');
   FIX_RENDER(0);
+};
+
+// Final review: a stage()-only page (no Y_init) that uses library.js sun(), with every kit module loaded
+FIXTURES.libsun = () => {
+  const { svg } = stage();
+  const s = sun(svg, 60); s.state({ x: 200, y: 200, t: 1 });
+  window.LIBSUN = { castSun: typeof castSun, circles: svg.querySelectorAll('circle').length };
 };

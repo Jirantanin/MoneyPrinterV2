@@ -58,7 +58,8 @@ function demo() {
 
 const SCENES = { demo };
 let render = null;
-window.__ready = document.fonts.load('900 40px Kanit').then(() => document.fonts.load('700 40px Kanit'))
+window.__MBLUR = 2;   // motion blur for this page's MP4s (record.cjs); list hard steps in window.__CUTS = [t, ...]
+window.__ready = typeReady()
   .then(() => { render = SCENES[NAME](); render(0); return true; });
 window.__seek = t => render(t);
 </script>
