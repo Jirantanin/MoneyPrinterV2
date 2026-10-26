@@ -5,8 +5,10 @@
 //   --png writes the stills as lossless PNG (thumbnails) instead of JPEG
 //   --from -0.8 starts at page time -0.8 s (crossfade handles); window.__SFX is saved next to the MP4 as <out>.sfx.json
 //   --size 1080x1920 sets the viewport for a vertical page (the page calls kitSize(1080, 1920))
-//   --mblur N blends N subframes per MP4 frame (default 2; 0 or 1 = off) over --shutter of the frame (default 0.6), so
-//   whips, dives and fast moves read as motion; it roughly doubles record time. Stills never blur.
+//   Motion blur is opt-in: a page sets window.__MBLUR = 2 (new pages built on the motion spec), or --mblur N overrides
+//   it (0 or 1 = off). N subframes per MP4 frame are blended over --shutter of the frame (default 0.6), so whips, dives
+//   and fast moves read as motion; it roughly doubles record time. Stills never blur. Frames within half a shutter of a
+//   time in window.__CUTS (hard cuts, counter ticks, caption swaps) are not blended, so they never double-expose.
 // Record at the episode render rate (minimal_doc: 25 fps) and to the exact slot length.
 // PRODUCER_CHROME_GPU=1 rasterizes on the GPU instead of SwiftShader (same flag as render.cjs).
 const path = require('path');
@@ -40,13 +42,15 @@ const main = async () => {
       else await page.screenshot({ path: `${out}_${t}.jpg`, type: 'jpeg', quality: 85 });
     }
   } else {
-    const sub = Math.max(1, Number(arg('--mblur', 2)) || 1), shutter = Number(arg('--shutter', .6));
+    const { pageBlur, cuts } = await page.evaluate(() => ({ pageBlur: window.__MBLUR || 1, cuts: window.__CUTS || [] }));
+    const sub = Math.max(1, Math.round(Number(arg('--mblur', pageBlur))) || 1), shutter = Number(arg('--shutter', .6));
+    const onCut = t => cuts.some(c => Math.abs(c - t) <= shutter / (2 * fps) + 1e-9);
     const blend = sub > 1 ? ['-vf', `tmix=frames=${sub},select=not(mod(n+1\\,${sub})),setpts=N/(${fps}*TB)`, '-r', String(fps)] : [];
     const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps * sub), '-c:v', 'mjpeg', '-i', '-', ...blend,
       '-c:v', 'libx264', '-crf', '14', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out], { stdio: ['pipe', 'inherit', 'inherit'] });
     const sfx = await page.evaluate(() => window.__SFX || null);
     if (sfx) fs.writeFileSync(out.replace(/\.mp4$/i, '') + '.sfx.json', JSON.stringify(sfx));
-    for (let i = 0; i < total; i++) for (const t of subframeTimes(i, fps, from, { sub, shutter })) {
+    for (let i = 0; i < total; i++) for (const t of onCut(from + i / fps) ? Array(sub).fill(from + i / fps) : subframeTimes(i, fps, from, { sub, shutter })) {
       await page.evaluate(v => window.__seek(v), t);
       const buf = await page.screenshot({ type: 'jpeg', quality: 95 });
       if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));

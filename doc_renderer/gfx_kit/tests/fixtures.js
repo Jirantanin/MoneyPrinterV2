@@ -63,3 +63,13 @@ FIXTURES.whip = () => {
   window.FIX_RENDER = t => set(bar, { x: (300 + 600 * t).toFixed(2) });
   FIX_RENDER(0);
 };
+
+// Final review: a hard cut at t = 0.48 (white before, black after); ?cuts=1 declares it in window.__CUTS
+FIXTURES.cut = () => {
+  const { svg } = stage();
+  const bg = el('rect', { width: KW, height: KH, fill: '#fff' }, svg);
+  window.FIX_RENDER = t => set(bg, { fill: t < .48 ? '#fff' : '#000' });
+  if (Q.get('cuts')) window.__CUTS = [.48];
+  if (Q.get('mblur')) window.__MBLUR = +Q.get('mblur');
+  FIX_RENDER(0);
+};
