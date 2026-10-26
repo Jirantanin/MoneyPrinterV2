@@ -1,0 +1,25 @@
+# <world name> beat sheet
+
+Copy next to the world's code as `<world>.beats.md`. Times are scene seconds (speech-map time; fill them with
+`python scripts/beat_word_times.py … --write`). Check with
+`node doc_renderer/gfx_kit/contact_sheet.cjs <page.html> "<scene&f=…>" <world>.beats.md <outdir>` and send นน
+`<outdir>/contact.html` before recording (LIBRARY.md "Beat sheet and contact sheet").
+
+## DIRECTION
+Look (B for space, D for history unless นน chose another), this world's palette, sizes of the main pieces at 1x, the
+light direction. Point at the shared shape and type specs in LIBRARY.md instead of restating them.
+
+## BEATS
+One row per line or trigger word. `story move` starts with its number from LIBRARY.md "Story moves" (1–12; "push-in"
+is not a story move). `camera` starts with a move from cam.js: push, pull, punch, dive, track, tilt, whip, cut, drift
+(= hold), shake. A drift row names what changes. `peak` is the second the beat looks fullest (empty = time + 0.4).
+Every world has at least one 2 (scale reveal) and one 3 (make it personal).
+
+| time | peak | trigger | story move | camera | what changes | text | sound |
+|---|---|---|---|---|---|---|---|
+| 3.2 |  | "แปดนาที" | 5 counter | punch-in 1.0→1.15, 0.5 s | 8:20 slams 1.7x→1x and starts ticking | — | tick |
+| 5.6 |  | "คุณ" | 3 personal | dive 1x→2.3x, 1 s | pin drops and squashes; จุก looks 0.25 s before | ประเทศไทย | pin tap |
+
+## GOTCHAS
+Traps met while building this world (for example: "the darkness front must speed up near Earth or it takes 13 s to
+cross"). Move the ones that apply to other worlds into LIBRARY.md.
