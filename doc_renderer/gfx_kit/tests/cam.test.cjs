@@ -13,7 +13,14 @@ run(async () => {
   assert(Math.abs(p(.5).z - 1.15) < 1e-9 && Math.abs(p(.8).z - 1.15) < 1e-9, 'punch lands exactly and stays');
   const h = camPath([{ t: 0, x: 0, y: 0, z: 1, move: 'cut' }, { t: 1, x: 0, y: 0, z: 1, move: 'hold' }]);
   assert(h(5).z > h(1).z, 'drift: never still');
-  assert(Math.abs(h(1).z - 1) < 1e-9 && Math.abs(h(1).x) < 1e-9, 'drift starts from rest (no jump)');
+  // no snap when a hold hands over to the next move, or at the last key
+  const hm = camPath([{ t: 0, x: 960, y: 540, z: 1, move: 'cut' }, { t: 4, x: 960, y: 540, z: 1, move: 'hold' }, { t: 5, x: 1200, y: 540, z: 2, move: 'push' }, { t: 6, x: 1200, y: 540, z: 2, move: 'hold' }]);
+  for (const k of [4, 6]) {
+    const a = hm(k - 1e-4), b = hm(k + 1e-4);
+    assert(Math.abs(a.z - b.z) < 1e-3 && Math.abs(a.x - b.x) < .05 && Math.abs(a.y - b.y) < .05, `continuous at ${k}: ${JSON.stringify([a, b])}`);
+  }
+  assert(Math.abs(hm(5).z - 2) < 1e-9, 'the push still lands on its key');
+  assert(Math.abs(h(1e-4).z - 1) < 1e-4 && Math.abs(h(1e-4).x) < .01, 'drift starts from rest (no jump)');
   const k = camPath([{ t: 0, x: 0, y: 0, z: 1, move: 'cut' }, { t: 2, x: 500, y: 0, z: 1, move: 'cut' }], { drift: 0 });
   assert.strictEqual(k(1.99).x, 0); assert.strictEqual(k(2).x, 500);
   const s = camPath([{ t: 0, x: 0, y: 0, z: 1, move: 'cut' }], { shakes: [{ t0: 1 }], drift: 0 });

@@ -18,22 +18,24 @@ function camPath(keys, { shakes = [], drift = .015 } = {}) {
   const at = (k, e, a) => ({ x: lerp(a.x, k.x, e), y: lerp(a.y, k.y, e), z: a.z * Math.pow(k.z / a.z, e), rot: lerp(a.rot || 0, k.rot || 0, e) });
   const still = k => ({ x: k.x, y: k.y, z: k.z, rot: k.rot || 0 });
   const wander = (c, dt) => drift ? { ...c, z: c.z * (1 + drift * dt), x: c.x + 400 * drift * Math.sin(.37 * dt), y: c.y + 270 * drift * Math.sin(.29 * dt) } : c;
+  // where the camera is at each key: a hold ends wherever its drift took it, so the next move starts from there
+  const S = [still(keys[0])];
+  for (let i = 1; i < keys.length; i++) S.push(keys[i].move === 'hold' ? wander(S[i - 1], keys[i].t - keys[i - 1].t) : still(keys[i]));
   const base = t => {
     if (t <= keys[0].t) return still(keys[0]);
     for (let i = 1; i < keys.length; i++) {
-      const a = keys[i - 1], k = keys[i];
+      const a = keys[i - 1], k = keys[i], from = S[i - 1];
       if (t >= k.t) continue;
       const u = p(t, a.t, k.t);
-      if (k.move === 'cut') return still(a);
-      if (k.move === 'hold') return wander(still(a), t - a.t);
-      if (k.move === 'punch') { const e = spring(u * .75, ENERGY.peak.zeta, ENERGY.peak.hz) * (1 - u ** 4) + u ** 4; return at(k, e, a); }
-      return at(k, eio(u), a);
+      if (k.move === 'cut') return S[i - 1];
+      if (k.move === 'hold') return wander(S[i - 1], t - a.t);
+      if (k.move === 'punch') { const e = spring(u * .75, ENERGY.peak.zeta, ENERGY.peak.hz) * (1 - u ** 4) + u ** 4; return at(k, e, from); }
+      return at(k, eio(u), from);
     }
-    const last = keys[keys.length - 1];
-    return wander(still(last), t - last.t);
+    return wander(S[S.length - 1], t - keys[keys.length - 1].t);
   };
   return t => {
-    const c = base(t);
+    const c = { ...base(t) };   // a copy: shakes must not leak into the key states
     for (const { t0, amp = 14, decay = 9, hz = 7 } of shakes) { c.x += kick(t - t0, amp, decay, hz); c.y += kick(t - t0 + .05, amp * .6, decay, hz * 1.3); }
     return c;
   };
