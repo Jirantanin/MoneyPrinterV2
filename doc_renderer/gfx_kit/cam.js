@@ -3,7 +3,7 @@
 //     keys [{t, x, y, z, rot?, move}], sorted; the segment ending at a key uses that key's move:
 //       push | pull | track | tilt | dive | whip   easeInOutCubic between the keys
 //       punch                                     peak-energy spring that overshoots, landing exactly on the key
-//       cut                                       holds the previous key, jumps at this key's t
+//       cut                                       drifts on the previous key, jumps at this key's t
 //       hold                                      stays on the previous key (drift keeps it alive)
 //     Zoom always interpolates in log space. During a hold and after the last key the camera drifts (zoom +drift per
 //     second, a few px of slow wander) so it is never fully still; drift 0 turns that off.
@@ -27,7 +27,7 @@ function camPath(keys, { shakes = [], drift = .015 } = {}) {
       const a = keys[i - 1], k = keys[i], from = S[i - 1];
       if (t >= k.t) continue;
       const u = p(t, a.t, k.t);
-      if (k.move === 'cut') return S[i - 1];
+      if (k.move === 'cut') return wander(S[i - 1], t - a.t);   // drifts until the jump
       if (k.move === 'hold') return wander(S[i - 1], t - a.t);
       if (k.move === 'punch') { const e = spring(u * .75, ENERGY.peak.zeta, ENERGY.peak.hz) * (1 - u ** 4) + u ** 4; return at(k, e, from); }
       return at(k, eio(u), from);
@@ -36,7 +36,7 @@ function camPath(keys, { shakes = [], drift = .015 } = {}) {
   };
   return t => {
     const c = { ...base(t) };   // a copy: shakes must not leak into the key states
-    for (const { t0, amp = 14, decay = 9, hz = 7 } of shakes) { c.x += kick(t - t0, amp, decay, hz); c.y += kick(t - t0 + .05, amp * .6, decay, hz * 1.3); }
+    for (const { t0, amp = 14, decay = 9, hz = 7 } of shakes) { c.x += kick(t - t0, amp, decay, hz); c.y += kick(t - t0, amp * .6, decay, hz * 1.3) * Math.cos(.7); }
     return c;
   };
 }

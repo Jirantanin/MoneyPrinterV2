@@ -20,12 +20,14 @@ function section(md, name) {
 }
 function parseBeats(md) {
   const rows = section(md, 'BEATS').split(/\r?\n/).filter(l => l.trim().startsWith('|')).map(l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim()));
+  if (!rows.length) throw new Error('no BEATS table: the sheet needs a "## BEATS" section with the table (see beats_template.md)');
   const head = rows[0].map(h => h.toLowerCase());
   if (COLS.some((c, i) => head[i] !== c)) throw new Error(`BEATS columns must be: ${COLS.join(' | ')}`);
   const beats = rows.slice(2).map(r => {
-    const [time, peak, trigger, story, camera, changes, text, sound] = r, t = Number(time);
+    const [time, peak, trig, story, camera, changes, text, sound] = r, t = empty(time) ? NaN : Number(time);
     const word = (camera.split(/[\s,]/)[0] || '').toLowerCase();
-    return { time: t, peak: empty(peak) ? +(t + .4).toFixed(2) : Number(peak), trigger: trigger.replace(/^["“]|["”]$/g, ''), story,
+    const mark = /\s*\((word|phrase|unknown)\)$/.exec(trig), trigger = (mark ? trig.slice(0, mark.index) : trig).replace(/^["“]|["”]$/g, '');
+    return { time: t, peak: empty(peak) ? +(t + .4).toFixed(2) : Number(peak), trigger, timing: mark ? mark[1] : '', story,
       storyNo: /^\d+/.test(story) ? parseInt(story, 10) : null, camera, cameraMove: CAM_ALIASES[word] || word, changes: empty(changes) ? '' : changes,
       text: empty(text) ? '' : text, sound: empty(sound) ? '' : sound };
   });
@@ -36,6 +38,9 @@ function parseBeats(md) {
 function checkBeats(beats) {
   const out = [], at = (b, i) => `beat ${i + 1} (${b.time} s)`;
   beats.forEach((b, i) => {
+    if (!Number.isFinite(b.time)) out.push(`${at(b, i)}: time is not a number of seconds`);
+    else if (!Number.isFinite(b.peak)) out.push(`${at(b, i)}: peak is not a number of seconds`);
+    else if (b.peak < b.time) out.push(`${at(b, i)}: peak ${b.peak} is before the beat's time`);
     if (empty(b.story)) out.push(`${at(b, i)}: empty story move`);
     else if (/^push/i.test(b.story)) out.push(`${at(b, i)}: push-in is not a story move`);
     else if (b.storyNo == null || b.storyNo < 1 || b.storyNo > 12) out.push(`${at(b, i)}: story move must start with its number 1-12`);
@@ -52,7 +57,7 @@ function checkBeats(beats) {
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function page(title, sheet, problems) {
-  const card = (b, i) => `<figure><img src="beat_${i + 1}.jpg" alt="beat ${i + 1}"><figcaption><b>${i + 1} · ${b.time}s</b> (peak ${b.peak}s) “${esc(b.trigger)}”
+  const card = (b, i) => `<figure><img src="beat_${i + 1}.jpg" alt="beat ${i + 1}"><figcaption><b>${i + 1} · ${b.time}s</b> (peak ${b.peak}s) “${esc(b.trigger)}”${b.timing === 'word' || !b.timing ? '' : ` <i>(${b.timing} time)</i>`}
 <div><span>เล่า</span>${esc(b.story)}</div><div><span>กล้อง</span>${esc(b.camera)}</div><div><span>เปลี่ยน</span>${esc(b.changes || '—')}</div>
 ${b.text ? `<div><span>ข้อความ</span>${esc(b.text)}</div>` : ''}</figcaption></figure>`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>

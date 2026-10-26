@@ -48,8 +48,8 @@ def trigger_time(script: str, words: list[tuple[str, float, float]], trigger: st
 
     Only occurrences at or after squashed index `start` count (beat sheets pass the previous match, so triggers land in
     order). When the trigger occurs more than once, the occurrence nearest `phrase_time` wins; with no phrase time and no
-    `start`, the choice is ambiguous and no time is guessed. The time is the first heard character of the occurrence,
-    snapped to the nearest speech onset within `snap` seconds. Below `min_match` of its characters heard, it falls back
+    `start`, the choice is ambiguous and no time is guessed. The time is where the occurrence starts (counted back from
+    its first heard character when the opening was misheard), snapped to the nearest speech onset within `snap` seconds. Below `min_match` of its characters heard, it falls back
     to `phrase_time` (or None). `index` is the chosen occurrence's squashed start, for chaining."""
     s, tr = squash(script), squash(trigger)
     occ = [i for i in range(start, len(s) - len(tr) + 1) if tr and s.startswith(tr, i)]
@@ -60,7 +60,15 @@ def trigger_time(script: str, words: list[tuple[str, float, float]], trigger: st
         conf = round(len(hit) / len(tr), 3)
         best = max(best, conf)
         if hit and conf >= min_match:
-            cands.append((i, known[hit[0]], conf))
+            t = known[hit[0]]
+            if hit[0] > i:   # the opening was not heard: count back to where it starts, not to the first heard character
+                prev = [k for k in known if k < i]
+                if prev:
+                    j = max(prev)
+                    t = known[j] + (t - known[j]) * (i - j) / (hit[0] - j)
+                elif len(hit) > 1:
+                    t -= (hit[0] - i) * (known[hit[-1]] - known[hit[0]]) / (hit[-1] - hit[0])
+            cands.append((i, max(0.0, t), conf))
     out = {"trigger": trigger, "index": None, "ambiguous": len(occ) > 1}
 
     def fallback(conf: float) -> dict:

@@ -52,6 +52,7 @@ FIXTURES.type = () => {
     hiddenBeforeT0: before.o === 0, pillBeforeT0: before.pill, atT0, offsetAtEnd, container: pill.getAttribute('data-kind'),
     lastTwoA: a.slice(-2), lastTwoB: b.slice(-2), widthMinus70: w, widthBudget: 120 * (.42 + .58 + .58 + .34 + .62) + 24,
     slam0: slam(1, 1), slamEnd: slam(4, 1),
+    thaiThrows: (() => { try { D.set('15 ล้าน'); return false; } catch (e) { return /riseLine/.test(e.message); } })(),
   };
 };
 

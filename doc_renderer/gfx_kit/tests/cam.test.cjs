@@ -25,6 +25,9 @@ run(async () => {
   assert.strictEqual(k(1.99).x, 0); assert.strictEqual(k(2).x, 500);
   const s = camPath([{ t: 0, x: 0, y: 0, z: 1, move: 'cut' }], { shakes: [{ t0: 1 }], drift: 0 });
   assert(Math.abs(s(1.05).x) > 1 && Math.abs(s(2).x) < .5 && s(.9).x === 0, 'damped shake');
+  assert.strictEqual(s(.96).y, 0, 'the shake does not start before its impact (y)');
+  const ct = camPath([{ t: 0, x: 0, y: 0, z: 1, move: 'cut' }, { t: 3, x: 500, y: 0, z: 2, move: 'cut' }]);
+  assert(ct(2).z > ct(.5).z, 'a cut segment still drifts until the cut');
   assert.strictEqual(screenScale(2), 'scale(0.5000)');
   assert.strictEqual(CAM_RULES.pullMinRatio, 3); assert.strictEqual(CAM_RULES.maxShakesPerWorld, 2);
 

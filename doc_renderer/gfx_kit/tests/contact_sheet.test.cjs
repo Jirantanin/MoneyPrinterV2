@@ -22,6 +22,14 @@ run(async () => {
   assert(probs.some(s => /push-in is not a story move/.test(s)));
   assert.strictEqual(probs.length, 3, probs.join(' | '));
 
+  // a sheet without a BEATS table says so; bad times are flagged; --write's timing marks are not part of the trigger
+  assert.throws(() => parseBeats(['# x', '', '## DIRECTION', 'no table'].join('\n')), /no BEATS table/);
+  const odd = parseBeats(['## BEATS', '| time | peak | trigger | story move | camera | what changes | text | sound |', '|---|---|---|---|---|---|---|---|',
+    '| ? |  | "ไกล" (phrase) | 2 scale | pull 1→.3, 2 s | out | — | — |', '| 4.0 | soon | "คุณ" | 3 personal | dive 1→2, 1 s | in | — | — |'].join('\n'));
+  assert.strictEqual(odd.beats[0].trigger, 'ไกล'); assert.strictEqual(odd.beats[0].timing, 'phrase');
+  const oddP = checkBeats(odd.beats);
+  assert(oddP.some(s => /beat 1.*time/.test(s)) && oddP.some(s => /beat 2.*peak/.test(s)), oddP.join(' | '));
+
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'contact-'));
   const r = spawnSync('node', [path.join(KIT, 'contact_sheet.cjs'), path.join(KIT, 'tests/fixture.html'), 'x&run=whip', path.join(__dirname, 'beats_fixture.md'), out], { encoding: 'utf8' });
   assert.notStrictEqual(r.status, 0, 'problems make the tool exit non-zero');

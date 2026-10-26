@@ -76,6 +76,14 @@ class TriggerTimeTest(unittest.TestCase):
         r2 = wt.trigger_time(script, words, "คุณ", onsets=[], phrase_time=1.1)
         self.assertEqual((r2["method"], r2["time"]), ("word", 1.0))
 
+    def test_misheard_opening_is_extrapolated_back_not_late(self) -> None:
+        script = "แสงนี้ออกจากดวงอาทิตย์แปดนาทีพอดี"
+        words = [("แสงนี้", 0.0, 0.5), ("ออกจาก", 0.5, 0.9), ("ดวงอาทิตย์", 0.9, 1.6), ("อือ", 1.6, 1.9), ("นาทีพอดี", 1.9, 2.6)]
+        r = wt.trigger_time(script, words, "แปดนาทีพอดี", onsets=[])
+        self.assertEqual(r["method"], "word")
+        self.assertLess(r["time"], 1.85, "the unheard opening is counted back from the heard part")
+        self.assertGreaterEqual(r["time"], 1.55)
+
     def test_gfx_short_uses_the_shared_char_times(self) -> None:
         g = load_script("producer_gfx_short")
         self.assertIs(g.char_times, wt.char_times)
@@ -83,6 +91,20 @@ class TriggerTimeTest(unittest.TestCase):
 
 
 class BeatSheetWriteTest(unittest.TestCase):
+    def test_write_moves_an_explicit_peak_with_its_time(self) -> None:
+        cli = load_script("beat_word_times")
+        with tempfile.TemporaryDirectory() as d:
+            beats = Path(d) / "w.beats.md"
+            shutil.copy(ROOT / "doc_renderer/gfx_kit/tests/beats_fixture.md", beats)
+            script = Path(d) / "s.txt"
+            script.write_text("แล้วคุณก็", encoding="utf-8")
+            cli.transcribe = lambda wav, model: [("แล้ว", 0.0, 0.3), ("คุณ", 0.3, 0.6), ("ก็", 0.6, 0.8)]
+            cli.speech_onsets = lambda wav: []
+            cli.wav_seconds = lambda wav: 2.0
+            cli.main([str(Path(d) / "x.wav"), str(script), str(beats), "--offset", "5.0", "--write"])
+            row = [l for l in beats.read_text(encoding="utf-8").splitlines() if "คุณ" in l][0]
+            self.assertTrue(row.startswith("| 5.30 | 6.10 |"), row)   # was 5.6 / 6.4: both move by -0.3
+
     def test_rows_outside_this_scene_are_left_alone(self) -> None:
         cli = load_script("beat_word_times")
         with tempfile.TemporaryDirectory() as d:

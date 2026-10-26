@@ -7,6 +7,7 @@
 //     update(t, z) counter-scales by the camera zoom z when the line hangs on a world object (z = 1 on the HUD).
 //   digits(parent, cx, y, size, {color, weight, align}) -> {g, set(str, color?)}   fixed-width slots, so a ticking number
 //     never jitters; align 'right' pins the last slot at cx (counters whose digit count changes)
+//     Digits, Latin letters and : . , ° % + - − only; Thai goes in a riseLine (its marks cannot take a slot).
 //   slam(t, t0, energy) -> scale    a number slams from 1.7x to 1x on a spring
 //   typeReady() -> Promise          load every face first; build the page after it resolves
 // Letter-spacing only on Latin caps; never on Thai (the marks detach from their consonants).
@@ -55,6 +56,7 @@ function digits(parent, cx, y, size, { color = 'white', weight = 700, align = 'c
   const g = el('g', {}, parent), slots = [];
   const w = c => c === ':' || c === '.' ? .3 : c === '°' ? .34 : c === '-' || c === '−' ? .42 : /[A-Z]/.test(c) ? .62 : .58;
   return { g, set(str, c = color) {
+    if (/[^0-9A-Za-z:.,°%+\-−\s]/.test(str)) throw new Error(`digits: "${str}" has characters that cannot sit in slots; put words in a riseLine next to it`);
     const chars = [...str];
     while (slots.length < chars.length) slots.push(el('text', { 'font-family': TYPE.num, 'font-weight': weight, 'font-size': size, 'text-anchor': 'middle' }, g));
     const ws = chars.map(ch => w(ch) * size), tot = ws.reduce((a, b) => a + b, 0);

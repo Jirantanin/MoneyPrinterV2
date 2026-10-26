@@ -14,6 +14,7 @@ run(async () => {
     assert.strictEqual(r.container, 'pill', 'look B uses the dark pill');
     assert.deepStrictEqual(r.lastTwoA, r.lastTwoB, 'the last two digits never move when the count shrinks');
     assert(r.widthMinus70 <= r.widthBudget, `−70°C fits its slots (${r.widthMinus70} > ${r.widthBudget})`);
+    assert(r.thaiThrows, 'digits refuses Thai (its marks would land in their own slots) and points to riseLine');
     assert(Math.abs(r.slam0 - 1.7) < 1e-9 && Math.abs(r.slamEnd - 1) < .01, 'slam 1.7x -> 1x');
   });
 });

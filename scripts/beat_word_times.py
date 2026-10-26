@@ -73,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
         t = None if r["time"] is None else round(r["time"] + a.offset, 2)
         print(f'{trig}\t{r["method"]}\t{t}\tconfidence {r["confidence"]}')
         if r["method"] == "word":
+            if old is not None and re.fullmatch(r"[\d.]+", cells[1]):   # an explicit peak moves with its beat
+                cells[1] = f"{float(cells[1]) + t - old:.2f}"
             cells[0], cells[2] = f"{t:.2f}", trig
         else:
             cells[2] = f'{trig} ({r["method"]})'

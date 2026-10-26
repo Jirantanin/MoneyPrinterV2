@@ -19,6 +19,10 @@ run(async () => {
   assert.strictEqual(+subframeTimes(10, 25, 0, { sub: 3 }).reduce((a, b) => a + b, 0).toFixed(6), 1.2, 'centred on the frame');
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mblur-')), page = path.join(KIT, 'tests/fixture.html');
+  for (const bad of [['--shutter', 'abc'], ['--shutter', '1.5'], ['--mblur', '2.5'], ['--mblur', 'x']]) {
+    const r = require('child_process').spawnSync('node', [path.join(KIT, 'record.cjs'), page, 'x&run=whip', '1', path.join(dir, 'bad.mp4'), ...bad], { encoding: 'utf8' });
+    assert(r.status !== 0 && /--(shutter|mblur)/.test(r.stderr), `${bad.join(' ')} is refused: ${r.stderr.slice(0, 200)}`);
+  }
   const rec = (out, extra) => execFileSync('node', [path.join(KIT, 'record.cjs'), page, 'x&run=whip', '1', out, ...extra], { stdio: 'pipe' });
   rec(path.join(dir, 'default.mp4'), []);
   rec(path.join(dir, 'blur.mp4'), ['--mblur', '2']); rec(path.join(dir, 'sharp.mp4'), ['--mblur', '0']);

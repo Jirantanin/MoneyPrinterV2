@@ -29,6 +29,9 @@ const main = async () => {
   const fps = Number(arg('--fps', 25)), total = Math.round(Number(seconds) * fps), stills = arg('--stills', null);
   const from = Number(arg('--from', 0));   // page time of the first frame (negative = lead-in handle)
   const [width, height] = arg('--size', '1920x1080').split('x').map(Number);
+  const mb = arg('--mblur', null), sh = Number(arg('--shutter', .6));
+  if (mb != null && !/^\d+$/.test(mb)) throw new Error(`--mblur takes a whole number of subframes (got "${mb}")`);
+  if (!(sh > 0 && sh <= 1)) throw new Error(`--shutter takes a fraction of the frame in (0, 1] (got "${arg('--shutter')}")`);
   const { browser, cleanup } = await launch();
   const page = await browser.newPage();
   page.on('pageerror', e => { console.error('pageerror', e.message); process.exitCode = 2; });
