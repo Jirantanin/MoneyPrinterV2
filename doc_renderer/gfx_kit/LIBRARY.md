@@ -6,13 +6,41 @@ Rule (นน, 2026-10-13): "ไม่หยิบของเดิมมาใ�
 Reuse a piece only when it is the same thing in every episode. Each episode draws its own metaphor, props,
 characters and compositions, and picks its own look with `theme()`.
 
+## Looks (since 2026-10-26)
+
+Four looks are kept and each episode picks one (นน, from `.mp/shape_styles_20261026/compare.html`). **B flat geometric
+is the default for space episodes; D paper collage is the default for history episodes.** A storybook glow and C kawaii
+sticker, or swapping a default, are per-episode choices: ask นน. Set it with `Y_init({style, ...})` (cast.js); B installs
+`flat.js`. Spec and rationale: `docs/superpowers/specs/2026-10-26-motion-spec-design.md`.
+
+**Shared cast identity, every look.** จุก keeps its body outline, sprout, proportions, white eyes, `#14103a` pupils, two
+highlight dots per eye and opaque `#ff8aa6` cheeks (reference: the channel avatar, `.mp/channel_logo_20261021/jook.js`);
+Earth keeps its ocean and land colours; the Sun keeps `#fff3b0 → #ffd23f → #ff8a3d`. A look changes only how bodies are
+painted and lit. Use the rigged cast in `cast_rig.js` (`jook`, `earth`, `sun`, painted per look).
+
+Every look's shape spec fills the same headings:
+
+| | B flat geometric (space default) | A storybook glow | C kawaii sticker | D paper collage (history default) |
+|---|---|---|---|---|
+| 1 primitives | circles, capsules, rounded rects, rounded polygons; corner radius 12 px on every piece; limbs full capsules; no outlines; a line is an object (thick, round-capped) | circles, capsules, rounded rects; corners 25–50 % of the short side; no outlines, no sharp corners except a pin tip | the same primitives with 6 px `#3a2230` outlines (4 px when far), round joins | torn paper: deckle edge, edge jitter 3–6 px, boil every 2 frames (backdrops 6) |
+| 2 colour and light | three tones in the body's own hue: lit band upper-left, base, hard shade crescent lower-right (`Y_lit` dx 6, dy 5); no gradient inside a piece except sky and ocean; at most five hues plus one warm accent | 2–3 stop gradients that shift hue (never toward grey or brown); rim and shade band from `finForm`; one light direction per scene | flat pastels; no light; an offset sticker shadow (8 px, `#1c1236` at 45 %) | colours 20 % muted; pencil hatch at 45°; light as pools in the dark (`pnight`) |
+| 3 depth | by value only; blur only on far background and at most 4 px on a planet's day/night edge | rim light; bloom only on small emitters (under 60 px) | stacking and the sticker shadow | paper layers with a soft 6 px offset shadow |
+| 4 sizes at 1x | main planet r 200–260, topic character about 330 px tall, จุก about 130 px | same | topic character head:body 1:1.5 | same as B |
+| 5 detail by size | under 100 px on screen: one shape, one colour; over 300 px: full three tones | under 80 px: silhouette and rim; 80–300 px: two tones | under 100 px: no inner detail | under 100 px: no hatch |
+| 6 banned | straight capsule clouds (read as loading bars; clouds are arched strokes); highlight ellipses over land; translucent cheeks or overlays on flat colour (turn grey); big bright nebula discs (read as bokeh) | big blurred halos on big bodies (muddy); outlines | faces on props (จุก is the only one who reacts); glow | ruler-straight lines; whips and fast tracks (the boiling edges read as noise) |
+| 7 rig | separate pieces with pivots (`jook()` arms, sprout follow-through) | same | same | cut pieces on brads; the shared cast stays in the SVG layer with the B paint |
+
+Prototype of all four on one beat: `.mp/shape_styles_20261026/page.html?g=A|B|C|D&play`. Demo world in B with every
+module: `motion_demo.html` (+ `motion_demo.beats.md`).
+
 ## Three layers
 
 | Layer | Where | Reuse |
 |---|---|---|
 | Tools the viewer never sees: easing, `lerpPt`, `bump`, `mixColor`, `track`, `camera`, `chip`, `burst` | `kit.js` | Always |
 | Finish: light and depth on whatever the episode draws (rim light, shade band, glow, light shaft, dust, vignette, grain) | `finish.js` | Always, coloured per episode |
-| Shared cast, the same thing every time: Earth, the Sun, จุก, truth tags, the number counter, the rock generator | `kit.js` (Earth `planet(…, 'earth')`, `mascot()`), `library.js` | Yes, unchanged |
+| Shared cast, the same thing every time: Earth, the Sun, จุก, truth tags, the number counter, the rock generator | new pages: `cast_rig.js` (`jook`, `earth`, `sun`); older pages: `kit.js` (`planet(…, 'earth')`, `mascot()`), `library.js` | Yes, unchanged |
+| Motion, camera and type tools: springs, entrances, camera moves, rising lines, digit slots | `kit.js` (`spring`, `kick`), `motion.js`, `cam.js`, `type.js` | Always (new pages) |
 | The episode's own: recurring metaphor, props (traffic light, hourglass, calendar, buildings, mountains), topic characters, layouts, palette | the episode's page | Never copied from another episode; draw it fresh in this episode's style |
 
 A prop that appeared twice is still a prop: an hourglass or a clock should look like this episode, not like the last
@@ -23,9 +51,9 @@ episode needs it.
 
 | Piece | Call | Use when | Not when |
 |---|---|---|---|
-| Earth | `planet(parent, r, 'earth', seed)` (kit.js) | Earth itself | a generic planet: use `planet(…, 'rock'/'warm'/'gold')` or draw one |
-| Sun | `sun(parent, r)`, `.state({x, y, s, o, t})` | our Sun | another star: draw it in the episode's palette |
-| จุก | `mascot(parent, x, y, scale)` (kit.js) | the viewer's reaction: look, blink, hop, `!`/`?` | stating facts, narrating, or appearing in every beat |
+| Earth | new pages `earth(parent, r, {paint, light, seed})` (cast_rig.js); older pages `planet(parent, r, 'earth', seed)` (kit.js) | Earth itself | a generic planet: use `planet(…, 'rock'/'warm'/'gold')` or draw one |
+| Sun | `sun(parent, r)`, `.state({x, y, s, o, t})`; on new pages cast_rig.js's `sun(parent, r, {paint})` replaces it (loaded after library.js) | our Sun | another star: draw it in the episode's palette |
+| จุก | new pages `jook(parent, {paint, arms, helmet})`, `.update(t, {x, y, s, look, blink, hop, bubble, mouth, wide, armL, armR, squash})` (cast_rig.js); older pages `mascot(parent, x, y, scale)` (kit.js) | the viewer's reaction: look, blink, hop, `!`/`?` | stating facts, narrating, or appearing in every beat |
 | จุก's space helmet | `spaceHelmet(m)`, `.update(t, o)` | จุก in space; the same helmet every time (decided 2026-10-13) | a scene on Earth; a gimmick in every beat |
 | จุก's other outfits | draw on `m.back` / `m.front` (behind / over the body; they follow hops and breathing) | a setting change worth a visual joke: diving gear underwater, a hard hat in a mine | an outfit that claims something the narration does not (จุก down where no one can go) or hides the eyes |
 | Rock | `rock(parent, r, {seed, fill, craters})` | an asteroid or boulder; pick a new seed and a fill from this episode's palette | reusing another episode's seed and fill |
@@ -62,9 +90,10 @@ Record the choice in the plan as `visual_rules.art_direction` (palette, backgrou
 motion language, topic characters) and make it visibly different from the last three episodes; see the
 producer-mode skill, sequence-and-review.md.
 
-## Glow direction (`glow.js`), the house default
+## Look A, glow direction (`glow.js`)
 
-Since 2026-10-16 (นน, from the black-hole test) the default look is flat vector shapes that emit light, built on the
+The house default from 2026-10-16 until 2026-10-26, when B flat geometric became the space default (see "Looks").
+From the black-hole test (นน), this look is flat vector shapes that emit light, built on the
 finish layer: load `glow.js` after `finish.js`. Our own version, not a copy: จุก is the character, the palette is the
 episode's own (fallback mint and amber on deep teal), and the truth tags and Kanit labels stay. Pick paper-collage
 instead when the story is about paper; a plain finish-only cut is still fine for a quiet beat.
@@ -125,13 +154,13 @@ everything else still follows rules 2-5 and 7, which cost little.
 Worked example: `.mp/podcast_v2_superhabitable-hunt_20261017_085615/graphics/glow/scene_s22_v2.js`
 (`out/s22_v2_voice.mp4`; the slide-like original is `out/s22_old_voice.mp4`).
 
-## Paper-collage direction (`paper.js`)
+## Look D, paper-collage direction (`paper.js`)
 
-A second house look besides the glow look (นน chose it on 2026-10-16 from the Hatshepsut S10/S14 test):
+The default for history episodes since 2026-10-26 (นน first chose it on 2026-10-16 from the Hatshepsut S10/S14 test):
 torn-paper cut-outs with deckle edges, pencil hatch, papyrus fibre, "boil" (shapes re-jitter every 2 frames, backdrops
-every 6), drawn on a Canvas 2D layer under the kit's SVG. Pick it per episode as the art direction when cut, torn,
-pasted or rebuilt paper carries the story (erasure, archives, folk tales, history told as a scrapbook); it is not a
-default. The palette, props and characters are still the episode's own.
+every 6), drawn on a Canvas 2D layer under the kit's SVG. It suits stories carried by cut, torn, pasted or rebuilt paper
+(erasure, archives, folk tales, history told as a scrapbook). The palette, props and characters are still the
+episode's own.
 
 | Call | Does | Notes |
 |---|---|---|
@@ -149,3 +178,95 @@ Rules that came out of the test: every `id` is unique per shape (it seeds the ji
 truth tags in the svg, not redrawn on paper. Check page: `paper_demo.html` (`night`, `day`). Worked example:
 `.mp/podcast_v2_hatshepsut-erased-pharaoh_20261015_165703_revision_v3gfx_01/graphics/paper/` (S10 erasure, S14 rebuild,
 side-by-side with v3 in `out/`). The grain and textures are rebuilt per page load, not per frame; draw static backdrops into an offscreen canvas if a long run renders slowly.
+
+## Type (since 2026-10-26)
+
+`type.js`. **Fredoka 600/700 for numbers and Latin, Mitr for Thai** (files in `.mp/fonts`; `template.html` loads them;
+new pages set `PAPER.font = 'Mitr'`). Colours teal `#8fd8e6`, gold `#ffd98a` (the scene's one prominent number), white.
+
+| Call | Does | Notes |
+|---|---|---|
+| `riseLine(parent, x, y, size, runs, t0, {anchor, container, energy})` → `update(t, z)` | a line that rises 1.3x its height through a clip on ease-out-quint (0.55 s), with its container arriving on a spring | `runs [[text, 'th' or 'num' or 'latin', 'teal' or 'gold' or 'white']]`; container by look: A underline bar, B pill `rgb(6,20,40)` at 62 %, C cream sticker, D torn strip (light containers switch to dark ink); pass the camera zoom `z` when the line hangs on a world object |
+| `digits(parent, cx, y, size, {color, align})` → `set(str, color)` | numbers in fixed-width slots | a ticking number never jitters; `align: 'right'` when the digit count changes (10:00 → 9:59) |
+| `slam(t, t0)` | scale 1.7 → 1 on a spring | numbers that slam in |
+
+Letter-spacing (5 px) only on Latin caps (`LAST LIGHT`, `KM/S`), never on Thai. Text at least 34 px. The label ceiling
+and truth rules above still hold: this changes how labels look, not how many there are.
+
+## Story moves (since 2026-10-26)
+
+A menu the producer designs each world from (นน: "เป็นชุดให้เลือก"), numbered so beat sheets can name them:
+
+| # | Move | Example |
+|---|---|---|
+| 1 | event on its word | the Sun swells and collapses on "หายไป" |
+| 2 | scale reveal: pull back until the size or distance shows | 2.4x → 0.45x until the Sun enters frame |
+| 3 | make it personal: dive to a viewer stand-in (a YOU pin, จุก, a place in Thailand) | the pin drops onto Thailand |
+| 4 | transformation: one object becomes another to carry the idea | the pin becomes a play button |
+| 5 | live counter: the consequence counted on screen | 8:20 ticking; 15 → −70 °C |
+| 6 | escalation: the consequence grows in steps | dark → cold → Earth leaves its orbit |
+| 7 | จุก gag: a reaction beat | sunglasses drop onto จุก |
+| 8 | absence: show what is missing | a dotted circle where the Sun was |
+| 9 | travelling front: a boundary sweeping across things | night sweeping over Earth |
+| 10 | rewind (needs the two clocks) | a 0.8 s rewind on the story clock |
+| 11 | callback: an earlier object or number returns with a new meaning | a photon tagged "8:20 OLD" |
+| 12 | track or pan through the world (horizontal, vertical, along a path) | sky → sea → seafloor |
+
+Move 12: parallax by depth (about 0.2 / 0.6 / 1 / 1.4 of camera speed); never things on one baseline, the camera passes
+through a place with things at different heights and depths; it slows at the thing being named and flows on, never
+fully stopping; each thing enters frame about 0.5 s before it is named.
+
+Guard rules (checked by `contact_sheet.cjs`): every beat names a story move and a camera move ("push-in" is not a story
+move); every world has at least one 2 and one 3; every move is backed by the narration (no invented events; counters
+land on spoken values); "nothing holds still" applies to graphics, holds on real evidence media stay as before.
+
+## Camera (since 2026-10-26)
+
+`cam.js` replaces the per-world hand-rolled cameras: `camPath(keys, {shakes, drift})` → `t => {x, y, z, rot}` (zoom
+always in log space; a slow drift during holds so the camera is never fully still), `camApply(cam, [{g, depth}])`
+(depth 0 static, 1 the world, above 1 foreground, below 1 far layers), `screenScale(z)` for labels hung on objects.
+
+| Move | Duration | Use |
+|---|---|---|
+| drift (`hold`) | whenever nothing else moves | 1–2 % zoom per second |
+| push | a whole line | slow, contemplative lines |
+| punch | 0.4–0.6 s | emphasis on a word; overshoots and lands exactly |
+| pull | 2–3 s | scale reveals; zoom ratio at least 3x |
+| dive | 0.8–1.2 s | into one point (make it personal) |
+| track / tilt | per narration | move 12 |
+| whip | about 0.3 s | a fast change of subject; reads through motion blur |
+| shake | 0.3–0.5 s | a damped kick on an impact; at most 1–2 per world |
+
+**Energy (นน):** full-energy camera and springs only in the hook and at each world's peak; explanation stretches use
+drift, push and track, with the story moves at a calmer pace. `record.cjs` blends 2 subframes per MP4 frame by default
+(`--mblur 0` turns it off; about twice the record time).
+
+## Motion (since 2026-10-26)
+
+`spring`/`kick` are in kit.js; `motion.js` has `ENERGY` (`peak` damping 0.45 at 2.4 Hz for the hook and peaks, `calm`
+0.7 at 2 Hz for explanation), `squash`, `land`, `anticip`, `enter(t, t0, 'pop' | 'drop' | 'slide')`, `leave`,
+`blinkOpen`, `storyTime`.
+
+1. Meaningful entrances have force (pop, drop and squash, slide with overshoot, draw-on, a rising line); no plain fade.
+2. Squash and stretch keep volume; light things about 30 %, heavy about 10 %.
+3. Anticipation before big moves: 5–10 % the other way for 0.1–0.2 s.
+4. Follow-through: hanging parts lag 0.05–0.1 s (จุก's sprout lags 0.07 s by itself).
+5. Eyes lead: characters look at what matters 0.2–0.3 s before it happens.
+6. Exits are quicker than entrances (about 0.25 s, ease-in), never a slow fade.
+7. Nothing is dead still: breathing, a slight bob, a blink every 3–5 s (`jook()` blinks by itself).
+8. Stagger pieces 0.06–0.12 s apart; never everything at once.
+9. Two clocks: ambient time for twinkle, spin and bob; `storyTime(t, keys)` for events, so a rewind or a retimed event
+   does not make the ambience jump.
+
+## Beat sheet and contact sheet (since 2026-10-26)
+
+Each world gets a sidecar `<world>.beats.md` (template: `beats_template.md`) in place of the free-prose SHOTS header:
+`## DIRECTION` (look, palette, sizes, light; point at the shared specs), `## BEATS` (one row per line or trigger word:
+`time | peak | trigger | story move | camera | what changes | text | sound`) and `## GOTCHAS` (traps met; promote the
+general ones here). Fill the times with `python scripts/beat_word_times.py <scene.wav> <scene_script.txt>
+<world>.beats.md --offset <scene start> --write` (faster-whisper large-v3 per scene, snapped to speech onsets; a
+trigger it did not hear keeps its phrase time and is marked "(phrase)").
+
+**Gate (นน):** before recording a world, run `node doc_renderer/gfx_kit/contact_sheet.cjs <page.html> "<scene&f=…>"
+<world>.beats.md <outdir>` and send นน `<outdir>/contact.html` (one still per beat at its peak, the guard-rule problems
+on top). Record only after นน approves that world.

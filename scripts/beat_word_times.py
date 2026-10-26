@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", default="large-v3")
     ap.add_argument("--write", action="store_true", help="update the time column in place")
     a = ap.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")   # Thai triggers on a cp874 console
     script = Path(a.script).read_text(encoding="utf-8")
     words, onsets = transcribe(a.wav, a.model), speech_onsets(a.wav)
     lines = Path(a.beats).read_text(encoding="utf-8").splitlines()
