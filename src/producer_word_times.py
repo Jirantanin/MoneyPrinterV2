@@ -42,22 +42,41 @@ def char_times(script: str, words: list[tuple[str, float, float]], dur: float) -
 
 
 def trigger_time(script: str, words: list[tuple[str, float, float]], trigger: str, onsets: list[float], *,
-                 phrase_time: float | None = None, snap: float = .15, min_match: float = .6) -> dict:
-    """When the trigger word starts: {"trigger", "time", "method": word | phrase | unknown, "confidence"}.
+                 phrase_time: float | None = None, start: int = 0, snap: float = .15, min_match: float = .6) -> dict:
+    """When the trigger word starts: {"trigger", "time", "method": word | phrase | unknown, "confidence", "index",
+    "ambiguous"}.
 
-    The time is the first heard character of the trigger, snapped to the nearest speech onset within `snap` seconds.
-    Below `min_match` of the trigger's characters heard, it falls back to `phrase_time` (or None)."""
+    Only occurrences at or after squashed index `start` count (beat sheets pass the previous match, so triggers land in
+    order). When the trigger occurs more than once, the occurrence nearest `phrase_time` wins; with no phrase time and no
+    `start`, the choice is ambiguous and no time is guessed. The time is the first heard character of the occurrence,
+    snapped to the nearest speech onset within `snap` seconds. Below `min_match` of its characters heard, it falls back
+    to `phrase_time` (or None). `index` is the chosen occurrence's squashed start, for chaining."""
     s, tr = squash(script), squash(trigger)
-    idx = s.find(tr) if tr else -1
-    known = _heard_times(script, words) if idx >= 0 else {}
-    hit = [i for i in range(idx, idx + len(tr)) if i in known] if idx >= 0 else []
-    conf = round(len(hit) / len(tr), 3) if tr else 0.0
-    if hit and conf >= min_match:
-        t = known[hit[0]]
-        near = [o for o in onsets if abs(o - t) <= snap]
-        if near:
-            t = min(near, key=lambda o: abs(o - t))
-        return {"trigger": trigger, "time": round(t, 2), "method": "word", "confidence": conf}
-    if phrase_time is not None:
-        return {"trigger": trigger, "time": phrase_time, "method": "phrase", "confidence": conf}
-    return {"trigger": trigger, "time": None, "method": "unknown", "confidence": conf}
+    occ = [i for i in range(start, len(s) - len(tr) + 1) if tr and s.startswith(tr, i)]
+    known = _heard_times(script, words) if occ else {}
+    cands, best = [], 0.0
+    for i in occ:
+        hit = [k for k in range(i, i + len(tr)) if k in known]
+        conf = round(len(hit) / len(tr), 3)
+        best = max(best, conf)
+        if hit and conf >= min_match:
+            cands.append((i, known[hit[0]], conf))
+    out = {"trigger": trigger, "index": None, "ambiguous": len(occ) > 1}
+
+    def fallback(conf: float) -> dict:
+        if phrase_time is not None:
+            return {**out, "time": phrase_time, "method": "phrase", "confidence": conf}
+        return {**out, "time": None, "method": "unknown", "confidence": conf}
+
+    if not cands:
+        return fallback(best)
+    if len(occ) > 1 and phrase_time is not None:
+        i, t, conf = min(cands, key=lambda c: abs(c[1] - phrase_time))
+    elif len(occ) > 1 and start == 0:
+        return fallback(best)
+    else:
+        i, t, conf = cands[0]
+    near = [o for o in onsets if abs(o - t) <= snap]
+    if near:
+        t = min(near, key=lambda o: abs(o - t))
+    return {**out, "time": round(t, 2), "method": "word", "confidence": conf, "index": i}
