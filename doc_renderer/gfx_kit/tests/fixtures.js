@@ -30,3 +30,27 @@ FIXTURES.rig = () => {
     night: parts('night').length,
   };
 };
+
+// Task 5: type module facts at look B
+FIXTURES.type = () => {
+  Y_init({ style: 'B' });
+  const L = riseLine(Y.hud, 960, 300, 40, [['แสงนี้ออกจาก ', 'th', 'teal'], ['8', 'num', 'gold'], [' LAST LIGHT', 'latin', 'white']], 1);
+  const tspans = [...L.g.querySelectorAll('tspan')];
+  const pill = L.g.querySelector('[data-part="container"]'), textG = L.g.querySelector('[data-part="lineText"]');
+  const ty = () => +(/translate\(0,([-\d.]+)\)/.exec(textG.getAttribute('transform')) || [0, 0])[1];
+  const sc = () => +(/scale\(([-\d.]+)/.exec(pill.getAttribute('transform')) || [0, 1])[1];
+  L.update(.99); const before = { o: +L.g.getAttribute('opacity'), pill: sc() };
+  L.update(1.0); const atT0 = ty();
+  L.update(1.6); const offsetAtEnd = ty();
+  const D = digits(Y.hud, 1500, 600, 120, { align: 'right' });
+  const xs = () => [...D.g.querySelectorAll('text')].filter(e => e.getAttribute('opacity') !== '0').map(e => +e.getAttribute('x'));
+  D.set('10:00'); const a = xs(); D.set('9:59'); const b = xs();
+  D.set('−70°C'); const w = D.g.getBBox().width;
+  window.TYPE_FACTS = {
+    thaiLetterSpacing: +(tspans[0].getAttribute('letter-spacing') || 0), latinLetterSpacing: tspans[2].getAttribute('letter-spacing'),
+    thaiFont: tspans[0].getAttribute('font-family'), numFont: tspans[1].getAttribute('font-family'), numFill: tspans[1].getAttribute('fill'),
+    hiddenBeforeT0: before.o === 0, pillBeforeT0: before.pill, atT0, offsetAtEnd, container: pill.getAttribute('data-kind'),
+    lastTwoA: a.slice(-2), lastTwoB: b.slice(-2), widthMinus70: w, widthBudget: 120 * (.42 + .58 + .58 + .34 + .62) + 24,
+    slam0: slam(1, 1), slamEnd: slam(4, 1),
+  };
+};
