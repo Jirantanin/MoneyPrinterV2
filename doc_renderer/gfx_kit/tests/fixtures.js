@@ -54,3 +54,12 @@ FIXTURES.type = () => {
     slam0: slam(1, 1), slamEnd: slam(4, 1),
   };
 };
+
+// Task 6/7: a 200x400 white bar on black moving right at 600 px/s from x = 300
+FIXTURES.whip = () => {
+  const { svg } = stage();
+  el('rect', { width: KW, height: KH, fill: '#000' }, svg);
+  const bar = el('rect', { y: 340, width: 200, height: 400, fill: '#fff' }, svg);
+  window.FIX_RENDER = t => set(bar, { x: (300 + 600 * t).toFixed(2) });
+  FIX_RENDER(0);
+};

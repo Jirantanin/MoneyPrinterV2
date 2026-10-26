@@ -5,6 +5,8 @@
 //   --png writes the stills as lossless PNG (thumbnails) instead of JPEG
 //   --from -0.8 starts at page time -0.8 s (crossfade handles); window.__SFX is saved next to the MP4 as <out>.sfx.json
 //   --size 1080x1920 sets the viewport for a vertical page (the page calls kitSize(1080, 1920))
+//   --mblur N blends N subframes per MP4 frame (default 2; 0 or 1 = off) over --shutter of the frame (default 0.6), so
+//   whips, dives and fast moves read as motion; it roughly doubles record time. Stills never blur.
 // Record at the episode render rate (minimal_doc: 25 fps) and to the exact slot length.
 // PRODUCER_CHROME_GPU=1 rasterizes on the GPU instead of SwiftShader (same flag as render.cjs).
 const path = require('path');
@@ -14,7 +16,13 @@ const { launch } = require('./chrome.cjs');
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 
-(async () => {
+// page times of the subframes of frame i: the midpoints of `sub` equal slices of the open shutter, centred on the frame
+function subframeTimes(i, fps, from, { sub = 2, shutter = .6 } = {}) {
+  const t = from + i / fps;
+  return Array.from({ length: sub }, (_, j) => t + ((j + .5) / sub - .5) * shutter / fps);
+}
+
+const main = async () => {
   const [page_, name, seconds, out] = process.argv.slice(2);
   const fps = Number(arg('--fps', 25)), total = Math.round(Number(seconds) * fps), stills = arg('--stills', null);
   const from = Number(arg('--from', 0));   // page time of the first frame (negative = lead-in handle)
@@ -32,12 +40,14 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
       else await page.screenshot({ path: `${out}_${t}.jpg`, type: 'jpeg', quality: 85 });
     }
   } else {
-    const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
+    const sub = Math.max(1, Number(arg('--mblur', 2)) || 1), shutter = Number(arg('--shutter', .6));
+    const blend = sub > 1 ? ['-vf', `tmix=frames=${sub},select=not(mod(n+1\\,${sub})),setpts=N/(${fps}*TB)`, '-r', String(fps)] : [];
+    const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps * sub), '-c:v', 'mjpeg', '-i', '-', ...blend,
       '-c:v', 'libx264', '-crf', '14', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out], { stdio: ['pipe', 'inherit', 'inherit'] });
     const sfx = await page.evaluate(() => window.__SFX || null);
     if (sfx) fs.writeFileSync(out.replace(/\.mp4$/i, '') + '.sfx.json', JSON.stringify(sfx));
-    for (let i = 0; i < total; i++) {
-      await page.evaluate(v => window.__seek(v), from + i / fps);
+    for (let i = 0; i < total; i++) for (const t of subframeTimes(i, fps, from, { sub, shutter })) {
+      await page.evaluate(v => window.__seek(v), t);
       const buf = await page.screenshot({ type: 'jpeg', quality: 95 });
       if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
     }
@@ -47,4 +57,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
   await browser.close();
   cleanup();
   console.log('done', name, out);
-})().catch(e => { console.error(e); process.exit(1); });
+};
+
+if (require.main === module) main().catch(e => { console.error(e); process.exit(1); });
+module.exports = { subframeTimes };
