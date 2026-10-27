@@ -33,6 +33,38 @@ Every look's shape spec fills the same headings:
 Prototype of all four on one beat: `.mp/shape_styles_20261026/page.html?g=A|B|C|D&play`. Demo world in B with every
 module: `motion_demo.html` (+ `motion_demo.beats.md`).
 
+## Backgrounds in look B (since 2026-10-27)
+
+นน, after comparing backgrounds: "บางที่เว้นที่ไว้เยอะเกินไป ไม่มี layer รายละเอียดน้ำ สีจม". A background is judged by
+empty space, layer count, water detail and colour separation, not by how many props it has. Approved on the
+before/after of `.mp/whatif_moon_iss_20261027/compare_bg.html` (code `world_v2.js` there).
+
+1. **Five depth layers in every wide shot:** sky (static), far (camera depth 0.3–0.5), mid-far (about 0.65), the world
+   (1), near (1.3–1.6, or screen-fixed with its own slow drift). Each layer has its own silhouettes, and things are
+   never lined up on one baseline.
+2. **Farther is lighter:** each layer back is lighter, less saturated and closer to the sky colour at the horizon;
+   its details are dimmer (far windows at about a third of the near ones' opacity). The nearest layer is the darkest
+   and most saturated. A layer is never darker than the one in front of it; that inversion is what sinks the colours
+   into one mass.
+3. **The sky is a layer too:** a gradient that turns warm toward the horizon when there is a light below it (a city,
+   a sunset), plus cloud banks: scalloped round tops on a flat base, lit like any B body (`Y_lit` with a light band
+   and a dark crescent in the cloud's own hue). Never long capsules (they read as pipes or loading bars). Circles
+   unioned into one path wind the same way as `rigRR` (clockwise), or the overlaps turn into holes.
+4. **No empty quarter:** split the frame in four; each quarter has something at its own depth. Space: a soft curving
+   Milky Way band (star density plus very faint blurred ellipses, never a straight streak), a few sparkle stars that
+   twinkle, one or two far planets, satellites or traffic around the planet, city lights on its night side, and one
+   near object at a corner. Leave a gap only when the gap is the point (the distance between two bodies), and even
+   then keep stars in it.
+5. **Silhouette variety:** towers with setbacks, rounded crowns, spires, rooftop tanks, aerials with blinking lights,
+   one light strip on a landmark; no two neighbours the same. No triangle mountains or zigzag ridges.
+6. **Water has five things:** (a) every light source reflected as a vertical column of short horizontal dashes below
+   it, fading with depth; (b) a wide pale column under the Moon or Sun; (c) two-tone ripples, denser and longer toward
+   the camera; (d) foam where the water meets anything standing in it; (e) floating things when the story allows. The
+   body is a gradient from a lighter surface to the deep, slightly transparent (about 0.9) over what it covers. A
+   character in the water is clipped at the waterline; never paint a front water lip over it (it hides (a) to (c)).
+7. **Check on the contact sheet:** before sending it, look at each still for an empty quarter, two neighbouring
+   layers of the same value, and a flat colour field over a fifth of the frame with no detail. Fix those first.
+
 ## Three layers
 
 | Layer | Where | Reuse |
