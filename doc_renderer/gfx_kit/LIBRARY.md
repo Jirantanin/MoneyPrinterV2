@@ -91,6 +91,9 @@ episode needs it.
 | Rock | `rock(parent, r, {seed, fill, craters})` | an asteroid or boulder; pick a new seed and a fill from this episode's palette | reusing another episode's seed and fill |
 | Truth tags | `truthTag(parent, 'compare'/'suppose', x, y)`, `truthTag(parent, 'scale')`, `.update(t, tIn, tOut)`; `supposeFrame(parent)` | `เปรียบเทียบ` on an analogy that could be read as data, `supposeFrame` (dashed border) for the whole hypothetical, never the `สมมติ` label on screen (นน 2026-10-15; the word is spoken instead), `ภาพประกอบ ไม่ตามสเกล` on orbits, maps, sizes | restyling them: their fixed look ignores `theme()` so viewers recognise them |
 | Counter | `counter(parent, x, y, {size, suffix})`, `.update(t, steps, climb)` | numbers the narration says; a drop or rewind is a step (swap) | counting through values nobody says; the climb guard throws if a climb counts down or misses its spoken landing value |
+| Dinosaurs and small mammals | `dinos.js` (load it via `?f=../../../../doc_renderer/gfx_kit/dinos.js` after `flat.js`): `Dino.hadro / cera / rex / bird / ptero / mam`, `.update(t, {x, y, s, flip, walk, head, chew, jaw, look, blink, hop, …})` | any episode with prehistoric animals: the channel's own cute flat cast (นน 2026-10-26), one outline per animal with a pale underside band, stub legs, big eyes, rounded snouts; recolour per episode | pointed beaks or outlines (นน turned both down); a scientific reconstruction where the anatomy is the point: use real figures |
+| Mesozoic world | `meso.js` (`?f=../../../../doc_renderer/gfx_kit/meso.js`): `Meso.world({ gy, x0, x1, seed, sun })`, `W.makeFG()` after your actor layer, then `W.paint(a, b, k)`, `W.sky_({...})`, `W.cam([cx, cy, z], anchor)`, `W.sway(T)`; plants `Meso.fernPlant / araucaria / treeFern / cycad / bush` | any dinosaur-age place: the cosmic-year standard world (far ridges and misty tree line, araucarias, tree ferns, cycads, bushes, ground ferns with long shadows, light pools, dust, dark corner fronds, parallax); palettes night, dawn, ash, morn, day, chill (นน 2026-10-26: "ดูทำลวกๆมาก" about a background drawn without it) | drawing a new background from triangles and flat blobs; a world with grass or flowers (not yet evolved) without adding them |
+| Space world | `cosmos.js` (`?f=../../../../doc_renderer/gfx_kit/cosmos.js`): `Cosmos.space(Y_layer(Y.bg), { sun, seed, pal })` → `update(t, { cam, dim })`; `Cosmos.rocks(layer, [[x, y, r, seed, stack]], { sun })` → `update(t, cam)`; `Cosmos.atmo(group, R, { rot })`; `Cosmos.star(...)` | any space shot: a light source in frame (bloom, spikes), nebula ribbons, twinkling stars, near rocks with a lit band toward the sun (flat look) or a rim (glow look), an atmosphere crescent on the lit limb; palettes `violet` and `veiled` (sun starved behind soot). Put the sun where the planet's lit side faces (นน 2026-10-26: flat navy space with grey corner rocks fell below the standard) | a shot whose light source is the subject itself (draw it); a planet lit from a side with no sun in the sky |
 
 ## Finish layer (house level)
 
@@ -262,7 +265,7 @@ always in log space; a slow drift during holds so the camera is never fully stil
 |---|---|---|
 | drift (`hold`) | whenever nothing else moves | 1–2 % zoom per second |
 | push | a whole line | slow, contemplative lines |
-| punch | 0.4–0.6 s | emphasis on a word; overshoots and lands exactly |
+| punch | 0.5–0.6 s | emphasis on a word; overshoots and lands exactly |
 | pull | 2–3 s | scale reveals; zoom ratio at least 3x |
 | dive | 0.8–1.2 s | into one point (make it personal) |
 | track / tilt | per narration | move 12 |
@@ -274,6 +277,17 @@ drift, push and track, with the story moves at a calmer pace. Motion blur: a new
 `record.cjs` blends 2 subframes per MP4 frame (about twice the record time; `--mblur 0` turns it off); list hard steps
 (cuts, counter ticks, caption swaps) in `window.__CUTS` so those frames are never double-exposed. Older pages record
 sharp, as before.
+
+**One-frame peaks:** under `__MBLUR = 2` a punch shorter than 0.5 s lands its overshoot on one sharp frame between two
+blurred ones, and a bloom shaped as `bump(T, cut, .12)` on a cut is brightest for one frame. `gfx_flicker_scan.py`
+flags both, with or without the GPU. Bloom on a cut is a flat plateau held for 3 frames.
+
+**Seams:** a world that continues the previous world's shot starts from the previous camera at that world's end time
+(`prevCam(tEnd)`), not from its last key: `camPath` keeps drifting after the last key (a 20 dB PSNR jump at the seam
+in dinosaurs-never-died).
+
+**Viewpoints (นน 2026-10-27):** `camPath` moves over one flat side view. Each world also has at least one redrawn
+viewpoint (a low angle, top-down, over the shoulder, a reverse shot), cut on action.
 
 ## Motion (since 2026-10-26)
 
@@ -297,7 +311,7 @@ sharp, as before.
 Each world gets a sidecar `<world>.beats.md` (template: `beats_template.md`) in place of the free-prose SHOTS header:
 `## DIRECTION` (look, palette, sizes, light; point at the shared specs), `## BEATS` (one row per line or trigger word:
 `time | peak | trigger | story move | camera | what changes | text | sound`) and `## GOTCHAS` (traps met; promote the
-general ones here). Fill the times with `python scripts/beat_word_times.py <scene.wav> <scene_script.txt>
+general ones here). Fill the times with `venv/Scripts/python.exe scripts/beat_word_times.py <scene.wav> <scene_script.txt>
 <world>.beats.md --offset <scene start> --write` (faster-whisper large-v3 per scene, snapped to speech onsets; a
 trigger it did not hear keeps its phrase time and is marked "(phrase)").
 

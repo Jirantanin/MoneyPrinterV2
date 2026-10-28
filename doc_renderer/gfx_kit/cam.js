@@ -10,7 +10,7 @@
 //     shakes [{t0, amp = 14, decay = 9, hz = 7}] add damped kicks (an impact; at most CAM_RULES.maxShakesPerWorld).
 //   camApply(cam, [{g, depth}])   depth 0 static, 1 the world, > 1 foreground (moves farther), < 1 far layers
 //   screenScale(z)                'scale(1/z)' for a label hung on a world object, so its screen size stays constant
-const CAM_RULES = { pullMinRatio: 3, punch: [.4, .6], pull: [2, 3], dive: [.8, 1.2], whip: .3, shake: [.3, .5], maxShakesPerWorld: 2 };
+const CAM_RULES = { pullMinRatio: 3, punch: [.5, .6], pull: [2, 3], dive: [.8, 1.2], whip: .3, shake: [.3, .5], maxShakesPerWorld: 2 };
 const CAM_EASED = ['push', 'pull', 'track', 'tilt', 'dive', 'whip'];
 
 function camPath(keys, { shakes = [], drift = .015 } = {}) {
