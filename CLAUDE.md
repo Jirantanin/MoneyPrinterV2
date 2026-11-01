@@ -19,6 +19,7 @@ The adjacent `moneyprinter-shorts-pack` skill uses the Remotion `ClipShort` comp
 - `src/producer_minimal_renderer.py` + `doc_renderer/`: default documentary renderer; `producer_mode.py init` writes `render_settings.renderer = "minimal_doc"` into new plans (see `docs/Configuration.md`)
 - `src/producer_score.py` + `scripts/producer_score.py`: composed procedural score bed from a cue sheet (`render_settings.background_bed`)
 - `doc_renderer/gfx_kit/` + `src/producer_sfx_synth.py`: flat explainer-graphic kit, recorder and designed SFX stems
+- `scripts/palette_qc.py` + `src/producer_palette_qc.py`: colour QC of a rendered video (saturation, neutral black, grey, dark stretches) against LIBRARY "Colour and framing"
 - `src/classes/Tts.py`: Gemini TTS implementation
 - `src/llm_provider.py`: Anthropic, MiniMax/OpenRouter, and local Ollama routing
 - `scripts/youtube_upload.py` + `src/youtube_upload.py`: user-directed YouTube upload/schedule of a finished episode (private or scheduled `publishAt`, receipts in `upload_pack/`); see the `moneyprinter-youtube-upload` skill

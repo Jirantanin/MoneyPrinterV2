@@ -27,11 +27,34 @@ Every look's shape spec fills the same headings:
 | 3 depth | by value only; blur only on far background and at most 4 px on a planet's day/night edge | rim light; bloom only on small emitters (under 60 px) | stacking and the sticker shadow | paper layers with a soft 6 px offset shadow |
 | 4 sizes at 1x | main planet r 200–260, topic character about 330 px tall, จุก about 130 px | same | topic character head:body 1:1.5 | same as B |
 | 5 detail by size | under 100 px on screen: one shape, one colour; over 300 px: full three tones | under 80 px: silhouette and rim; 80–300 px: two tones | under 100 px: no inner detail | under 100 px: no hatch |
-| 6 banned | straight capsule clouds (read as loading bars; clouds are arched strokes); highlight ellipses over land; translucent cheeks or overlays on flat colour (turn grey); big bright nebula discs (read as bokeh) | big blurred halos on big bodies (muddy); outlines | faces on props (จุก is the only one who reacts); glow | ruler-straight lines; whips and fast tracks (the boiling edges read as noise) |
+| 6 banned | straight capsule clouds (read as loading bars; clouds are arched strokes); highlight ellipses over land; translucent cheeks or overlays on flat colour (turn grey); big bright nebula discs (read as bokeh) | big blurred halos on big bodies (muddy); outlines | faces on props (only จุก and C15 agents have faces); glow | ruler-straight lines; whips and fast tracks (the boiling edges read as noise) |
 | 7 rig | separate pieces with pivots (`jook()` arms, sprout follow-through) | same | same | cut pieces on brads; the shared cast stays in the SVG layer with the B paint |
 
 Prototype of all four on one beat: `.mp/shape_styles_20261026/page.html?g=A|B|C|D&play`. Demo world in B with every
 module: `motion_demo.html` (+ `motion_demo.beats.md`).
+
+## Colour and framing (since 2026-11-01)
+
+From three Kurzgesagt teardowns against our last four episodes (`research_notes/teardown_kurz_compare_palette/SCENE_DESIGN.md`):
+their graphics average 0.74–0.83 saturation with no neutral black and a bright scene at least every 73 s; ours averaged
+0.49–0.69 with 4–23 % grey and up to 278 s of unbroken dark. นน chose palette B (deep sea) on 2026-11-01.
+
+**Colour** (measured by `python scripts/palette_qc.py <video> --skip <real media ranges>`; run it on the preview mix)
+- Space worlds in look B start from `Y_DEEPSEA` (cast.js): `Y_init({style: 'B', ...Y_DEEPSEA.look})`, drawing with
+  `Y_DEEPSEA.night` / `.day`. Shift hues per episode (art direction still differs per episode); keep the rules below.
+- Mean saturation of the graphics at least 0.72; grey or brown under 5 % of pixels; neutral black under 8 %.
+- No neutral black: the deepest shadow is the scene's own saturated dark (deep blue, plum), and the vignette is that
+  colour at opacity 0.4 or less, never `#03040e` at .72. True black only for something that is black (inside a hole).
+- A bright scene (cream, daylight, a lit interior) at least every 90 s; no run of dark longer than that.
+- One complementary pair per shot: the subject warm on a cool ground, or the reverse; not the subject in the ground's hue.
+
+**Framing** (checked by the art reviewer)
+1. In a hero shot the subject is at least 35 % of the frame height, and at least one big thing runs off the frame edge.
+2. At least half the shots have a main diagonal (a tilted disc, a trail, a perspective grid, a burst from the centre).
+3. Scale contrast in one frame: something huge and near against something small and far.
+4. The background is two or three big flat colour shapes; detail goes on the focal point only.
+5. Event beats use energy shapes (rays bursting out, splash blobs, speed lines, zigzag sparks), not bloom.
+6. Shiny round things get a white capsule highlight along the edge.
 
 ## Backgrounds in look B (since 2026-10-27)
 
@@ -275,7 +298,7 @@ drawings.
 | # | Device | Example (theirs; find our own) | Seen |
 |---|---|---|---|
 | C1 | stand-in that carries the property: the object already has it in daily life | time that runs out = an hourglass with sand falling; a hormone that unlocks = a key that clicks | 3/3 |
-| C2 | the viewer stand-in suffers the physics in its own body (a topic character; จุก only reacts until นน decides otherwise) | the bird stretched thin into a line, then gone | 3/3 |
+| C2 | the viewer stand-in suffers the physics in its own body: จุก or a topic character (นน 2026-11-01; จุก comes back whole, eyes readable, never states facts) | the bird stretched thin into a line, then gone | 3/3 |
 | C3 | landmarks make the invisible visible | walking on and passing the same city again = space closes on itself | 2/3 |
 | C4 | repeated poses of one figure turn a space axis into a time axis; play it backwards for "back in time" | egg → chick → adult on a line, then the egg reassembles | 2/3 |
 | C5 | draw the breaking as a thing | the time bar cracks into a glitch; the signal's plug dangles, missing its socket | 3/3 |
@@ -288,6 +311,7 @@ drawings.
 | C12 | admit the simplification on screen: the stand-in is puzzled, or a small footnote bubble | "there are other kinds too, not important here" | 3/3 |
 | C13 | fixed-length budget bar split between two quantities; one grows, the other shrinks; past the limit it breaks | a Time / Space bar that never changes length | 1/3, new |
 | C14 | a clock on each figure, ticking at its own rate | two twins with clocks that drift apart | 1/3, new |
+| C15 | talking agents: organs, cells, hormones and molecules with faces; the mechanism is their conversation (a signal heard, ignored, shouted, given up on); bubbles hold a reaction word or the narration's words only | the brain says "done" to the satiety hormone, later stops hearing it | 1/3, new (นน 2026-11-01) |
 
 A drawing that would lie more than the narration allows gets C12 instead. Truth rules in sequence-and-review.md apply to
 every device: a count, gauge or bar shows only values the narration or sources give.

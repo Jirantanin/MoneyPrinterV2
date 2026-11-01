@@ -40,6 +40,18 @@ function Y_init(look = {}) {
   return svg;
 }
 
+// Deep-sea palette (นน 2026-11-01, option B in research_notes/teardown_kurz_compare_palette/palette_preview.html): the
+// house start for space worlds in look B. Saturated deep blue instead of neutral black, warm amber/coral against it,
+// จุก's teal as the signature. Opt in: Y_init({style: 'B', ...Y_DEEPSEA.look}); draw with Y_DEEPSEA.night / .day, and
+// for a bright scene pass Y_DEEPSEA.dayLook too. Shift hues per episode; keep the saturation and the no-grey rule.
+const Y_DEEPSEA = {
+  night: { deep: '#040e2e', base: '#08204f', mid: '#123a80', far: '#2a5fb8', hi: '#5fd0ff', warm: '#ffb23a', hot: '#ff5f6d', pop: '#ff8ac2' },
+  day: { sky: '#fde4a6', sky2: '#ffc978', ground: '#123a80', mid: '#1fa4c4', far: '#2a5fb8', warm: '#ff8a3d', hot: '#c2264f', pop: '#ff5f6d' },
+  look: { rim: '#9fe8ff', shade: '#08204f', deep: '#040e2e', warm: '#ffb23a', glowWarm: '#ffb23a', accent: '#ff5f6d',
+    cool: '#5fd0ff', vig: '#040e2e', vigOpacity: .38, grain: .04 },
+  dayLook: { shade: '#123a80', vig: '#123a80', vigOpacity: .16 },
+};
+
 // ---------------------------------------------------------------- drawing shorthands
 const YP = (d, fill, parent, extra = {}) => el('path', { d, fill, ...extra }, parent);
 const YC = (cx, cy, r, fill, parent, extra = {}) => el('circle', { cx, cy, r, fill, ...extra }, parent);
