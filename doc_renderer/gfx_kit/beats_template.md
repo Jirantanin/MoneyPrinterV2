@@ -10,8 +10,17 @@ Copy next to the world's code as `<world>.beats.md`. Times are world seconds, th
 Look (B for space, D for history unless นน chose another), this world's palette, sizes of the main pieces at 1x, the
 light direction. Point at the shared shape and type specs in LIBRARY.md instead of restating them.
 
+## CONCEPTS
+One card per abstract claim in this world (a claim with no look of its own); leave the section out when there is none.
+Fill it before designing the shot (LIBRARY.md "Concept devices"):
+
+- **claim:** the narration line, as spoken
+- **property to see:** what the viewer must notice (finite / endless, same / different, before / after, broken …)
+- **device and thing:** a device C1–C14, the everyday thing used, and why that thing already carries the property
+- **where it lies:** what the picture gets wrong; if it is more than the narration admits, use C12 instead
+
 ## BEATS
-One row per line or trigger word. `story move` starts with its number from LIBRARY.md "Story moves" (1–12; "push-in"
+One row per line or trigger word. `story move` starts with its number from LIBRARY.md "Story moves" (1–14; "push-in"
 is not a story move). `camera` starts with a move from cam.js: push, pull, punch, dive, track, tilt, whip, cut, drift
 (= hold), shake. A drift row names what changes. `peak` is the second the beat looks fullest (empty = time + 0.4).
 Every world has at least one 2 (scale reveal) and one 3 (make it personal).

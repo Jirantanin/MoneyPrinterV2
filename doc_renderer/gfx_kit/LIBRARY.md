@@ -156,6 +156,12 @@ seen (a visor, glass). Check page: `glow_demo.html` (`space`, `earth`). Worked e
 นน approved this from the superhabitable s22 test (round 2): the graphics explain and compare, but every shot is a
 scene in a world, not a slide. It applies to every look (glow and paper alike).
 
+**Exception: a diagram stage (นน 2026-11-01).** When the idea is itself a structure (axes of space and time, a family
+tree, the glands around one organ, a risk table), a diagram may carry it, as a stage: set up once, then returned to across
+the episode; holding the episode's own characters or drawn things (not icons or text boxes); and something happens on it
+on the narration's words (a character leaves a trail along an axis, a branch dims and vanishes, a bar cracks). Never a
+static diagram shown once. All three Kurzgesagt clips in `research_notes/teardown_kurz_compare.md` lean on such stages.
+
 1. **A world, not objects on a plain background.** Every wide shot has a setting with layers: sky or far wall, far
    props that belong to the episode (its metaphor, distant bodies, probes with light trails, debris), the subject, and a
    foreground. Every corner has something to look at, and every piece serves the same story.
@@ -246,6 +252,8 @@ A menu the producer designs each world from (นน: "เป็นชุดใ�
 | 10 | rewind (needs the two clocks) | a 0.8 s rewind on the story clock |
 | 11 | callback: an earlier object or number returns with a new meaning | a photon tagged "8:20 OLD" |
 | 12 | track or pan through the world (horizontal, vertical, along a path) | sky → sea → seafloor |
+| 13 | yardstick: the same everyday object measures each rung of a scale ladder, drawn in the same place each time | the same `โอ่งมังกร` beside each body, filled with as much of it as the jar holds |
+| 14 | myth picture: draw the explanation the viewer already holds, then break it on screen | the textbook atom with planet-like electrons smears into a cloud |
 
 Move 12: parallax by depth (about 0.2 / 0.6 / 1 / 1.4 of camera speed); never things on one baseline, the camera passes
 through a place with things at different heights and depths; it slows at the thing being named and flows on, never
@@ -254,6 +262,35 @@ fully stopping; each thing enters frame about 0.5 s before it is named.
 Guard rules (checked by `contact_sheet.cjs`): every beat names a story move and a camera move ("push-in" is not a story
 move); every world has at least one 2 and one 3; every move is backed by the narration (no invented events; counters
 land on spoken values); "nothing holds still" applies to graphics, holds on real evidence media stay as before.
+
+## Concept devices (since 2026-11-01)
+
+How to draw a claim that has no look of its own (a time running out, a rule that the total stays fixed, a signal that is
+no longer heard). Start from the property the viewer must see (finite or endless, same or different, before or after,
+inside or outside, broken), then pick a device and an everyday thing that carries that property by itself. Each world's
+beat sheet records the choice in its `## CONCEPTS` card (beats_template.md). From three Kurzgesagt teardowns
+(`research_notes/teardown_kurz_compare.md`); the count is how many of the three use it. Take the device, never their
+drawings.
+
+| # | Device | Example (theirs; find our own) | Seen |
+|---|---|---|---|
+| C1 | stand-in that carries the property: the object already has it in daily life | time that runs out = an hourglass with sand falling; a hormone that unlocks = a key that clicks | 3/3 |
+| C2 | the viewer stand-in suffers the physics in its own body (a topic character; จุก only reacts until นน decides otherwise) | the bird stretched thin into a line, then gone | 3/3 |
+| C3 | landmarks make the invisible visible | walking on and passing the same city again = space closes on itself | 2/3 |
+| C4 | repeated poses of one figure turn a space axis into a time axis; play it backwards for "back in time" | egg → chick → adult on a line, then the egg reassembles | 2/3 |
+| C5 | draw the breaking as a thing | the time bar cracks into a glitch; the signal's plug dangles, missing its socket | 3/3 |
+| C6 | one container, different contents | the same capsule universe holding stars, black holes or an empty soup | 3/3 |
+| C7 | a diagram stage (see "Scenes, not diagrams") | axes of space and time the character runs inside | 3/3 |
+| C8 | the analogy plays out and becomes the real thing in one shot | a squeezed rubber ball bursts into a Big Bang | 2/3 |
+| C9 | cut it open, show the inside, close it again | the hole sliced to show a universe, then whole again: "nothing changed outside" | 2/3 |
+| C10 | one emptying beat at the story's lowest point (STANDARD "No dead frames" exception) | the frame empties on "is this the end?", one point of light returns | 3/3 |
+| C11 | the picture everyone knows, then "this is a lie" (story move 14) | the rubber-sheet funnel, then a plain black ball on a plinth | 2/3 |
+| C12 | admit the simplification on screen: the stand-in is puzzled, or a small footnote bubble | "there are other kinds too, not important here" | 3/3 |
+| C13 | fixed-length budget bar split between two quantities; one grows, the other shrinks; past the limit it breaks | a Time / Space bar that never changes length | 1/3, new |
+| C14 | a clock on each figure, ticking at its own rate | two twins with clocks that drift apart | 1/3, new |
+
+A drawing that would lie more than the narration allows gets C12 instead. Truth rules in sequence-and-review.md apply to
+every device: a count, gauge or bar shows only values the narration or sources give.
 
 ## Camera (since 2026-10-26)
 

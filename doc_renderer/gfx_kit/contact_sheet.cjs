@@ -43,7 +43,7 @@ function checkBeats(beats) {
     else if (b.peak < b.time) out.push(`${at(b, i)}: peak ${b.peak} is before the beat's time`);
     if (empty(b.story)) out.push(`${at(b, i)}: empty story move`);
     else if (/^push/i.test(b.story)) out.push(`${at(b, i)}: push-in is not a story move`);
-    else if (b.storyNo == null || b.storyNo < 1 || b.storyNo > 12) out.push(`${at(b, i)}: story move must start with its number 1-12`);
+    else if (b.storyNo == null || b.storyNo < 1 || b.storyNo > 14) out.push(`${at(b, i)}: story move must start with its number 1-14`);
     if (empty(b.camera)) out.push(`${at(b, i)}: empty camera move`);
     else if (!CAM_MOVES.includes(b.cameraMove)) out.push(`${at(b, i)}: unknown camera move "${b.cameraMove}"`);
     if (b.cameraMove === 'hold' && !b.changes) out.push(`${at(b, i)}: drift with nothing in "what changes"`);
