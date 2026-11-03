@@ -118,6 +118,70 @@ episode needs it.
 | Mesozoic world | `meso.js` (`?f=../../../../doc_renderer/gfx_kit/meso.js`): `Meso.world({ gy, x0, x1, seed, sun })`, `W.makeFG()` after your actor layer, then `W.paint(a, b, k)`, `W.sky_({...})`, `W.cam([cx, cy, z], anchor)`, `W.sway(T)`; plants `Meso.fernPlant / araucaria / treeFern / cycad / bush` | any dinosaur-age place: the cosmic-year standard world (far ridges and misty tree line, araucarias, tree ferns, cycads, bushes, ground ferns with long shadows, light pools, dust, dark corner fronds, parallax); palettes night, dawn, ash, morn, day, chill (นน 2026-10-26: "ดูทำลวกๆมาก" about a background drawn without it) | drawing a new background from triangles and flat blobs; a world with grass or flowers (not yet evolved) without adding them |
 | Space world | `cosmos.js` (`?f=../../../../doc_renderer/gfx_kit/cosmos.js`): `Cosmos.space(Y_layer(Y.bg), { sun, seed, pal })` → `update(t, { cam, dim })`; `Cosmos.rocks(layer, [[x, y, r, seed, stack]], { sun })` → `update(t, cam)`; `Cosmos.atmo(group, R, { rot })`; `Cosmos.star(...)` | any space shot: a light source in frame (bloom, spikes), nebula ribbons, twinkling stars, near rocks with a lit band toward the sun (flat look) or a rim (glow look), an atmosphere crescent on the lit limb; palettes `violet` and `veiled` (sun starved behind soot). Put the sun where the planet's lit side faces (นน 2026-10-26: flat navy space with grey corner rocks fell below the standard) | a shot whose light source is the subject itself (draw it); a planet lit from a side with no sun in the sky |
 
+## People on a code-drawn canvas (since 2026-11-03)
+
+The rig from the nukes-sun Short, which passed a people-only review (15 findings, all fixed). It follows the 2026-11-02
+construction (tube limbs, mitten hands, big round head, dot eyes, solid hair, no outlines). Code: `people.js`, for
+canvas pages. Load it before the page's own scripts, then bind it once:
+`const { person, personBack, walker, react, bangOn, jumpAt, toLocal, idle } = People.rig(ctx, { pal, onEvent })`.
+`pal` overrides the colours (skin, shoe, ink, …). `onEvent(t, kind)` receives the sound time of each `!`. The file's
+header lists every option. `tests/people.test.cjs` checks the planted feet, the head top and the poses. First used by
+`.mp/whatif_nukes_sun_20261103/film/` (film.html loads it).
+
+**Body.** Local units: a figure 918 high with its feet at y 0, scaled by `s`.
+- Legs are two rounded bars (74 × 252) with oval shoes.
+- The torso is a rounded rect (256 × 330) with one darker shade.
+- The head is a circle (r 170) with a side shade that moves against the look direction.
+- Hair is one solid mass: short, bun, curly, or bald.
+- A bald head needs ears and side tufts, or it reads as headphones.
+
+**Arms.**
+- Each arm is a two-bone IK with an upper arm of 118 and a forearm of 112.
+- The upper arm is 40 thick in the sleeve colour, one shade darker than the shirt (`dk(shirt, .86)`). In the shirt colour it melts into the torso and the arm seems to grow out of the belly.
+- The forearm is 36 thick in skin colour. A round socket sits on the shoulder.
+- There are three hands: `open` (mitten and thumb), `point` and `fist`.
+- Each hand is driven by a target `{tx, ty}` in local units. To touch or point at something in the world, convert its position with `toLocal(o, wx, wy)`.
+- A point at nothing reads as talking on the phone.
+
+**Face.**
+- Eyes are black dots (r 15) that move with `look` (±42) and `lookY` (±22). The eyes lead: look at the lever, then at the screen.
+- Blinks follow the seed: one every 3.45 ± 0.37 s, lasting 0.14 s.
+- The brows carry most of the feeling, more than the mouth. There are four: `calm`, `up`, `worry` and `focus`.
+- Mouths are `smile`, `grin`, `o` (30 × 40), `wide` and `flat`. `tilt` turns the head.
+
+**Never fully still.**
+- The body breathes ±5 and the head nods ±0.035 rad.
+- Idle arms sway a little.
+- Between poses the arms blend over a few frames; they never snap from one frame to the next.
+
+**Reactions.**
+- `POSES` holds five: `shock` (hands up by the face), `cheeks` (hands on the face, drawn in front), `flung` (arms out), `point` and `shrug`.
+- `react(kind, spring(t - t0))` blends a pose from the hanging arms.
+- In a crowd every person gets a different pose, size, jump height (`jumpAt`, with squash on take-off and landing) and start time, offset by 0.05–0.15 s. One shared shock pose reads as copies.
+- Put the `!` at the head top that `person()` returns (`bangOn`), which counts the hat. A fixed y lands on the hat.
+
+**Acting.**
+- Wind up before an action: push the lever forward, then pull. The body leans into it.
+- After the action, release: the hand lets go and returns to idle.
+
+**Walking (`walker`, side view).**
+- The stance foot stays planted: the thigh angle is `asin(sin(.42)·(1 − 2u))`.
+- On the swing, the knee bends `0.75·sin²` and the hips drop onto the stance leg.
+- One cycle covers `4·L·sin(.42)` = 1.63 leg lengths. Pass `dist` = world px walked ÷ `s`. Any other cycle length slides the feet, about 25–30 px a step at 1.5.
+- The arms swing against the legs (−0.9 × the thigh angle). The far arm and leg are darker (0.72 / 0.85).
+- A walker keeps walking for the whole shot. Never freeze mid-stride for more than a second.
+
+**Staging in 1080 × 1920.**
+- Adults are at `s` .5–.65. Smaller reads as children, so background people stay adult-sized and stand further back.
+- Extras must not share the hero's shirt and hair.
+- A writer at a board who cannot reach stands on a stool.
+- Keep a drawing on the board about 200 px from the writer's head, or the head hides it in the close shot.
+- Keep faces out of the Shorts UI: the bottom 350 px, and x > 950 between y 1000 and 1600.
+
+**Review.**
+- Contact sheets miss the rig faults.
+- Send a reviewer for people only, with a pose strip (every pose, large) and a walk strip (stills every 0.1 s). That pass caught the sliding feet, the arms merged into the torso, the `!` on hats and a pointing arm at nothing.
+
 ## Finish layer (house level)
 
 Every episode's graphics get the same depth of finish; only the colours change (นน approved the level on 2026-10-15
