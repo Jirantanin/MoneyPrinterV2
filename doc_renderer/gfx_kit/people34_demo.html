@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People34 demo</title>
+<style>
+  body { margin: 0; background: #0f1530; color: #eef0ff; font-family: Mitr, sans-serif; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 10px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  canvas { width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>people34.js: คนหันสามในสี่ (สูตร T2) · ?t=วินาที หยุดเวลา</h1>
+  <canvas id="wide"></canvas>
+  <div class="grid"><canvas id="mid"></canvas><canvas id="close"></canvas></div>
+  <div class="grid"><canvas id="cast"></canvas><canvas id="tis"></canvas></div>
+</div>
+<script src="people34.js"></script>
+<script>
+'use strict';
+// check page for people34.js: the three shot sizes (LIBRARY "Shots, views, hands and costume" A), the cast, and hs 1 vs 1.28
+const W = 960, H = 540, dpr = Math.min(2, window.devicePixelRatio || 1);
+const shots = {};
+for (const id of ['wide', 'mid', 'close', 'cast', 'tis']) {
+  const cv = document.getElementById(id); cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); shots[id] = { ctx, R: People34.rig(ctx) };
+}
+const rect = (R, x, y, w, h, c) => R.fill(`M ${x} ${y} L ${x + w} ${y} L ${x + w} ${y + h} L ${x} ${y + h} Z`, c);
+
+function room({ R }, t) {
+  rect(R, 0, 0, W, H, '#f6e7c8');
+  for (let x = 20; x < W; x += 56) rect(R, x, 0, 18, 430, '#f0dcb6');
+  rect(R, 640, 40, 260, 340, '#d9b98c'); rect(R, 656, 56, 228, 308, '#8fdcec'); rect(R, 656, 250, 228, 114, '#bdeef5');
+  rect(R, 766, 56, 8, 308, '#d9b98c'); rect(R, 656, 206, 228, 8, '#d9b98c');
+  rect(R, 0, 430, W, 110, '#c98a5e'); rect(R, 0, 430, W, 12, '#b3774c');
+  rect(R, 40, 150, 210, 16, '#b3774c');
+  [['#e63946', 60, 70], ['#2a9d8f', 92, 84], ['#ffb703', 130, 64], ['#4c7fd1', 160, 78]].forEach(([c, x, h]) => rect(R, x, 150 - h, 26, h, c));
+}
+function wide(sh, t) {
+  const { R } = sh, u = t % 6, laugh = u > 3.6; room(sh, t);
+  const off = R.person({ C: R.CAST.off, seed: 2, x: 300, y: 488, s: .4, dir: 1, mouth: laugh ? 'grin' : 'talk', eyes: laugh ? 'happy' : 'open',
+    armN: laugh ? null : { x: 120, y: -610 + 14 * Math.sin(t * 3) } }, t);
+  R.person({ C: R.CAST.sci, seed: 1, x: 500, y: 488, s: .385, dir: -1, mouth: laugh ? 'grin' : 'smile', eyes: laugh ? 'happy' : 'open',
+    nod: laugh ? .05 * Math.sin(t * 10) : 0, armN: { x: 30, y: -560 } }, t);
+  R.person({ C: R.CAST.wrk, seed: 3, x: 790, y: 470, s: .3, dir: -1, eyes: laugh ? 'happy' : 'open' }, t);
+  window.__top = off.top;
+}
+function mid({ R }, t) {
+  rect(R, 0, 0, W, H, '#3fb8c9');
+  for (const x of [80, 380, 680]) { rect(R, x, 50, 240, 330, '#62d0dc'); rect(R, x, 300, 240, 80, '#86dde6'); }
+  rect(R, 0, 380, W, 160, '#2f6fd6');
+  const grin = t % 5 > 2.8, s = 1.25 / 1.28;
+  const tablet = api => { rect(api, -40, -90, 150, 200, '#2b2d42'); rect(api, -30, -80, 130, 180, '#8fd8e6');
+    rect(api, -20, 20, 30, 70, '#ffb703'); rect(api, 20, -10, 30, 100, '#ffb703'); rect(api, 60, -50, 30, 140, '#ffb703'); api.hand('fingers', api.CAST.sci.skin, 50); };
+  R.person({ C: R.CAST.sci, seed: 4, x: 470, y: 70 + (812 + 200 * 1.28) * s, s, ground: false, mouth: grin ? 'grin' : 'talk', eyes: grin ? 'happy' : 'open',
+    brow: grin ? 'up' : 'calm', armN: { x: 70, y: -640, hold: tablet } }, t);
+}
+function close({ R }, t) {
+  rect(R, 0, 0, W, H, '#ffcf5a'); R.fill(R.ell(760, 120, 70, 70), '#fff3b0');
+  rect(R, 80, 120, 18, 420, '#e8a83a'); rect(R, 80, 120, 420, 14, '#e8a83a'); rect(R, 0, 430, W, 110, '#c98a5e');
+  const s = 1.55 / 1.28, wideEyes = t % 5 > 3.4;
+  R.person({ C: R.CAST.wrk, seed: 5, x: 470, y: 40 + (812 + 200 * 1.28) * s, s, ground: false, mouth: wideEyes ? 'o' : 'grit', eyes: wideEyes ? 'wide' : 'open',
+    brow: 'worry', sweat: true, armN: { x: 130 + 5 * Math.sin(t * 23), y: -700, hand: 'fingers', big: true } }, t);
+}
+function cast({ R }, t) {
+  rect(R, 0, 0, W, H, '#e9f6f4'); rect(R, 0, 450, W, 90, '#bfe3df');
+  const list = [['off', 1], ['sci', -1], ['wrk', 1], ['kid', -1]];
+  list.forEach(([k, dir], i) => R.person({ C: R.CAST[k], seed: 10 + i, x: 150 + i * 220, y: 480, s: k === 'kid' ? .26 : .36, hs: k === 'kid' ? 1.5 : 1.28, dir,
+    mouth: 'smile', eyes: 'open' }, t));
+}
+function tis({ R }, t) {   // the same people at the TIS 1/5 head (hs 1, small eyes) for comparison
+  rect(R, 0, 0, W, H, '#f3ecff'); rect(R, 0, 450, W, 90, '#d9ccf5');
+  [[1.28, true], [1, false]].forEach(([hs, dotEyes], i) => R.person({ C: R.CAST.off, seed: 20 + i, x: 330 + i * 300, y: 480, s: .38, hs, dotEyes, dir: i ? -1 : 1 }, t));
+}
+const fns = { wide, mid, close, cast, tis };
+function render(t) { for (const id in shots) { const s = shots[id]; s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); s.ctx.clearRect(0, 0, W, H); fns[id](s, t); } }
+const fixed = new URLSearchParams(location.search).get('t');
+if (fixed != null) render(+fixed);
+else { const t0 = performance.now(); let last = 0; const loop = now => { requestAnimationFrame(loop); if (now - last < 33) return; last = now; render((now - t0) / 1000); }; requestAnimationFrame(loop); }
+window.__render = render; window.__ready = Promise.resolve();
+</script>
+</body>
+</html>

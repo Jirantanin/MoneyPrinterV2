@@ -118,6 +118,58 @@ episode needs it.
 | Mesozoic world | `meso.js` (`?f=../../../../doc_renderer/gfx_kit/meso.js`): `Meso.world({ gy, x0, x1, seed, sun })`, `W.makeFG()` after your actor layer, then `W.paint(a, b, k)`, `W.sky_({...})`, `W.cam([cx, cy, z], anchor)`, `W.sway(T)`; plants `Meso.fernPlant / araucaria / treeFern / cycad / bush` | any dinosaur-age place: the cosmic-year standard world (far ridges and misty tree line, araucarias, tree ferns, cycads, bushes, ground ferns with long shadows, light pools, dust, dark corner fronds, parallax); palettes night, dawn, ash, morn, day, chill (นน 2026-10-26: "ดูทำลวกๆมาก" about a background drawn without it) | drawing a new background from triangles and flat blobs; a world with grass or flowers (not yet evolved) without adding them |
 | Space world | `cosmos.js` (`?f=../../../../doc_renderer/gfx_kit/cosmos.js`): `Cosmos.space(Y_layer(Y.bg), { sun, seed, pal })` → `update(t, { cam, dim })`; `Cosmos.rocks(layer, [[x, y, r, seed, stack]], { sun })` → `update(t, cam)`; `Cosmos.atmo(group, R, { rot })`; `Cosmos.star(...)` | any space shot: a light source in frame (bloom, spikes), nebula ribbons, twinkling stars, near rocks with a lit band toward the sun (flat look) or a rim (glow look), an atmosphere crescent on the lit limb; palettes `violet` and `veiled` (sun starved behind soot). Put the sun where the planet's lit side faces (นน 2026-10-26: flat navy space with grey corner rocks fell below the standard) | a shot whose light source is the subject itself (draw it); a planet lit from a side with no sun in the sky |
 
+## Three-quarter people: the house people (since 2026-11-04)
+
+นน picked T2 from `.mp/people_tis_20261104/index.html`, drawn after looking at The Infographics Show frames in
+`research_notes/teardown_tis_people/frames/`. The earlier style sheet `.mp/people_styles_20261104/`, drawn from the
+teardown text alone, did not count. New episodes draw their people with `people34.js`. The front-view rig below
+(`people.js`) stays for the films that use it and for what people34 cannot do yet: front views, the back view,
+walking, crowds of poses.
+
+Load it before the page's own scripts, then bind it once:
+`const { person, hand, fill, cel, stroke, ell, cap, CAST } = People34.rig(ctx)`.
+`person(o, t)` returns `{ top, nearHand, farHand }` in world px: put a `!` on `top`, attach props to the hands.
+The file's header lists every option. `tests/people34.test.cjs` checks the shoes on the ground line, the head top for
+every hair style and both head scales, the mirror, a reachable hand target and the blink rate. The check page is
+`people34_demo.html` (`?t=4.2` freezes the time; it loads people34.js by relative path, so open it from disk with
+Chrome or the test harness, not the built-in browser's static snapshot).
+
+**Construction.**
+- Adult body, about 1000 local units tall; the head is 1/4 of the height (`hs` 1.28 over the TIS 1/5 head). `hs: 1`
+  gives the TIS head; leave it at 1.28 so people sit next to จุก.
+- Head and body both turn three-quarters. `dir` 1 faces right, -1 left; two people talking face each other.
+- The nose sticks out past the face line. One ear shows, at the back of the head. The back of the head and the neck
+  under the chin are one shade darker.
+- Eyes: the near eye full, the far eye narrow beside the nose. `dotEyes` (default) gives larger dots with a catch light;
+  `happy` eyes are closed arcs, `wide` eyes have whites.
+- Brows are short thick strokes; they carry `calm`, `up` and `worry`.
+- Mouths: `smile`, `talk` (opens with t), `grin` (a D shape with the upper teeth and the tongue), `grit` (clenched
+  teeth, for strain), `o`. Add `sweat` for stress.
+- Hair is one solid mass with one lighter streak (`quiff`, `bun`), or a hard hat over a hair patch (`hat`).
+- Clothes give the role: `suit` (lapels, collar, tie, white cuffs), `coat` (lab coat with lapels and a pocket),
+  `vest` (polo with a hi-vis vest and reflective bands), `tee` (short sleeves and shorts). Long sleeves end in a cuff.
+- The neck is narrow, in skin with its top in the chin's shadow, and goes into a shirt collar that wraps it; the chin
+  sits in front of the collar. A wide dark block under the chin (the first T2) reads as a box, not a neck.
+- Jackets and coats have a slight waist and a front edge line down to the hem; trousers have a light crease.
+- Each piece gets one big shade plane (`cel`), on the side away from the light; no outlines.
+
+**Arms and hands.** Each arm is a two-bone IK (185 / 170) with tapered tubes. The far arm sits behind the body; when it
+hangs, its hand rests just in front of the thigh so it reads as a hand, as in the TIS frames. Hanging arms sway a
+little with t. Targets are local units; `bend` -1 (default) keeps the elbow back and down. Hands are oversized: `mitt`
+in wide shots (a palm, the fingers as one curled block with two split lines, the thumb toward the front) and `fingers`
+(four fingers and a thumb) in mid and close shots. Use `big` for a hand near the
+camera. `hold(api)` draws a prop in hand space in place of the hand; draw the prop, then `api.hand('fingers', …)` over
+it, so the fingers sit on the prop.
+
+**Shots** (rule A below). Scales are for a 1920 × 1080 frame; the demo is 960 × 540, so its `s` values are half these.
+- A wide shot has adults at `s` .6–.8 (people about 3/4 of the frame height), extras further back at .6.
+- A beat a face must carry (laughing, shock, strain) cuts to a mid shot (`s` about 2, the head about 1/3 of the frame) or
+  a close shot (`s` about 2.4).
+- Set `ground: false` when the feet are out of frame.
+
+**Not yet.** Front and back views, walking and sitting are not drawn in people34. Use `people.js` for a walk, or draw the
+new view and add a test before using it in a film.
+
 ## People on a code-drawn canvas (since 2026-11-03)
 
 The rig from the nukes-sun Short, which passed a people-only review (15 findings, all fixed). It follows the 2026-11-02
