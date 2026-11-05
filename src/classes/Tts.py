@@ -20,6 +20,9 @@ PCM_SAMPLE_RATE = 24000
 # Host-led narration (2026-10-11 audition): one short style for every scene. Long per-scene
 # Director's Notes are the deprecated structure that drove voice drift.
 HOST_DRY_STYLE = "dry humor, wry, storytelling like chatting with an old friend"
+# Calm deadpan for Kurzgesagt-style episodes (นน picked it over host_dry, universe-doesnt-care 2026-10-29).
+DEADPAN_STYLE = ("calm, understated documentary narration with a deadpan wit; unhurried and even, never chatty or excited; "
+                 "let the short punchlines land flat with a small pause before them")
 HTTP_SESSION = requests.Session()
 HTTP_SESSION.trust_env = False
 
@@ -38,6 +41,8 @@ def normalize_gemini_tts_tone_preset(value: str | None) -> str:
         "host": "host_dry",
         "dry": "host_dry",
         "host_dry": "host_dry",
+        "deadpan": "deadpan",
+        "kurz": "deadpan",
     }
     return aliases.get(preset, DEFAULT_GEMINI_TTS_TONE_PRESET)
 
@@ -77,6 +82,8 @@ def gemini_speech_style(preset: str, scene_index: int = -1, total_scenes: int = 
     preset = normalize_gemini_tts_tone_preset(preset)
     if preset == "host_dry":
         return HOST_DRY_STYLE
+    if preset == "deadpan":
+        return DEADPAN_STYLE
     return f"{_gemini_audio_profile(preset)} {_gemini_directors_notes(preset, scene_index, total_scenes)}"
 
 

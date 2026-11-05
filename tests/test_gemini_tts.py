@@ -47,6 +47,13 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual(styles, {Tts.HOST_DRY_STYLE})
         self.assertIn("dry humor", Tts.HOST_DRY_STYLE)
 
+    def test_deadpan_style_is_short_and_constant_across_scenes(self):
+        self.assertEqual(Tts.normalize_gemini_tts_tone_preset("deadpan"), "deadpan")
+        self.assertEqual(Tts.normalize_gemini_tts_tone_preset("kurz"), "deadpan")
+        styles = {gemini_speech_style("deadpan", i, 46) for i in (-1, 0, 20, 45)}
+        self.assertEqual(styles, {Tts.DEADPAN_STYLE})
+        self.assertIn("deadpan", Tts.DEADPAN_STYLE)
+
 
 class AudioTests(unittest.TestCase):
     def test_find_audio_in_steps(self):
