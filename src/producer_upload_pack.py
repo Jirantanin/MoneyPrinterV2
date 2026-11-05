@@ -440,6 +440,18 @@ def write_upload_pack(
         warnings.append("competitor SEO results are missing or empty.")
     if len(_as_list(research.get("sources"))) < int(research.get("minimum_sources") or 3):
         warnings.append("source count is below the research minimum.")
+    # Other-language title/description, e.g. {"en": {"title", "description"}}; YouTube shows them by viewer language.
+    localizations: dict[str, dict[str, str]] = {}
+    for language, copy in _as_dict(seo.get("localizations")).items():
+        copy = _as_dict(copy)
+        title, text = _clean_text(copy.get("title")), _clean_multiline(copy.get("description"))
+        if not title or not text:
+            errors.append(f"seo_packaging.localizations.{language} needs both title and description")
+        elif len(title) > MAX_TITLE_LENGTH or len(text.encode("utf-8")) > MAX_DESCRIPTION_BYTES:
+            errors.append(f"seo_packaging.localizations.{language} title is over {MAX_TITLE_LENGTH} characters "
+                          f"or description over {MAX_DESCRIPTION_BYTES} bytes")
+        else:
+            localizations[str(language)] = {"title": title, "description": text}
     if description_source == "generated_fallback":
         warnings.append(
             "seo_packaging.upload_description is missing; generated fallback description requires public-copy review."
@@ -468,6 +480,7 @@ def write_upload_pack(
         "hashtags": hashtags,
         "pinned_comment": pinned_comment,
         "language": episode.get("language") or "th",
+        "localizations": localizations,
         "final_video_path": str(final_video),
         "final_report_path": final_report,
         "thumbnail_brief_path": str(pack_dir / "thumbnail_brief.html"),

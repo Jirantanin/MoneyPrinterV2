@@ -141,6 +141,20 @@ class UploadPackTests(unittest.TestCase):
         self.assertGreater(manifest["description_review"]["bytes"], 5000)
         self.assertTrue(any("bytes" in error and "upload_description" in error for error in manifest["errors"]))
 
+    def test_carries_english_localization_and_blocks_a_half_written_one(self) -> None:
+        plan = _plan(upload_description="คำอธิบายสาธารณะ")
+        plan["seo_packaging"]["localizations"] = {"en": {"title": "  The universe in one year ", "description": "Copy\n\n\nhere"}}
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        episode_dir = Path(temp_dir.name)
+        write_upload_pack(episode_dir=episode_dir, plan=plan, final_qc={"status": "pass"}, render_props={})
+        metadata = json.loads((episode_dir / "upload_pack" / "metadata.json").read_text(encoding="utf-8"))
+        self.assertEqual(metadata["localizations"], {"en": {"title": "The universe in one year", "description": "Copy\n\nhere"}})
+        plan["seo_packaging"]["localizations"] = {"en": {"title": "Title only"}}
+        manifest = write_upload_pack(episode_dir=episode_dir, plan=plan, final_qc={"status": "pass"}, render_props={})
+        self.assertEqual(manifest["status"], "blocked")
+        self.assertTrue(any("localizations.en" in error for error in manifest["errors"]))
+
     def test_marks_pack_for_review_when_public_copy_or_chapters_are_missing(self) -> None:
         _, manifest = self._write_pack(render_props={})
 

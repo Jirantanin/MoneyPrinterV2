@@ -16,7 +16,8 @@ import youtube_upload as yt  # noqa: E402
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("reconnect", "request", "upload", "schedule", "status"))
+    parser.add_argument("action", choices=("reconnect", "request", "upload", "schedule", "status",
+                                           "captions-source", "captions-build", "localize"))
     parser.add_argument("--plan", help="Episode producer_plan.json")
     parser.add_argument("--thumbnail", help="request: chosen thumbnail image")
     parser.add_argument("--publish-at", help="ISO time with offset, e.g. 2026-10-05T18:30+07:00; omit to stay private")
@@ -50,6 +51,20 @@ def main() -> int:
             parser.error("--publish-at is required")
         record = yt.schedule(episode, publish_at=args.publish_at, user_message=args.user_message, channel_id=args.channel_id)
         print(json.dumps(record["youtube_status"], ensure_ascii=False))
+    elif args.action == "captions-source":
+        target = pack / yt.CAPTION_SOURCE_NAME
+        if target.exists():
+            parser.error(f"{target} already exists (it may hold translations); remove it yourself to start over")
+        source = yt.caption_source(episode)
+        yt.write_json(target, source)
+        print(json.dumps({"path": str(target), "cues": sum(len(s["cues"]) for s in source["scenes"])}))
+    elif args.action == "captions-build":
+        srt = yt.build_srt(yt.read_json(pack / yt.CAPTION_SOURCE_NAME))
+        (pack / yt.CAPTIONS_NAME).write_text(srt, encoding="utf-8")
+        print(json.dumps({"path": str(pack / yt.CAPTIONS_NAME), "cues": yt.parse_srt(srt)}))
+    elif args.action == "localize":
+        record = yt.localize(episode, user_message=args.user_message, channel_id=args.channel_id)
+        print(json.dumps({k: record[k] for k in ("video_id", "localized_languages", "caption_id")}, ensure_ascii=False))
     else:
         receipt = yt.read_json(pack / yt.RECEIPT_NAME)
         if not receipt.get("video_id"):

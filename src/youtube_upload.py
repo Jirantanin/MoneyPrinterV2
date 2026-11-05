@@ -30,6 +30,9 @@ MAX_DESCRIPTION_BYTES = 5000
 MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 REQUEST_NAME = "youtube_upload_request.json"
 RECEIPT_NAME = "youtube_upload_receipt.json"
+LOCALIZE_RECEIPT_NAME = "youtube_localize_receipt.json"
+CAPTION_SOURCE_NAME = "captions_en_source.json"  # cue times + Thai, with an "en" field per cue to fill in
+CAPTIONS_NAME = "captions_en.srt"
 
 
 def utc_now() -> str:
@@ -80,6 +83,7 @@ def build_request(
     if isinstance(title_options, list) and any(o.get("role") == "fallback_topic" for o in title_options if isinstance(o, dict)):
         raise ValueError("title comes from fallback_topic; write seo_packaging.title_options")
     video = episode_dir / "final.mp4"
+    captions = pack / CAPTIONS_NAME
     request: dict[str, Any] = {
         "status": "requested",
         "requested_at": (now or datetime.now(timezone.utc)).isoformat(),
@@ -93,6 +97,8 @@ def build_request(
         "language": "th",
         "privacyStatus": "private",
         "publishAt": parse_publish_at(publish_at) if publish_at else None,
+        "localizations": dict(metadata.get("localizations") or {}),
+        "captions_path": str(captions) if captions.is_file() else None,
     }
     validate_request(request, now=now)
     return request
@@ -108,10 +114,81 @@ def validate_request(request: dict[str, Any], *, now: datetime | None = None) ->
         raise ValueError(f"title must be 1-{MAX_TITLE} characters")
     if len(request["description"].encode("utf-8")) > MAX_DESCRIPTION_BYTES:
         raise ValueError(f"description exceeds {MAX_DESCRIPTION_BYTES} bytes")
+    validate_localizations(request.get("localizations") or {})
+    if request.get("captions_path"):
+        parse_srt(Path(request["captions_path"]).read_text(encoding="utf-8"))
     if request.get("publishAt"):
         moment = datetime.fromisoformat(request["publishAt"].replace("Z", "+00:00"))
         if moment <= (now or datetime.now(timezone.utc)):
             raise ValueError("publishAt is in the past")
+
+
+def validate_localizations(localizations: dict[str, Any]) -> None:
+    for language, copy in localizations.items():
+        title, description = (copy or {}).get("title") or "", (copy or {}).get("description") or ""
+        if not title or len(title) > MAX_TITLE or not description or len(description.encode("utf-8")) > MAX_DESCRIPTION_BYTES:
+            raise ValueError(f"localization {language} needs a 1-{MAX_TITLE} character title and a description "
+                             f"of 1-{MAX_DESCRIPTION_BYTES} bytes")
+
+
+def caption_source(episode_dir: Path) -> dict[str, Any]:
+    """Cue times from speech_map.json (Whisper segments on the final timeline) with the Thai to translate.
+
+    The Whisper Thai is only a guide for where a cue starts; each scene carries its script narration for the meaning.
+    Fill every cue's "en"; "+" joins a cue onto the one before it (when English word order spans two Thai cues).
+    """
+    speech_map = read_json(episode_dir / "speech_map.json")
+    if not speech_map.get("scenes"):
+        raise ValueError("speech_map.json is missing; captions need its segment times")
+    script = json.loads((episode_dir / "script.json").read_text(encoding="utf-8")) if (episode_dir / "script.json").exists() else []
+    scenes = []
+    for scene in speech_map["scenes"]:
+        index = scene["scene_index"]
+        cues = [{"start": round(seg["abs_start"], 2), "end": round(seg["abs_start"] + seg["end"] - seg["start"], 2),
+                 "th": seg["text"].strip(), "en": ""} for seg in scene.get("segments") or []]
+        narration = script[index].get("narration", "") if index < len(script) else ""
+        scenes.append({"scene": index, "narration": narration, "cues": cues})
+    return {"note": "Fill each cue's en; '+' joins a cue onto the previous one. Then run youtube_upload.py captions-build.",
+            "scenes": scenes}
+
+
+def _srt_time(seconds: float) -> str:
+    ms = round(seconds * 1000)
+    return f"{ms // 3_600_000:02d}:{ms // 60_000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+
+
+def build_srt(source: dict[str, Any]) -> str:
+    """Filled caption source -> SRT text; refuses an untranslated cue."""
+    cues: list[dict[str, Any]] = []
+    for scene in source.get("scenes") or []:
+        for cue in scene["cues"]:
+            text = (cue.get("en") or "").strip()
+            if not text:
+                raise ValueError(f"scene {scene['scene']} cue at {cue['start']}s has no English yet")
+            if text == "+":
+                if not cues:
+                    raise ValueError("the first cue cannot join a previous one")
+                cues[-1]["end"] = cue["end"]
+            else:
+                cues.append({"start": cue["start"], "end": cue["end"], "text": text})
+    if not cues:
+        raise ValueError("caption source has no cues")
+    for cue, following in zip(cues, cues[1:]):
+        cue["end"] = min(cue["end"], following["start"])  # Whisper ends can overlap the next start
+    return "\n".join(f"{n}\n{_srt_time(c['start'])} --> {_srt_time(c['end'])}\n{c['text']}\n"
+                     for n, c in enumerate(cues, 1))
+
+
+def parse_srt(text: str) -> int:
+    """Count cues; raise on a block without a time line or text, or a cue that ends before it starts."""
+    blocks = [block.splitlines() for block in text.strip().split("\n\n") if block.strip()]
+    if not blocks:
+        raise ValueError("captions file is empty")
+    for lines in blocks:
+        times = lines[1].split(" --> ") if len(lines) >= 3 else []
+        if len(times) != 2 or times[0] >= times[1]:
+            raise ValueError(f"bad caption block: {lines[:2]}")
+    return len(blocks)
 
 
 def upload_state(receipt: dict[str, Any]) -> str:
@@ -212,8 +289,10 @@ def upload(episode_dir: Path, *, channel_id: str = DEFAULT_CHANNEL_ID, log=print
                         "categoryId": request["categoryId"], "defaultLanguage": "th", "defaultAudioLanguage": "th"},
             "status": status,
         }
+        if request.get("localizations"):
+            body["localizations"] = request["localizations"]
         media = MediaFileUpload(str(video), mimetype="video/mp4", chunksize=16 * 1024 * 1024, resumable=True)
-        insert = youtube.videos().insert(part="snippet,status", body=body, media_body=media,
+        insert = youtube.videos().insert(part=",".join(body), body=body, media_body=media,
                                          notifySubscribers=bool(request.get("publishAt")))
         response = None
         while response is None:
@@ -233,6 +312,9 @@ def upload(episode_dir: Path, *, channel_id: str = DEFAULT_CHANNEL_ID, log=print
         youtube.thumbnails().set(videoId=receipt["video_id"], media_body=MediaFileUpload(str(thumbnail), mimetype=mime)).execute(num_retries=2)
         receipt["thumbnail_set"] = True
         write_json(receipt_path, receipt)
+    if request.get("captions_path") and not receipt.get("caption_id"):
+        receipt["caption_id"] = set_captions(youtube, receipt["video_id"], Path(request["captions_path"]))
+        write_json(receipt_path, receipt)
     result = video_status(youtube, receipt["video_id"])
     if result["snippet"]["channelId"] != channel_id or result["snippet"]["title"] != request["title"]:
         raise RuntimeError("uploaded video does not match the request; inspect in Studio")
@@ -245,10 +327,58 @@ def upload(episode_dir: Path, *, channel_id: str = DEFAULT_CHANNEL_ID, log=print
 
 
 def video_status(youtube, video_id: str) -> dict[str, Any]:
-    items = youtube.videos().list(part="snippet,status,contentDetails,processingDetails", id=video_id).execute().get("items", [])
+    items = youtube.videos().list(part="snippet,status,contentDetails,processingDetails,localizations",
+                                  id=video_id).execute().get("items", [])
     if len(items) != 1:
         raise RuntimeError(f"video {video_id} not found")
     return items[0]
+
+
+def set_captions(youtube, video_id: str, path: Path, language: str = "en", name: str = "English") -> str:
+    """Replace this video's own `language` caption track (never YouTube's auto ASR track) or add one; returns its id."""
+    from googleapiclient.http import MediaFileUpload
+
+    parse_srt(path.read_text(encoding="utf-8"))
+    media = MediaFileUpload(str(path), mimetype="application/octet-stream")
+    tracks = youtube.captions().list(part="snippet", videoId=video_id).execute().get("items", [])
+    own = [t for t in tracks if t["snippet"]["language"] == language and t["snippet"].get("trackKind") != "asr"]
+    if own:
+        body = {"id": own[0]["id"], "snippet": {"isDraft": False}}
+        return youtube.captions().update(part="snippet", body=body, media_body=media).execute()["id"]
+    body = {"snippet": {"videoId": video_id, "language": language, "name": name, "isDraft": False}}
+    return youtube.captions().insert(part="snippet", body=body, media_body=media).execute()["id"]
+
+
+def localize(episode_dir: Path, *, user_message: str, channel_id: str = DEFAULT_CHANNEL_ID) -> dict[str, Any]:
+    """Add the pack's other-language title/description and English captions to an already uploaded video."""
+    if not user_message.strip():
+        raise ValueError("an explicit user message is required to change a published video")
+    pack = episode_dir / "upload_pack"
+    receipt = read_json(pack / RECEIPT_NAME)
+    if not receipt.get("video_id"):
+        raise ValueError("no uploaded video in the receipt")
+    localizations = dict(read_json(pack / "metadata.json").get("localizations") or {})
+    captions = pack / CAPTIONS_NAME
+    if not localizations and not captions.is_file():
+        raise ValueError("nothing to add: no metadata.json localizations and no captions_en.srt")
+    validate_localizations(localizations)
+    youtube = youtube_client()
+    _check_channel(youtube, channel_id)
+    video_id = receipt["video_id"]
+    if localizations:
+        current = video_status(youtube, video_id)
+        merged = {**(current.get("localizations") or {}), **localizations}
+        youtube.videos().update(part="localizations", body={"id": video_id, "localizations": merged}).execute()
+    caption_id = set_captions(youtube, video_id, captions) if captions.is_file() else None
+    result = video_status(youtube, video_id)
+    for language, copy in localizations.items():
+        if (result.get("localizations") or {}).get(language, {}).get("title") != copy["title"]:
+            raise RuntimeError(f"{language} title on YouTube does not match the pack; inspect in Studio")
+    record = {"video_id": video_id, "user_message": user_message, "localized_languages": sorted(localizations),
+              "caption_id": caption_id, "captions_sha256": file_sha256(captions) if caption_id else None,
+              "verified_at": utc_now(), "youtube_localizations": result.get("localizations")}
+    write_json(pack / LOCALIZE_RECEIPT_NAME, record)
+    return record
 
 
 def schedule(episode_dir: Path, *, publish_at: str, user_message: str, channel_id: str = DEFAULT_CHANNEL_ID) -> dict[str, Any]:
