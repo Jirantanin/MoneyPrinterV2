@@ -97,6 +97,15 @@ class TimelineTests(unittest.TestCase):
             build_timeline(props_for(self.images, counts=[1, 2, 1], scene_durations=[6.0, 6.0, 5.0], titles=["A", "B", "C"]),
                            narration_end=17.0, assets_dir=self.dir / "assets", overrides=overrides)
 
+    def test_chapter_cards_can_be_turned_off(self):
+        props = props_for(self.images, counts=[1, 2, 1], scene_durations=[6.0, 6.0, 5.0], titles=["A", "A", "B"])
+        overrides = {"opening": {"seconds": 3.0, "after_scene": 0}, "chapter_cards": False}
+        tl = build_timeline(props, narration_end=17.0, assets_dir=self.dir / "assets", overrides=overrides)
+        self.assertEqual((tl["chapters"], tl["opening"]), ([], 3.0))
+        with self.assertRaises(ValueError):          # the opening is still checked
+            build_timeline(props, narration_end=17.0, assets_dir=self.dir / "assets",
+                           overrides={"opening": {"seconds": 4.0, "after_scene": 0}, "chapter_cards": False})
+
     def test_video_frames_play_once_and_short_clips_warn(self):
         clip = self.dir / "b.mp4"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30:duration=2",

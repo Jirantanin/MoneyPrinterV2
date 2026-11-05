@@ -20,7 +20,7 @@ Optional per-episode framing overrides live in ``minimal_render_overrides.json``
                                     "min_zoom": 1.07, "caption_title": "ดาวพฤหัสบดี"},
                 "clip.mp4": {"zoom": [1, 1.04], "caption_top": True}},
      "end_card": {"sources": ["..."], "note": "..."},
-     "opening": {"seconds": 6.5}}
+     "opening": {"seconds": 6.5}, "chapter_cards": false}
 
 ``caption_top`` moves a full-frame (cover/video) caption to the top-left, for footage with its own text
 bottom-left. Slots shorter than 2.5 s bring their caption in at once (0.15 s, short fades) so a quick
@@ -31,6 +31,9 @@ audio carries that much lead silence). No chapter card shows during the sting; c
 the chapter dip start at ``seconds``, which must be a shot boundary. With ``"after_scene": N`` the
 video opens on the hook instead and the sting is the first slot(s) of scene N + 1 (that scene's audio
 carries the lead); the hook scenes and scene N + 1 share chapter 1, whose card starts after the sting.
+
+``"chapter_cards": false`` drops the chapter cards and the dips between chapters (for a film whose graphics already
+carry designed transitions); every shot boundary then uses the plain crossfade. Chapter checks still run first.
 
 ``producer_plan.json`` -> ``render_settings.end_cta.path`` (repo-relative or absolute) appends the channel's sign-off
 clip after the outro hold: it is re-encoded with render.cjs's x264 settings at the episode's size and joined by stream
@@ -270,6 +273,8 @@ def build_timeline(raw_props: dict[str, Any], *, narration_end: float, assets_di
             raise ValueError(f"{OVERRIDES_FILE}: opening.seconds={opening} must end on a shot boundary inside chapter 1"
                              " (the hook scenes and the sting's scene share chapter 1's title)")
         chapters[0]["start"] = boundary          # chapter 1's card waits for the sting
+    if overrides.get("chapter_cards") is False:
+        chapters = []                            # the graphics carry their own transitions: no cards, no dips
 
     end_card = overrides.get("end_card") or {}
     sources, note = end_card.get("sources"), end_card.get("note")   # no end card unless an episode asks for one
