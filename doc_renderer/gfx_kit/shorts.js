@@ -32,10 +32,11 @@ function captions(parent, list, keywords, size = 68) {
   return t => {
     for (const it of items) {
       const { t0, t1 } = it.c;
-      // the next chunk starts at t1 in the same spot, so the old one leaves within a frame or two (no mushed overlap)
-      if (t < t0 - .01 || t > t1 + .04) { show(it.g, 0); continue; }
+      // the next chunk starts at t1 in the same spot, so the old one is gone by t1: two chunks never share a frame
+      // (a 0.04 s overlap read as a double-exposed caption, review 2026-10-25)
+      if (t < t0 - .01 || t >= t1) { show(it.g, 0); continue; }
       if (it.fit == null) { const w = it.tx.getComputedTextLength(); it.fit = Math.min(1, (SAFE.x1 - SAFE.x0) / Math.max(1, w)); }
-      const k = back(p(t, t0, t0 + .22)), out = p(t, t1 - .03, t1 + .04);
+      const k = back(p(t, t0, t0 + .22)), out = p(t, t1 - .07, t1);
       put(it.g, SAFE.cx, SAFE.capY + 10 * (1 - k), it.fit * (.86 + .14 * k));
       show(it.g, p(t, t0, t0 + .05) * (1 - out));
     }
