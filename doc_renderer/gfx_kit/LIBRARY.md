@@ -122,15 +122,21 @@ episode needs it.
 
 นน picked T2 from `.mp/people_tis_20261104/index.html`, drawn after looking at The Infographics Show frames in
 `research_notes/teardown_tis_people/frames/`. The earlier style sheet `.mp/people_styles_20261104/`, drawn from the
-teardown text alone, did not count. New episodes draw their people with `people34.js`. The front-view rig below
-(`people.js`) stays for the films that use it and for what people34 cannot do yet: front views, the back view,
-walking, crowds of poses.
+teardown text alone, did not count. New episodes draw their people with `people34.js`. The older rig below
+(`people.js`) stays for the films that use it and for what people34 cannot do yet: the back view, walking, crowds of
+poses. On 2026-11-05 นน sent a Kurzgesagt frame (a couple facing the camera, blush, plain clothes, a pregnant belly) and
+chose to extend people34 toward it: the front view, cheeks, the `shirt` and `dress` looks, `belly` and `bob` below.
+The style sheet of both views across roles, ages, faces, hands and shots is `.mp/people_variations_20261105/index.html`
+(serve it with the `mp-preview` launch config; it loads people34.js by relative path).
 
 Load it before the page's own scripts, then bind it once:
 `const { person, hand, fill, cel, stroke, ell, cap, CAST } = People34.rig(ctx)`.
-`person(o, t)` returns `{ top, nearHand, farHand }` in world px: put a `!` on `top`, attach props to the hands.
+`person(o, t)` returns `{ top, nearHand, farHand }` in world px: put a `!` on `top`, attach props to the hands. Each hand
+point carries `.a`, the forearm's world angle, so a hand or prop can be drawn again over someone drawn later (an arm round
+a shoulder: draw the holder, then the held, then `hand()` at `handL`). In the front view the hands are `handL` / `handR`.
 The file's header lists every option. `tests/people34.test.cjs` checks the shoes on the ground line, the head top for
-every hair style and both head scales, the mirror, a reachable hand target and the blink rate. The check page is
+every hair style and both head scales, the mirror, a reachable hand target and the blink rate, in both views, plus the
+cheeks, the dress hem, the belly and the shirt cuffs. The check page is
 `people34_demo.html` (`?t=4.2` freezes the time; it loads people34.js by relative path, so open it from disk with
 Chrome or the test harness, not the built-in browser's static snapshot).
 
@@ -145,9 +151,22 @@ Chrome or the test harness, not the built-in browser's static snapshot).
 - Brows are short thick strokes; they carry `calm`, `up` and `worry`.
 - Mouths: `smile`, `talk` (opens with t), `grin` (a D shape with the upper teeth and the tongue), `grit` (clenched
   teeth, for strain), `o`. Add `sweat` for stress.
-- Hair is one solid mass with one lighter streak (`quiff`, `bun`), or a hard hat over a hair patch (`hat`).
+- Cheeks (since 2026-11-05): opaque pink discs (`#ff8aa6`, จุก's pink) under the eyes, on by default; `blush: false` in
+  the costume turns them off, another colour replaces the pink. Never translucent (they turn grey on flat colour).
+- Hair is one solid mass with one lighter streak (`quiff`, `bun`, `bob`: a cap with side masses to the jaw that hide
+  the ears), or a hard hat over a hair patch (`hat`).
 - Clothes give the role: `suit` (lapels, collar, tie, white cuffs), `coat` (lab coat with lapels and a pocket),
-  `vest` (polo with a hi-vis vest and reflective bands), `tee` (short sleeves and shorts). Long sleeves end in a cuff.
+  `vest` (polo with a hi-vis vest and reflective bands), `tee` (short sleeves and shorts), `shirt` (a plain long-sleeve
+  top with a lighter crew band and cuffs, for everyday people), `dress` (one garment to the knee, the legs in `pants`
+  below it, as leggings). Long sleeves end in a cuff.
+- `belly` (on `o` or the costume) draws a pregnant belly: a bulge forward of the garment in three-quarter, a lighter
+  disc low on the garment in the front view (kept inside a short garment). `CAST.mom` and `CAST.dad` are the couple from
+  the reference frame.
+- **Front view** (`view: 'front'`, since 2026-11-05): the face straight on with no nose, two ears, the same hair heights
+  as three-quarter, symmetric brows, eyes and mouth; both legs side by side with the shoes seen from the front; both
+  arms lit, sleeves one shade darker than the top so they read against it, elbows out from the body, the +x hand's thumb
+  inward. Targets are `armL` (the -x arm before `dir`) and `armR`. Use it for direct address, a couple facing the camera
+  and wide shots; cut to three-quarter for acting beats (rule B).
 - The neck is narrow, in skin with its top in the chin's shadow, and goes into a shirt collar that wraps it; the chin
   sits in front of the collar. A wide dark block under the chin (the first T2) reads as a box, not a neck.
 - Jackets and coats have a slight waist and a front edge line down to the hem; trousers have a light crease.
@@ -158,8 +177,9 @@ hangs, its hand rests just in front of the thigh so it reads as a hand, as in th
 little with t. Targets are local units; `bend` -1 (default) keeps the elbow back and down. Hands are oversized: `mitt`
 in wide shots (a palm, the fingers as one curled block with two split lines, the thumb toward the front) and `fingers`
 (four fingers and a thumb) in mid and close shots. Use `big` for a hand near the
-camera. `hold(api)` draws a prop in hand space in place of the hand; draw the prop, then `api.hand('fingers', …)` over
-it, so the fingers sit on the prop.
+camera. `hold(api, j)` draws a prop in hand space in place of the hand; draw the prop, then `api.hand('fingers', …)` over
+it, so the fingers sit on the prop. `j.fa` is the forearm angle: for a prop that must stand upright (a glass, a sign),
+translate to the palm, undo `j.flip` with `scale(1, -1)`, then `rotate(-j.fa)` before drawing it.
 
 **Shots** (rule A below). Scales are for a 1920 × 1080 frame; the demo is 960 × 540, so its `s` values are half these.
 - A wide shot has adults at `s` .6–.8 (people about 3/4 of the frame height), extras further back at .6.
@@ -167,8 +187,9 @@ it, so the fingers sit on the prop.
   a close shot (`s` about 2.4).
 - Set `ground: false` when the feet are out of frame.
 
-**Not yet.** Front and back views, walking and sitting are not drawn in people34. Use `people.js` for a walk, or draw the
-new view and add a test before using it in a film.
+**Not yet.** The back view, walking and sitting are not drawn in people34. Use `people.js` for a walk, or draw the
+new view and add a test before using it in a film. Against the Kurzgesagt reference the bodies are still T2 proportions
+(the reference is rounder, with sloped shoulders, thicker arms and bigger hands).
 
 ## People on a code-drawn canvas (since 2026-11-03)
 
@@ -229,6 +250,31 @@ header lists every option. `tests/people.test.cjs` checks the planted feet, the 
 - A writer at a board who cannot reach stands on a stool.
 - Keep a drawing on the board about 200 px from the writer's head, or the head hides it in the close shot.
 - Keep faces out of the Shorts UI: the bottom 350 px, and x > 950 between y 1000 and 1600.
+
+**Shots, views, hands and costume (since 2026-11-04, from The Infographics Show teardown,
+`research_notes/teardown_tis_people/TEARDOWN.md`; นน approved A–G).** We keep the big round head, the deep-sea palette, idle
+life and no speech bubbles. We add:
+- **A. Acting beats cut in.** A beat the viewer must read on a face (jaw drop, head shake, a celebration, handing something
+  over) gets a waist-up or chest-up shot in which the head is at least 1/5 of the frame height. Full-body people stay for
+  establishing shots, walks and crowds. A 10 px head shake in a wide shot is not acting.
+- **B. Three-quarter heads in close shots.** Turn the head, not just the eyes. The nose sits near the turned side, the far eye is
+  narrower and closer to the nose, and the far cheek and ear tuck behind the near one. Two people in one shot turn towards
+  each other. The front view is for wide shots and direct address only.
+- **C. Fingers when the hand is near.** When the head is taller than 1/5 of the frame, draw hands with four fingers and a thumb,
+  and a grip that wraps round the prop (fingers in front of it, thumb behind). Mittens stay for small figures. A prop
+  without fingers over it is floating, not held.
+- **D. Costume tells the role.** Give each person a role silhouette, not only a shirt colour: a jacket with lapels, a tie, a
+  cardigan, a lab coat, a lanyard, a headset, a hard hat. One costume per person for the whole episode. In one shot, no
+  two people share a colour or a silhouette, and an extra never wears a named person's look.
+- **E. Mouths carry the feeling.** Besides `smile`/`grin`/`o`/`wide`/`flat`, use `grit` (clenched, teeth showing) for
+  strain or worry, and `yell` (open, upper teeth and tongue) for shock or shouting, plus a sweat drop for stress. Keep the
+  `focus` brow shallow: a steep focus brow reads as a scowl on neutral beats such as counting, writing or looking.
+- **F. Frame edges.** The frame may only cut a person who is a deliberate foreground layer, taller than half the frame
+  (over the shoulder). A small or mid-ground figure is either wholly inside the frame or wholly outside. Never leave a
+  lone hand or half a body poking in at the edge.
+- **G. Insert shots of hands and things.** When an object is the point (the matching ticket, a card, a letter, a mug pressed
+  onto a map), cut to an insert: the hand holding it, large, with fingers (C). It reads better than a small prop in a
+  wide shot.
 
 **Review.**
 - Contact sheets miss the rig faults.

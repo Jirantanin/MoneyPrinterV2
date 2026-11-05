@@ -18,6 +18,7 @@
   <canvas id="wide"></canvas>
   <div class="grid"><canvas id="mid"></canvas><canvas id="close"></canvas></div>
   <div class="grid"><canvas id="cast"></canvas><canvas id="tis"></canvas></div>
+  <canvas id="front"></canvas>
 </div>
 <script src="people34.js"></script>
 <script>
@@ -25,7 +26,7 @@
 // check page for people34.js: the three shot sizes (LIBRARY "Shots, views, hands and costume" A), the cast, and hs 1 vs 1.28
 const W = 960, H = 540, dpr = Math.min(2, window.devicePixelRatio || 1);
 const shots = {};
-for (const id of ['wide', 'mid', 'close', 'cast', 'tis']) {
+for (const id of ['wide', 'mid', 'close', 'cast', 'tis', 'front']) {
   const cv = document.getElementById(id); cv.width = W * dpr; cv.height = H * dpr;
   const ctx = cv.getContext('2d'); shots[id] = { ctx, R: People34.rig(ctx) };
 }
@@ -76,7 +77,16 @@ function tis({ R }, t) {   // the same people at the TIS 1/5 head (hs 1, small e
   rect(R, 0, 0, W, H, '#f3ecff'); rect(R, 0, 450, W, 90, '#d9ccf5');
   [[1.28, true], [1, false]].forEach(([hs, dotEyes], i) => R.person({ C: R.CAST.off, seed: 20 + i, x: 330 + i * 300, y: 480, s: .38, hs, dotEyes, dir: i ? -1 : 1 }, t));
 }
-const fns = { wide, mid, close, cast, tis };
+function front({ R }, t) {   // the front view (since 2026-11-05): mom and dad from the reference in both views, the cast facing the camera
+  rect(R, 0, 0, W, H, '#fbe3c9'); rect(R, 0, 450, W, 90, '#e0a56e');
+  R.person({ view: 'front', C: R.CAST.mom, seed: 30, x: 110, y: 480, s: .36, eyes: 'happy', armR: { x: 70, y: -520 } }, t);
+  R.person({ view: 'front', C: R.CAST.dad, seed: 31, x: 250, y: 480, s: .38, eyes: 'happy', armR: { x: 136, y: -520 } }, t);
+  R.person({ C: R.CAST.mom, seed: 32, x: 390, y: 480, s: .36, dir: -1 }, t);
+  R.person({ C: R.CAST.dad, seed: 33, x: 500, y: 480, s: .38, dir: 1 }, t);
+  [['off', 1], ['sci', -1], ['wrk', 1], ['kid', -1]].forEach(([k, dir], i) => R.person({ view: 'front', C: R.CAST[k], seed: 34 + i, x: 640 + i * 90, y: 480, s: k === 'kid' ? .26 : .36, hs: k === 'kid' ? 1.5 : 1.28, dir,
+    mouth: i % 2 ? 'grin' : 'smile' }, t));
+}
+const fns = { wide, mid, close, cast, tis, front };
 function render(t) { for (const id in shots) { const s = shots[id]; s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); s.ctx.clearRect(0, 0, W, H); fns[id](s, t); } }
 const fixed = new URLSearchParams(location.search).get('t');
 if (fixed != null) render(+fixed);
