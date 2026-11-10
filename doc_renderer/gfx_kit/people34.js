@@ -192,6 +192,8 @@ const People34 = (() => {
     // ---- head, facing +x ----
     const FACE = 'M 28 -806 C 0 -808 -30 -820 -48 -846 C -70 -870 -80 -905 -74 -935 C -66 -970 -30 -990 5 -990 C 40 -990 62 -968 66 -935 L 68 -906 C 74 -896 92 -880 92 -868 C 92 -859 82 -856 72 -856 C 74 -846 76 -836 70 -826 C 64 -812 48 -806 28 -806 Z';
     const BUN_CAP = 'M 68 -940 C 64 -988 26 -1008 -10 -1006 C -56 -1002 -86 -968 -84 -922 C -82 -884 -72 -862 -56 -852 C -52 -880 -46 -904 -32 -914 C -6 -930 30 -930 48 -948 C 56 -944 62 -940 68 -940 Z';
+    const QUIFF_TQ = 'M 60 -944 C 76 -950 84 -972 76 -990 C 68 -1008 40 -1010 14 -1004 C -30 -998 -70 -982 -84 -944 C -88 -915 -80 -885 -66 -866 C -56 -878 -48 -898 -44 -916 L -16 -912 C -16 -904 -11 -897 -3 -896 C 3 -912 9 -930 22 -938 C 36 -944 50 -942 60 -944 Z';
+    const BOB_TQ = 'M 68 -940 C 66 -990 28 -1010 -10 -1006 C -60 -1002 -100 -968 -102 -920 C -104 -880 -100 -846 -92 -822 C -84 -806 -40 -804 -24 -822 C -14 -850 -12 -890 -6 -918 C 14 -936 44 -938 68 -940 Z';
     function head(C, o, t) {
       const sk = C.skin, eyeMode = o.eyes || 'open', closed = blinkOn(t, o.seed || 1) && eyeMode !== 'happy', dots = o.dotEyes !== false;
       if (C.hairStyle === 'bun') cel(ell(-62, -982, 36, 34), C.hair, 6);
@@ -199,15 +201,16 @@ const People34 = (() => {
       fill('M -120 -1000 L -38 -1000 C -60 -930 -50 -860 -6 -800 L -120 -800 Z', dk(sk, .92)); ctx.restore();   // back of the head
       if (C.hairStyle !== 'bob') { fill(ell(-26, -886, 14, 21), sk); fill(ell(-24, -884, 7, 12), dk(sk, .82)); }   // the one ear, at the back
       if (C.hairStyle === 'quiff') {
-        cel('M 64 -946 C 64 -980 40 -1004 0 -1006 C -50 -1004 -84 -976 -84 -930 C -84 -905 -78 -885 -66 -870 C -56 -880 -48 -900 -44 -918 L -24 -912 C -14 -932 10 -948 40 -944 C 50 -948 58 -950 64 -946 Z', C.hair, 8);
-        fill('M 20 -1002 C 56 -1012 84 -990 76 -958 C 68 -966 54 -966 40 -960 Z', C.hair);
-        fill('M -40 -990 C -10 -1000 20 -998 40 -992 C 14 -990 -14 -986 -40 -976 Z', lt(C.hair, .22));   // one sheen streak
+        // seen turned, not the front cap with its tuft: the lift overhangs the forehead, the crown slopes down to the back
+        // of the skull, and the hairline runs from the nape round the ear to a sideburn and up the temple
+        cel(QUIFF_TQ, C.hair, 8);
+        fill('M 58 -992 C 32 -1001 -8 -997 -40 -980 C -12 -987 22 -987 52 -978 Z', lt(C.hair, .22));   // one sheen streak, along the sweep
       } else if (C.hairStyle === 'bun') {
         cel(BUN_CAP, C.hair, 8);
-        fill('M -20 -998 C 10 -1004 40 -996 58 -978 C 30 -986 0 -988 -20 -984 Z', lt(C.hair, .2));
-      } else if (C.hairStyle === 'bob') {   // the same cap, and the near side mass hanging to the jaw over the ear
-        cel(BUN_CAP, C.hair, 8);
-        cel('M -86 -930 C -96 -890 -96 -850 -86 -826 C -72 -812 -50 -816 -42 -834 C -52 -866 -54 -898 -48 -926 Z', C.hair, 6);
+        fill('M 44 -980 C 16 -1000 -18 -1001 -46 -986 C -20 -991 10 -988 36 -970 Z', lt(C.hair, .2));   // pulled back toward the bun
+      } else if (C.hairStyle === 'bob') {   // its own turned shape, not the bun cap: one mass from the fringe over the brows,
+        // round the back of the skull and down to the jaw, its front edge framing the near cheek (the ear is under it)
+        cel(BOB_TQ, C.hair, 8);
         fill('M -20 -998 C 10 -1004 40 -996 58 -978 C 30 -986 0 -988 -20 -984 Z', lt(C.hair, .2));
       } else if (C.hairStyle === 'hat') {
         fill('M -78 -930 C -82 -900 -76 -880 -66 -868 C -56 -880 -50 -900 -46 -920 Z', C.hair);

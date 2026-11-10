@@ -154,7 +154,11 @@ Chrome or the test harness, not the built-in browser's static snapshot).
 - Cheeks (since 2026-11-05): opaque pink discs (`#ff8aa6`, จุก's pink) under the eyes, on by default; `blush: false` in
   the costume turns them off, another colour replaces the pink. Never translucent (they turn grey on flat colour).
 - Hair is one solid mass with one lighter streak (`quiff`, `bun`, `bob`: a cap with side masses to the jaw that hide
-  the ears), or a hard hat over a hair patch (`hat`).
+  the ears), or a hard hat over a hair patch (`hat`). Each style has its own shape per view: a turned head never reuses
+  another style's cap or the front view's top (fixed 2026-11-10: the three-quarter `bob` was the bun cap plus a strand,
+  now a fringe, the back of the skull and the fall to the jaw in one mass; the three-quarter `quiff` was the front dome
+  with the same tuft and streak, now a lift over the forehead, a crown sloping back and a sideburn; the streak follows
+  the sweep in each view).
 - Clothes give the role: `suit` (lapels, collar, tie, white cuffs), `coat` (lab coat with lapels and a pocket),
   `vest` (polo with a hi-vis vest and reflective bands), `tee` (short sleeves and shorts), `shirt` (a plain long-sleeve
   top with a lighter crew band and cuffs, for everyday people), `dress` (one garment to the knee, the legs in `pants`
