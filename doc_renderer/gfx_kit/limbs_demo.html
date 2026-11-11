@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Limbs Demo</title>
+<style>
+  html, body { margin: 0; background: #0a0428; color: #fdf7ee; font-family: 'Leelawadee UI', 'Noto Sans Thai', 'Segoe UI', sans-serif; }
+  canvas, svg { display: block; width: 100%; height: auto; }
+  p { margin: 0; padding: 14px 3.2% 6px; color: #9d8fd6; font-size: clamp(13px, 1.2vw, 20px); }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1300"></canvas>
+<p>ด้านล่างคือรูปเดียวกันบน SVG: <code>Limbs.d(pts)</code> ให้ path string ไปใส่ <code>YP()</code> ได้เลย</p>
+<svg id="s" viewBox="0 0 1920 260" xmlns="http://www.w3.org/2000/svg"></svg>
+<script src="limbs.js"></script>
+<script>
+// Every panel is one Limbs.points() call with one option changed, so the picture is the documentation.
+// ?t=<seconds> or seek(t) freezes it for a still; otherwise it plays.
+const cv = document.getElementById('c'), ctx = cv.getContext('2d'), svg = document.getElementById('s');
+const HALF = Math.PI / 2, TAU = Math.PI * 2, FONT = "'Leelawadee UI','Noto Sans Thai','Segoe UI',sans-serif";
+const C = { body: '#f98a2c', back: '#d23d48', belly: '#ffeaa8', kelp: '#22b47a', coral: '#8a2cc0', tip: '#ff6fd0', eel: '#3a1c9c', eelDark: '#22106a', eelSpot: '#6a44d8', vein: '#b46af0', panel: '#1b0c66', ink: '#1a0b3d' };
+
+function panel(x, y, w, h, title, note) {
+  ctx.fillStyle = C.panel; ctx.beginPath(); ctx.roundRect(x, y, w, h, 22); ctx.fill();
+  ctx.fillStyle = '#fdf7ee'; ctx.font = `700 26px ${FONT}`; ctx.textAlign = 'left'; ctx.fillText(title, x + 22, y + 40);
+  ctx.fillStyle = '#9d8fd6'; ctx.font = `400 18px ${FONT}`; ctx.fillText(note, x + 22, y + 66);
+}
+function row(x, y, values, make, label) {
+  values.forEach((v, i) => {
+    const px = x + 70 + i * 100;
+    Limbs.fill(ctx, Limbs.points(make(v, px, y)), C.body);
+    ctx.fillStyle = '#c9bdf5'; ctx.font = `600 17px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText(label(v), px, y - 14);
+  });
+}
+
+function draw(t) {
+  ctx.clearRect(0, 0, 1920, 1300);
+  ctx.fillStyle = '#0a0428'; ctx.fillRect(0, 0, 1920, 1300);
+  ctx.fillStyle = '#fdf7ee'; ctx.font = `700 44px ${FONT}`; ctx.textAlign = 'left'; ctx.fillText('limbs.js', 60, 70);
+  ctx.fillStyle = '#9d8fd6'; ctx.font = `400 22px ${FONT}`; ctx.fillText('เส้นโค้งเรียวจากตัวเลขไม่กี่ตัว · แต่ละช่องเปลี่ยนค่าเดียว ค่าที่เหลือเท่ากัน (ang ลง, len 190, w 34)', 60, 104);
+  const base = (px, y) => ({ x: px, y, ang: HALF, len: 190, w: 34 });
+
+  panel(60, 130, 580, 330, 'bend', 'เลี้ยวเท่าๆ กันตลอดเส้น (เรเดียน)');
+  row(60, 240, [-1.2, -0.6, 0, 0.6, 1.2], (v, px, y) => Object.assign(base(px, y), { bend: v }), v => v);
+  panel(670, 130, 580, 330, 'curl', 'เลี้ยวเพิ่มที่ปลาย ยิ่งใกล้ปลายยิ่งม้วน');
+  row(670, 240, [0, 1.2, 2.4, 3.6, -2.4], (v, px, y) => Object.assign(base(px, y), { curl: v }), v => v);
+  panel(1280, 130, 580, 330, 'taper / tp', 'ปลายเหลือความกว้างเท่าไร และเรียวช้าหรือเร็ว');
+  row(1280, 240, [0, 0.5, 0.8, 1, 'tp 2.5'], (v, px, y) => Object.assign(base(px, y), v === 'tp 2.5' ? { taper: 0.8, tp: 2.5 } : { taper: v }), v => v);
+
+  panel(60, 490, 580, 330, 'wave + ph', 'คลื่นวิ่งจากโคนไปปลาย เมื่อ ph เปลี่ยนตามเวลา');
+  row(60, 600, [0.2, 0.4, 0.7, 0.4, 0.4], (v, px, y) => Object.assign(base(px, y), { wave: v, ph: -t * 4, wf: px > 420 ? (px > 520 ? 3 : 12) : 6 }), v => v);
+  ctx.fillStyle = '#9d8fd6'; ctx.font = `400 16px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('wf 12', 430, 806); ctx.fillText('wf 3', 530, 806); ctx.fillText('wf 6', 230, 806);
+  panel(670, 490, 580, 330, 'waveAll', 'ซ้าย: คลื่นโตไปทางปลาย · ขวา: แรงเท่ากันตั้งแต่โคน (ลำตัวที่ว่าย)');
+  [false, true].forEach((wa, i) => {
+    const pts = Limbs.points({ x: 720 + i * 0, y: 610 + i * 110, ang: 0, len: 480, w: 40, taper: 0.85, tp: 1.5, wave: 0.5, wf: 7.5, ph: -t * 3, waveAll: wa, n: 60 });
+    Limbs.fill(ctx, pts, C.eelDark, 1.4); Limbs.fill(ctx, pts, C.eel);
+  });
+  panel(1280, 490, 580, 330, 'grow, at(), dots()', 'ขอบครีบจากเส้นเดิมที่กว้างขึ้น · จุดเกาะ · ปุ่มดูด');
+  {
+    const pts = Limbs.points({ x: 1340, y: 620, ang: 0.2, len: 420, w: 60, taper: 0.74, bend: 0.3, curl: -2.6 + Math.sin(t * 1.3) * 0.3, wave: 0.15, ph: -t * 2 });
+    Limbs.fill(ctx, pts, C.back, 1.3); Limbs.fill(ctx, pts, C.body);
+    Limbs.fillDots(ctx, pts, C.belly, { side: -1, from: 0.25, every: 3 });
+    const q = Limbs.at(pts, 0.55); ctx.strokeStyle = '#7bf0ff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(q.x, q.y, 16, 0, TAU); ctx.stroke();
+    ctx.fillStyle = '#7bf0ff'; ctx.font = `600 17px ${FONT}`; ctx.textAlign = 'left'; ctx.fillText('at(pts, 0.55)', q.x + 24, q.y - 16);
+  }
+
+  panel(60, 850, 1800, 420, 'ตัวอย่าง', 'ทุกชิ้นคือ points() + fill(): หนวดหมึก 8 เส้น · สาหร่าย · ปะการังกิ่ง · หาง · เส้นเลือดแตกแขนง');
+  for (let i = 0; i < 8; i++) { // an octopus skirt, mirrored left and right
+    const k = i / 7 - 0.5, back = i % 2 === 1, sd = k < 0 ? 1 : -1;
+    const pts = Limbs.points({ x: 300 + k * 150, y: 1080, ang: HALF - k * 1.5, len: 150 + (back ? 12 : 0), w: back ? 38 : 42, taper: 0.74, bend: sd * 0.4 + Math.sin(t * 1.3 + i) * 0.11, curl: sd * 2.4 + Math.sin(t * 0.9 + i * 1.7) * 0.16 });
+    Limbs.fill(ctx, pts, back ? C.back : C.body); if (!back) Limbs.fillDots(ctx, pts, C.belly, { side: sd, from: 0.45 });
+  }
+  ctx.fillStyle = C.body; ctx.beginPath(); ctx.ellipse(300, 1040, 96, 84, 0, 0, TAU); ctx.fill();
+  for (let k = 0; k < 4; k++) Limbs.fill(ctx, Limbs.points({ x: 640 + k * 34, y: 1250, ang: -HALF - 0.12, len: 250 + k * 30, w: 24, taper: 0.7, bend: 0.2, wave: 0.5, ph: t * 2.2 + k * 1.3, n: 22 }), C.kelp);
+  { // a branching coral: branches start from points on the trunk
+    const trunk = Limbs.points({ x: 960, y: 1250, ang: -HALF + 0.1, len: 300, w: 50, taper: 0.45, bend: Math.sin(t * 1.1) * 0.05, n: 16 });
+    Limbs.fill(ctx, trunk, C.coral);
+    for (let b = 0; b < 5; b++) {
+      const p = trunk[4 + b * 2], sd = b % 2 ? 1 : -1;
+      const br = Limbs.points({ x: p.x, y: p.y, ang: p.a + sd * 0.85, len: 150 - b * 14, w: 32, taper: 0.35, bend: -sd * 0.5 + Math.sin(t * 1.1) * 0.1, n: 10 });
+      Limbs.fill(ctx, br, C.coral); const e = br[br.length - 1]; ctx.fillStyle = C.tip; ctx.beginPath(); ctx.arc(e.x, e.y, 18, 0, TAU); ctx.fill();
+    }
+  }
+  Limbs.fill(ctx, Limbs.points({ x: 1250, y: 1180, ang: -0.1, len: 330, w: 70, taper: 0.92, tp: 0.8, bend: -0.6, curl: -2.2 + Math.sin(t * 2) * 0.5 }), '#2fb8a0'); // a tail
+  ctx.fillStyle = '#2fb8a0'; ctx.beginPath(); ctx.ellipse(1210, 1170, 80, 62, 0, 0, TAU); ctx.fill();
+  { // vessels with a light running along each
+    const v = Limbs.points({ x: 1660, y: 1265, ang: -HALF, len: 360, w: 22, taper: 0.7, wave: 0.5, wf: 5, ph: 2.1, waveAll: true, n: 40 });
+    Limbs.fill(ctx, v, C.vein);
+    [8, 17, 26].forEach((i, b) => Limbs.fill(ctx, Limbs.points({ x: v[i].x, y: v[i].y, ang: v[i].a + (b % 2 ? 0.9 : -0.9), len: 130, w: 12, taper: 0.8, bend: b % 2 ? -0.6 : 0.6, n: 14 }), C.vein));
+    const q = Limbs.at(v, (t * 0.35) % 1); ctx.fillStyle = '#fff3c0'; ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, TAU); ctx.fill();
+  }
+
+  // the same outline on SVG
+  const NS = 'http://www.w3.org/2000/svg'; svg.replaceChildren();
+  const add = (d, fill) => { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('fill', fill); svg.appendChild(p); };
+  for (let i = 0; i < 9; i++) {
+    const pts = Limbs.points({ x: 140 + i * 205, y: 40, ang: HALF - 0.3, len: 190, w: 40, taper: 0.76, bend: 0.3, curl: 2.2 + Math.sin(t * 1.2 + i) * 0.4, wave: 0.2, ph: -t * 3 + i });
+    add(Limbs.d(pts, 1.25), C.back); add(Limbs.d(pts), C.body);
+  }
+}
+
+const q = new URLSearchParams(location.search);
+let fixed = q.has('t') ? +q.get('t') : null;
+window.seek = t => { fixed = t; draw(t); };
+if (fixed !== null) draw(fixed);
+const t0 = performance.now();
+(function loop() { if (fixed === null) { draw((performance.now() - t0) / 1000); requestAnimationFrame(loop); } })();
+window.READY = true; window.__ready = Promise.resolve();
+</script>
+</body>
+</html>

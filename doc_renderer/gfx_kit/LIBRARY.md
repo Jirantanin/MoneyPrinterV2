@@ -297,6 +297,42 @@ from the Hatshepsut v3 cut; Kurzgesagt is the reference level, not a look to cop
 | `glowHalo(parent, r, {flicker, seed, soft})` → `update(t)` | screen-blended halo for a light source | torches, lamps, a sun low in the frame |
 | `lightShaft(parent, d, {color, opacity, dir})` → `update(t)` | soft beam through a slot or window | one per scene is plenty |
 | `dustLayer(parent, seed, {n, h, colors})` → `update(t)` | drifting particles that catch the light | |
+## Curved limbs (`limbs.js`, since 2026-11-11)
+
+A geometry helper, not a look: it gives the outline of a curved, tapering shape and leaves the colour, shading and
+character to the episode. So it does not fall under the reuse rule at the top. Use it for anything with no elbow:
+tentacles, tails, kelp, sea grass, coral branches, anemone arms, eel and worm bodies, vessels, roots, smoke trails.
+For arms and legs that bend at a joint, use the people rigs above.
+
+A limb grows from its root: walk `len` in `n` steps while the heading turns. `Limbs.points(o)` returns the spine
+(`{ x, y, a, w, s }` per step). `Limbs.fill(ctx, pts, fill)` draws it on a canvas, `Limbs.d(pts)` gives the same
+outline as a path string for `YP()` on SVG pages. The file's header lists every option. `tests/limbs.test.cjs` checks
+the length, the tip heading, the taper, mirroring, the wave and the outline. `limbs_demo.html` shows each option
+with one value changed per panel (`?t=1.3` freezes the time; open it from disk or through `mp-preview`).
+
+| Option | What it does | Typical values |
+|---|---|---|
+| `ang` | heading at the root, rad (0 right, `PI/2` down) | |
+| `len`, `w` | length along the spine, width at the root, px | |
+| `taper`, `tp` | share of the width lost by the tip; `tp` above 1 keeps it thick, then narrows late | 0.74 tentacle, 0.45 coral trunk, 0.86 with `tp` 1.5 eel |
+| `bend` | turn spread evenly along the limb | ±0.3 to ±0.6 |
+| `curl` | extra turn packed into the tip | ±2.2 to ±2.7 for a curled tip |
+| `wave`, `wf`, `ph` | wave size, how much wave fits, and its phase; `ph: -t * 3` makes it travel root to tip | 0.4 to 0.55 |
+| `waveAll` | the wave is full strength from the root: a swimming body, not a swaying tip | eel, vessel |
+
+Recipes from the octopus film (`.mp/kurz_style_film_20261110/film/`):
+- **Idle life.** Add a small sine of `t` to `bend` and `curl`, with a different phase per limb (`+ Math.sin(t * 1.3 + i) * 0.11`). Never animate all limbs in step.
+- **Mirror.** `ang -> PI - ang`, `bend -> -bend`, `curl -> -curl`, `wave -> -wave`. The test checks that this is exact.
+- **Depth.** Draw the far limbs first in the shade colour, then the body, then the near limbs.
+- **Fringe or rim.** Draw the same `pts` with `grow` 1.3 to 1.4 in a darker colour first.
+- **Branches.** Start a branch at a spine point: `{ x: p.x, y: p.y, ang: p.a ± 0.85 }`.
+- **Attach.** `Limbs.at(pts, s)` gives the point and heading at `s`, for a hand, a tip bulb or a light running along it. `Limbs.dots()` places suckers or spots on one side.
+- **Streamlined.** For a jetting or fleeing body: small spread, `curl` 0, `wave` 0.4 with a fast phase (`-t * 13`).
+
+Limits: a limb cannot bend at one sharp joint, and a jaw or lid that opens wide needs separate hinged pieces (the eel
+head had to be rebuilt that way). The outline is a polygon, so a very tight curl with a wide root can fold over itself;
+lower `curl` or `w`.
+
 | `finishFrame(svg, {vignette, grain})` | vignette and film grain over the frame | last, before the HUD, in place of `overlays()`; a bright scene wants a lighter `vig`/`vigOpacity` |
 
 Also build backgrounds in layers (far, mid, light sources) with slow parallax, and use gradient fills rather than flat
