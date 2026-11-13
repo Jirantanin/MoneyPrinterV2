@@ -9,6 +9,9 @@
 //       bob, sq (from jumpAt), noLegs, coat. top = world y of the head top, hat included (put the "!" there).
 //   personBack(o, t)                 seen from behind (at a board, at a screen): the head is all hair
 //   walker(o, t)                     side view, no foot slide: o.dist = world px walked / o.s, o.dir = 1 | -1
+//                                    o.shorts: bare shins in the skin colour; o.shoe: shoe colour
+//                                    o.slope (rad, default 0): the ground rises that much ahead of the walker; the legs, shoes
+//                                    and floor shadow follow it, the body stays upright along the fall line
 //   react(kind, u, from = HANG)      blend the arms from `from` to POSES[kind] by u (use a spring of t - t0)
 //   jumpAt(t, t0, h, d) -> {bob, sq} a reaction hop with squash on take-off and landing
 //   bang(x, y, t, t0) / bangOn(p, x, t, t0)   a "!" that pops; bangOn sits it on p.top
@@ -181,18 +184,19 @@ const People = (() => {
     // follows asin of a linear foot offset), on the swing the knee bends 0.75*sin^2 (0.75*cos^2 of the swing phase); the hips
     // drop to the straight stance leg. One cycle covers 4*L*sin(.42) = 1.63 leg lengths, the stride those angles give.
     function walker(o, t) {
-      const { s = .4, dir = 1, shirt = P.teal, pants = P.navy, hair = '#3e3138', skin = P.skin, seed = 3, dist = 0 } = o;
+      const { s = .4, dir = 1, shirt = P.teal, pants = P.navy, hair = '#3e3138', skin = P.skin, seed = 3, dist = 0, shoe = P.shoe, shorts = false } = o;
       const T = 128, S = 118, L = T + S, A0 = Math.sin(.42), p = 2 * Math.PI * dist / (4 * L * A0);
       const leg = ph => { ph = ((ph % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
         if (ph < Math.PI) return { th: Math.asin(A0 * (1 - 2 * ph / Math.PI)), k: 0, sw: false };
         const v = (ph - Math.PI) / Math.PI; return { th: -.42 * Math.cos(v * Math.PI), k: .75 * Math.sin(v * Math.PI) ** 2, sw: true }; };
       const A = leg(p), B = leg(p + Math.PI), st = A.sw ? B : A, hipY = -L * Math.cos(st.th) - 22;
       ctx.save(); ctx.translate(o.x, o.y); ctx.scale(dir * s, s);
-      E(0, -4, 120, 18, 'rgba(35,30,55,.18)');
-      const drawLeg = (g, col) => {
+      const sl = Math.tan(o.slope || 0), onGround = fn => { if (!sl) return fn(); ctx.save(); ctx.transform(1, -sl, 0, 1, 0, 0); fn(); ctx.restore(); };
+      onGround(() => E(0, -4, 120, 18, 'rgba(35,30,55,.18)'));
+      const drawLeg = (g, col) => onGround(() => {
         const kx = Math.sin(g.th) * T, ky = hipY + Math.cos(g.th) * T, fx = kx + Math.sin(g.th - g.k) * S, fy = ky + Math.cos(g.th - g.k) * S;
-        line(0, hipY, kx, ky, 64, col); line(kx, ky, fx, fy, 60, col); E(fx + 30, fy + 4, 54, 24, P.shoe);
-      };
+        line(0, hipY, kx, ky, 64, col); line(kx, ky, fx, fy, 60, shorts ? (col === pants ? skin : dk(skin, .88)) : col); E(fx + 30, fy + 4, 54, 24, shoe);
+      });
       drawLeg(B, dk(pants, .85));
       const ty = hipY - 300, sw = -.9 * A.th;
       const armSide = (ang, col, sk) => { const sx = 0, sy = ty + 60, ex = sx + Math.sin(ang) * 118, ey = sy + Math.cos(ang) * 118,

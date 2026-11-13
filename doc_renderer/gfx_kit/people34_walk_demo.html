@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People34 walk demo</title>
+<style>
+  body { margin: 0; background: #0f1530; color: #eef0ff; font-family: Mitr, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 10px; }
+  canvas { width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; display: block; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>people34.js: ท่าเดิน (o.walk, o.slope) · ?t=วินาที หยุดเวลา</h1>
+  <canvas id="strip"></canvas>
+  <canvas id="walk"></canvas>
+  <canvas id="slope"></canvas>
+  <canvas id="stop"></canvas>
+</div>
+<script src="people34.js?v=5"></script>
+<script>
+'use strict';
+// check page for the people34 walk cycle: eight phases of one cycle, the cast walking on the flat (both directions),
+// walkers going up a rising ground (o.slope), and one who stops and starts (o.walkAmt). Pure in t; ?t=seconds freezes it.
+const W = 960, H = 540, dpr = Math.min(2, window.devicePixelRatio || 1), S = {};
+for (const id of ['strip', 'walk', 'slope', 'stop']) { const cv = document.getElementById(id); cv.width = W * dpr; cv.height = H * dpr; const ctx = cv.getContext('2d'); S[id] = { ctx, R: People34.rig(ctx) }; }
+const rect = (R, x, y, w, h, c) => R.fill(`M ${x} ${y} L ${x + w} ${y} L ${x + w} ${y + h} L ${x} ${y + h} Z`, c);
+const CYCLE = 4 * 494 * Math.sin(.38), C = People34.CAST;
+function draw(t) {
+  for (const k in S) { S[k].ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  { const { R } = S.strip; rect(R, 0, 0, W, H, '#fde9ae'); rect(R, 0, 440, W, 100, '#e9813f');
+    for (let i = 0; i < 8; i++) R.person({ x: 70 + i * 116, y: 440, s: .3, C: C.kid, walk: CYCLE * i / 8, seed: 2 }, 0); }
+  { const { R } = S.walk; rect(R, 0, 0, W, H, '#bfe6ff'); rect(R, 0, 430, W, 110, '#35b65c');
+    const sp = 150, cast = [C.kid, C.off, C.mom, C.wrk, C.sci, C.dad];
+    cast.forEach((c, i) => { const d = i % 2 ? -1 : 1, s = .3, x0 = (i * 170 + t * sp * (1 + i * .08)) % (W + 200) - 100;
+      R.person({ x: d > 0 ? x0 : W - x0, y: 430 + (i % 3) * 14, s, dir: d, C: c, walk: t * sp * (1 + i * .08) / s, seed: i + 1, mouth: i % 2 ? 'smile' : 'talk' }, t); }); }
+  { const { R, ctx } = S.slope; rect(R, 0, 0, W, H, '#ffd9b0'); const th = .2, gx = 520, gy = 430;
+    ctx.save(); ctx.translate(gx, gy); ctx.rotate(-th); rect(R, -700, 0, 1400, 500, '#b8432e'); ctx.restore();
+    // the walkers really move up the slope (x by the distance walked), and one stops and starts with walkAmt
+    const up = (c, sp, off, seed, o = {}) => { const d = t * sp + off, x = (d % (W + 200)) - 100, y = gy + Math.tan(th) * (gx - x); R.person(Object.assign({ x, y, s: .34, C: c, walk: d / .34, slope: th, seed }, o), t); };
+    up(C.kid, 170, 500, 3, { eyes: 'happy' }); up(C.off, 150, 150, 5); }
+  { const { R } = S.stop; rect(R, 0, 0, W, H, '#d9f0ff'); rect(R, 0, 430, W, 110, '#f3a94e'); const ph = (t % 4) / 4, amt = ph < .35 ? 1 : ph < .45 ? 1 - (ph - .35) / .1 : ph < .9 ? 0 : (ph - .9) / .1, e = amt * amt * (3 - 2 * amt);
+    // stop and start: distance is the integral of the eased speed, so the planted foot does not slide while it slows
+    let d = 0; for (let i = 0, n = 200; i < n; i++) { const p = ph * (i + .5) / n, a = p < .35 ? 1 : p < .45 ? 1 - (p - .35) / .1 : p < .9 ? 0 : (p - .9) / .1; d += a * a * (3 - 2 * a) * ph * 4 / n * 140; }
+    R.person({ x: 120 + d * 2, y: 430, s: .34, C: C.dad, walk: d * 2 / .34, walkAmt: e, seed: 4, ground: true }, t); }
+}
+const q = new URLSearchParams(location.search).get('t');
+if (q != null) draw(Number(q)); else { const t0 = performance.now(); (function loop() { draw((performance.now() - t0) / 1000); requestAnimationFrame(loop); })(); }
+</script>
+</body>
+</html>

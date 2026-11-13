@@ -123,7 +123,7 @@ episode needs it.
 นน picked T2 from `.mp/people_tis_20261104/index.html`, drawn after looking at The Infographics Show frames in
 `research_notes/teardown_tis_people/frames/`. The earlier style sheet `.mp/people_styles_20261104/`, drawn from the
 teardown text alone, did not count. New episodes draw their people with `people34.js`. The older rig below
-(`people.js`) stays for the films that use it and for what people34 cannot do yet: the back view, walking, crowds of
+(`people.js`) stays for the films that use it and for what people34 cannot do yet: the back view, crowds of
 poses. On 2026-11-05 นน sent a Kurzgesagt frame (a couple facing the camera, blush, plain clothes, a pregnant belly) and
 chose to extend people34 toward it: the front view, cheeks, the `shirt` and `dress` looks, `belly` and `bob` below.
 The style sheet of both views across roles, ages, faces, hands and shots is `.mp/people_variations_20261105/index.html`
@@ -136,7 +136,8 @@ point carries `.a`, the forearm's world angle, so a hand or prop can be drawn ag
 a shoulder: draw the holder, then the held, then `hand()` at `handL`). In the front view the hands are `handL` / `handR`.
 The file's header lists every option. `tests/people34.test.cjs` checks the shoes on the ground line, the head top for
 every hair style and both head scales, the mirror, a reachable hand target and the blink rate, in both views, plus the
-cheeks, the dress hem, the belly and the shirt cuffs. The check page is
+cheeks, the dress hem, the belly, the shirt cuffs, the world-fixed light on both `dir`s, the near sleeve shade, `look`
+and the `flat` mouth. The check page is
 `people34_demo.html` (`?t=4.2` freezes the time; it loads people34.js by relative path, so open it from disk with
 Chrome or the test harness, not the built-in browser's static snapshot).
 
@@ -144,13 +145,18 @@ Chrome or the test harness, not the built-in browser's static snapshot).
 - Adult body, about 1000 local units tall; the head is 1/4 of the height (`hs` 1.28 over the TIS 1/5 head). `hs: 1`
   gives the TIS head; leave it at 1.28 so people sit next to จุก.
 - Head and body both turn three-quarters. `dir` 1 faces right, -1 left; two people talking face each other.
-- The nose sticks out past the face line. One ear shows, at the back of the head. The back of the head and the neck
-  under the chin are one shade darker.
+- The nose sticks out past the face line. One ear shows, at the back of the head. The neck under the chin is one shade
+  darker, and so is the back of the head when the face is toward the light. A face turned away from the light stays
+  lit (it carries the beat): only a thin rim along the nose, the mouth corner and the jaw, never a plane across the
+  mouth (people review round 2, N1).
 - Eyes: the near eye full, the far eye narrow beside the nose. `dotEyes` (default) gives larger dots with a catch light;
-  `happy` eyes are closed arcs, `wide` eyes have whites.
+  `happy` eyes are closed arcs, `wide` eyes have whites. `look` / `lookY` (since 2026-11-06) move the pupils in local
+  units, about ±6 / ±4 (+x toward the face before `dir`, +y down); the far eye moves .6 as much, `wide` pupils stay
+  inside their whites, closed and `happy` eyes ignore it. Point the eyes at what matters (the eyes lead).
 - Brows are short thick strokes; they carry `calm`, `up` and `worry`.
 - Mouths: `smile`, `talk` (opens with t), `grin` (a D shape with the upper teeth and the tongue), `grit` (clenched
-  teeth, for strain), `o`. Add `sweat` for stress.
+  teeth, for strain), `o`, `flat` (a short straight stroke, since 2026-11-06: worry, doubt, deadpan; pair `worry` brows
+  with `flat`, never with the default smile). Add `sweat` for stress.
 - Cheeks (since 2026-11-05): opaque pink discs (`#ff8aa6`, จุก's pink) under the eyes, on by default; `blush: false` in
   the costume turns them off, another colour replaces the pink. Never translucent (they turn grey on flat colour).
 - Hair is one solid mass with one lighter streak (`quiff`, `bun`, `bob`: a cap with side masses to the jaw that hide
@@ -174,7 +180,14 @@ Chrome or the test harness, not the built-in browser's static snapshot).
 - The neck is narrow, in skin with its top in the chin's shadow, and goes into a shirt collar that wraps it; the chin
   sits in front of the collar. A wide dark block under the chin (the first T2) reads as a box, not a neck.
 - Jackets and coats have a slight waist and a front edge line down to the hem; trousers have a light crease.
-- Each piece gets one big shade plane (`cel`), on the side away from the light; no outlines.
+- Each piece gets one big shade plane (`cel`), on the side away from the light; no outlines. The light is fixed in the
+  world, not in the figure (since 2026-11-06): `light` -1 (default) is the house upper-left light, 1 the upper right.
+  The shade planes, the head's shade side and the two-tone lapels and vest panels follow it on both `dir`s, so two
+  people facing each other are lit from the same side and a figure that turns keeps its light. Set `light` to the
+  scene's light, never per figure. `cel` called outside `person()` keeps its old local +x light; inside a `hold` prop
+  it uses the figure's light in the hand's frame.
+- Three-quarter sleeves: the near sleeve is one shade under the top (`dk(top, .86)`), the far one `.78`, so an arm in
+  front of the torso reads as an arm and never grows out of the chest; cuffs follow the sleeve as before.
 
 **Arms and hands.** Each arm is a two-bone IK (185 / 170) with tapered tubes. The far arm sits behind the body; when it
 hangs, its hand rests just in front of the thigh so it reads as a hand, as in the TIS frames. Hanging arms sway a
@@ -191,8 +204,19 @@ translate to the palm, undo `j.flip` with `scale(1, -1)`, then `rotate(-j.fa)` b
   a close shot (`s` about 2.4).
 - Set `ground: false` when the feet are out of frame.
 
-**Not yet.** The back view, walking and sitting are not drawn in people34. Use `people.js` for a walk, or draw the
-new view and add a test before using it in a film. Against the Kurzgesagt reference the bodies are still T2 proportions
+**Walking (since 2026-11-13).** `o.walk` = local units walked so far (world px moved / `o.s`), three-quarter view only.
+The legs step with the stance foot planted (the test checks it does not slide), the hips drop onto the standing leg, and
+an arm with no target swings against its leg; give `armN` / `armF` to carry something instead. One cycle is 733 units, so
+a figure at `s: .3` moving 150 px/s takes a step about every 0.73 s. `o.slope` (rad) lays the legs, shoes and floor shadow
+on rising ground while the body stays upright. `o.walkAmt` (0..1) eases the stride, knee lift, hip drop and arm swing
+to nothing for a stop or a start: ramp it over about 0.4 s together with the figure's speed (feed `walk` the distance
+actually covered, so the planted foot does not slide); at 0 the standing legs are drawn. The stance foot stays flat (no
+heel strike or heel lift yet), and the far leg of dark trousers is drawn lighter so the legs do not merge as they pass. Move `o.x` by the same distance you feed `walk`, or scroll the ground under
+a fixed figure by it. Check page: `people34_walk_demo.html` (`?t=` freezes it). Asked for after the cube-Earth Short,
+where นน found the `people.js` walker scene the weakest (2026-11-13).
+
+**Not yet.** The back view, a walk in the front view, running and sitting are not drawn in people34. Use `people.js` for
+those, or draw the new view and add a test before using it in a film. Against the Kurzgesagt reference the bodies are still T2 proportions
 (the reference is rounder, with sloped shoulders, thicker arms and bigger hands).
 
 ## People on a code-drawn canvas (since 2026-11-03)
@@ -284,19 +308,6 @@ life and no speech bubbles. We add:
 - Contact sheets miss the rig faults.
 - Send a reviewer for people only, with a pose strip (every pose, large) and a walk strip (stills every 0.1 s). That pass caught the sliding feet, the arms merged into the torso, the `!` on hats and a pointing arm at nothing.
 
-## Finish layer (house level)
-
-Every episode's graphics get the same depth of finish; only the colours change (นน approved the level on 2026-10-15
-from the Hatshepsut v3 cut; Kurzgesagt is the reference level, not a look to copy). Load `finish.js` after `kit.js`.
-
-| Call | Does | Notes |
-|---|---|---|
-| `finishDefs(svg, {rim, shade, light, warm, warmCore, vig, vigOpacity, grain, dust})` | adds the `fin*` filters and gradients in this episode's colours | once, right after `stage()`; `light` is the offset toward the light, default `[-16, -12]` (upper left) |
-| `rimForm(parent, d, fill, {rim, dx, dy})` | a filled path with a thin rim light on the lit edge | for figures and shapes you build piece by piece; the rim side follows `light` unless dx/dy are given |
-| `litPass(node)` | one filter over a finished piece: rim on the lit edge, soft shade band on the far edge | props and library pieces (`rock`, planets, buildings); do not stack it over `rimForm` parts |
-| `glowHalo(parent, r, {flicker, seed, soft})` → `update(t)` | screen-blended halo for a light source | torches, lamps, a sun low in the frame |
-| `lightShaft(parent, d, {color, opacity, dir})` → `update(t)` | soft beam through a slot or window | one per scene is plenty |
-| `dustLayer(parent, seed, {n, h, colors})` → `update(t)` | drifting particles that catch the light | |
 ## Curved limbs (`limbs.js`, since 2026-11-11)
 
 A geometry helper, not a look: it gives the outline of a curved, tapering shape and leaves the colour, shading and
@@ -333,6 +344,19 @@ Limits: a limb cannot bend at one sharp joint, and a jaw or lid that opens wide 
 head had to be rebuilt that way). The outline is a polygon, so a very tight curl with a wide root can fold over itself;
 lower `curl` or `w`.
 
+## Finish layer (house level)
+
+Every episode's graphics get the same depth of finish; only the colours change (นน approved the level on 2026-10-15
+from the Hatshepsut v3 cut; Kurzgesagt is the reference level, not a look to copy). Load `finish.js` after `kit.js`.
+
+| Call | Does | Notes |
+|---|---|---|
+| `finishDefs(svg, {rim, shade, light, warm, warmCore, vig, vigOpacity, grain, dust})` | adds the `fin*` filters and gradients in this episode's colours | once, right after `stage()`; `light` is the offset toward the light, default `[-16, -12]` (upper left) |
+| `rimForm(parent, d, fill, {rim, dx, dy})` | a filled path with a thin rim light on the lit edge | for figures and shapes you build piece by piece; the rim side follows `light` unless dx/dy are given |
+| `litPass(node)` | one filter over a finished piece: rim on the lit edge, soft shade band on the far edge | props and library pieces (`rock`, planets, buildings); do not stack it over `rimForm` parts |
+| `glowHalo(parent, r, {flicker, seed, soft})` → `update(t)` | screen-blended halo for a light source | torches, lamps, a sun low in the frame |
+| `lightShaft(parent, d, {color, opacity, dir})` → `update(t)` | soft beam through a slot or window | one per scene is plenty |
+| `dustLayer(parent, seed, {n, h, colors})` → `update(t)` | drifting particles that catch the light | |
 | `finishFrame(svg, {vignette, grain})` | vignette and film grain over the frame | last, before the HUD, in place of `overlays()`; a bright scene wants a lighter `vig`/`vigOpacity` |
 
 Also build backgrounds in layers (far, mid, light sources) with slow parallax, and use gradient fills rather than flat

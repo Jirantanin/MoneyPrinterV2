@@ -14,12 +14,23 @@
 //                   +x arms before o.dir) in place of armN / armF, and returns { top, handL, handR } (nearHand = handR).
 //     o.hs          head scale, default 1.28 (the house 1/4 head); 1 gives the TIS 1/5 head
 //     o.dotEyes     default true (bigger dots with a catch light); false gives the small TIS eyes
-//     o.eyes        open | happy (closed arcs) | wide       o.mouth  smile | talk (opens with t) | grin | grit | o
+//     o.light       the world side of the scene light: -1 upper left (default, the house light) | 1 upper right. The shade
+//                   planes (cel), the head shade (a thin rim when the face turns away) and the two-tone lapels and vest panels stay on the side away from
+//                   it whatever o.dir is, so two people facing each other are lit from the same side (since 2026-11-06)
+//     o.eyes        open | happy (closed arcs) | wide       o.mouth  smile | talk (opens with t) | grin | grit | o | flat
+//     o.look/lookY  pupil offset in local units (about +-6 / +-4; +x toward the face before o.dir, +y down); the far eye
+//                   moves less; ignored on closed and happy eyes. flat = a short straight mouth (worry, doubt, deadpan)
 //     o.brow        calm | up | worry          o.sweat  a falling drop       o.nod  extra head tilt (rad)
 //     o.belly       a pregnant belly (default C.belly): a bulge forward in tq, a lighter disc on the garment in front
 //     o.armN/armF   near / far arm target {x, y (local units), hand: mitt|fingers, big, bend (1 | -1), hold(api)}
 //                   hold(api, j) draws a prop in hand space (+x along the forearm) instead of the hand; j.fa is the forearm
 //                   angle (rotate by -j.fa for an upright prop; undo j.flip with scale(1, -1) first) ; the far arm is behind the body
+//     o.walk        (tq only, since 2026-11-13) local units walked so far (world px / o.s): the legs step with the foot
+//                   planted through the stance, the hips drop onto the standing leg, and an arm with no target swings
+//                   against its leg. One cycle = 4 * 494 * sin(.38) = 733 units. o.walkAmt (0..1, default 1) eases the
+//                   stride, knee lift, hip drop and arm swing to nothing, to start or stop: ramp it over ~0.4 s while the
+//                   figure's speed ramps with it; at 0 the standing legs are drawn. o.slope (rad): the ground rises that much
+//                   ahead; legs, shoes and the floor shadow follow it, the body stays upright
 //     o.ground      false drops the floor shadow (mid and close shots)      o.seed  blinks and breathing phase
 // Local units: feet at y 0, shoulders near y -770, the neck at -812; facing +x before o.dir.
 const People34 = (() => {
@@ -65,11 +76,12 @@ const People34 = (() => {
       }
     }
     function fill(sh, col) { ctx.beginPath(); trace(sh); ctx.fillStyle = col; ctx.fill(); }
-    // flat colour plus one big shade plane: the part of the shape not covered by itself moved toward the light (front, up)
+    // flat colour plus one big shade plane: the part of the shape not covered by itself moved toward the light (up, and to
+    // the world side o.light while person() draws; local +x outside it, as before)
     function cel(sh, col, d = 16, k = .8) {
       ctx.save(); ctx.beginPath(); trace(sh); ctx.clip();
       ctx.fillStyle = dk(col, k); ctx.fillRect(-4000, -4000, 8000, 8000);
-      ctx.translate(d, -d * .5); fill(sh, col); ctx.restore();
+      ctx.translate(d * curLX, -d * .5); fill(sh, col); ctx.restore();
     }
     function stroke(sh, col, w) { ctx.beginPath(); trace(sh); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke(); }
     const ell = (cx, cy, rx, ry, rot = 0) => () => ctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2);
@@ -80,6 +92,7 @@ const People34 = (() => {
       ctx.arc(x1, y1, r1, n + Math.PI, n, true); ctx.closePath();
     };
     let curT = 0, curSeed = 1;   // the person being drawn, for the idle sway of hanging arms
+    let curLX = 1;               // the light's local x side (o.light * o.dir) while person() draws; 1 outside it, as before
     function blinkOn(t, seed) {
       const tt = t + seed * 1.7, n = Math.floor(tt / 3.45);
       for (const m of [n - 1, n]) { const b = m * 3.45 + (rnd(m * 3.1 + seed) - .5) * .75; if (tt >= b && tt < b + .14) return true; }
@@ -92,6 +105,7 @@ const People34 = (() => {
       return { ex, ey, hx: ex + Math.cos(fa) * b, hy: ey + Math.sin(fa) * b, fa };
     }
     const cheeks = C => C.blush === false ? null : (C.blush || BLUSH);
+    const pair = (neg, pos) => curLX > 0 ? [neg, pos] : [pos, neg];   // tones of the -x and +x piece, given for light on +x
 
     // ---- body, three-quarter ----
     function legs(C, far) {
@@ -104,6 +118,31 @@ const People34 = (() => {
       } else if (!far) stroke('M 40 -500 C 42 -360 40 -210 37 -60', lt(pc, .12), 3);   // the trouser crease
       fill('M 2 -42 L 66 -42 C 100 -40 118 -26 118 -6 L 118 0 L 0 0 Z', sc);
       ctx.restore();
+    }
+    // ---- walking legs, three-quarter (o.walk). Thigh 250 + shin 244 = the standing leg (hip -530 to ankle -36). In the
+    // stance the thigh angle follows asin of a linear foot offset, so the planted foot does not slide; on the swing the knee
+    // bends and the shoe tips toe-down, then toe-up, and is level again as it lands.
+    const WT = 250, WS = 244, WL = WT + WS, WA = Math.sin(.38), SHOE = 'M 2 -42 L 66 -42 C 100 -40 118 -26 118 -6 L 118 0 L 0 0 Z';
+    function gait(d, amt = 1) {
+      const p = 2 * Math.PI * d / (4 * WL * WA);
+      const leg = ph => { ph = ((ph % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        if (ph < Math.PI) return { th: amt * Math.asin(WA * (1 - 2 * ph / Math.PI)), k: 0, sw: false, v: ph / Math.PI };
+        const v = (ph - Math.PI) / Math.PI; return { th: -.38 * amt * Math.cos(v * Math.PI), k: .8 * amt * Math.sin(v * Math.PI) ** 1.2, sw: true, v, amt }; };   // the knee stays bent late, so the foot clears the ground until it lands
+      const near = leg(p), far = leg(p + Math.PI), st = near.sw ? far : near, hipY = -36 - WL * Math.cos(st.th);
+      return { near, far, hipY, bob: hipY + 530 };
+    }
+    function legW(C, g, far, hipY) {
+      // the far leg: darker, but lighter on trousers already too dark to darken, so the two legs never merge as they pass
+      const dark = hx(C.pants).reduce((a, v) => a + v, 0) < 200, pc = !far ? C.pants : dark ? lt(C.pants, .16) : dk(C.pants, .78), sc = far ? dk(C.shoe, .8) : C.shoe, hx0 = far ? -22 : 34;
+      const kx = hx0 + Math.sin(g.th) * WT, ky = hipY + Math.cos(g.th) * WT, ax = kx + Math.sin(g.th - g.k) * WS, ay = ky + Math.cos(g.th - g.k) * WS;
+      if (C.look === 'tee') {   // shorts: a bare shin, the hem a darker band above the knee
+        fill(cap(kx, ky, ax, ay, 31, 26), dk(C.skin, far ? .85 : 1)); fill(cap(hx0, hipY, kx, ky, 47, 39), pc);
+        fill(cap(lerp(hx0, kx, .9), lerp(hipY, ky, .9), lerp(hx0, kx, .97), lerp(hipY, ky, .97), 40, 39), dk(pc, .85));
+      } else { fill(cap(kx, ky, ax, ay, 35, 29), pc); fill(cap(hx0, hipY, kx, ky, 47, 37), pc); }
+      const pitch = g.sw ? g.amt * Math.sin(g.v * Math.PI) * .5 * (1 - g.v) : 0;   // flat through the stance, so the heel never sinks
+      // a tipped shoe is lifted just enough that neither the toe nor the heel goes below the ground line
+      const up = Math.max(0, ay + 36 * Math.cos(pitch) + Math.max(81 * Math.sin(pitch), -37 * Math.sin(pitch)));
+      ctx.save(); ctx.translate(ax, ay - up); ctx.rotate(pitch); ctx.translate(-37, 36); fill(SHOE, sc); ctx.restore();
     }
     function torso(C, br, belly) {
       ctx.save(); ctx.translate(0, br); ctx.scale(C.narrow || 1, 1);
@@ -118,7 +157,7 @@ const People34 = (() => {
         cel('M -16 -812 C -80 -810 -108 -790 -112 -748 C -106 -660 -98 -600 -100 -560 C -104 -480 -108 -420 -108 -360 C -30 -350 40 -350 108 -362 C 106 -430 100 -500 98 -560 C 98 -620 104 -680 106 -740 C 102 -790 80 -810 44 -814 Z', C.top, 18, .86);
         fill('M 4 -814 L 50 -816 L 40 -600 L 22 -600 Z', C.shirt);
         collar(dk(C.shirt, .9), false);
-        fill('M 4 -814 L -8 -760 L 22 -600 Z', '#d9d4c8'); fill('M 50 -816 L 68 -770 L 40 -600 Z', '#e6e2d8');   // lapels
+        { const [la, lb] = pair('#d9d4c8', '#e6e2d8'); fill('M 4 -814 L -8 -760 L 22 -600 Z', la); fill('M 50 -816 L 68 -770 L 40 -600 Z', lb); }   // lapels
         fill('M 52 -560 L 92 -560 L 90 -500 L 54 -500 Z', '#e2ded3');                                            // breast pocket
         stroke('M 31 -600 C 30 -500 30 -430 29 -360', '#d9d4c8', 4);                                             // the front edge
       } else if (C.look === 'suit') {
@@ -126,7 +165,7 @@ const People34 = (() => {
         fill('M 0 -816 L 52 -818 L 34 -628 Z', C.shirt);
         collar('#f2f2f5');
         if (C.tie) { fill('M 18 -806 L 34 -806 L 40 -690 L 28 -664 L 16 -690 Z', C.tie); fill('M 16 -812 L 36 -812 L 32 -796 L 20 -796 Z', dk(C.tie, .8)); }
-        fill('M 0 -816 L -14 -770 L 6 -760 L 32 -628 Z', dk(C.top, .72)); fill('M 52 -818 L 70 -774 L 56 -764 L 34 -628 Z', dk(C.top, .86));   // lapels
+        { const [la, lb] = pair(.72, .86); fill('M 0 -816 L -14 -770 L 6 -760 L 32 -628 Z', dk(C.top, la)); fill('M 52 -818 L 70 -774 L 56 -764 L 34 -628 Z', dk(C.top, lb)); }   // lapels
         stroke('M 33 -628 C 32 -560 32 -500 30 -462', dk(C.top, .7), 4);                                                                       // the front edge
         fill(ell(40, -560, 6, 6), dk(C.top, .6)); fill(ell(41, -520, 6, 6), dk(C.top, .6));
       } else if (C.look === 'dress') {   // one garment to the knee: a slight waist, then the skirt flares
@@ -137,8 +176,9 @@ const People34 = (() => {
         if (C.look === 'vest') {
           collar(dk(C.top, .86));
           fill('M 6 -812 L 48 -814 L 36 -770 L 18 -770 Z', dk(C.top, .78));   // polo placket
-          cel('M -104 -770 C -100 -790 -70 -800 -52 -800 L -40 -470 L -104 -478 Z', C.vest, 10, .82);
-          cel('M 40 -804 C 70 -800 100 -790 106 -760 L 104 -480 L 54 -470 Z', C.vest, 10, .9);
+          const [va, vb] = pair(.82, .9);
+          cel('M -104 -770 C -100 -790 -70 -800 -52 -800 L -40 -470 L -104 -478 Z', C.vest, 10, va);
+          cel('M 40 -804 C 70 -800 100 -790 106 -760 L 104 -480 L 54 -470 Z', C.vest, 10, vb);
           for (const y of [-640, -560]) { fill(`M -104 ${y} L -40 ${y - 4} L -40 ${y + 14} L -104 ${y + 18} Z`, '#e6e9ef'); fill(`M 52 ${y - 4} L 105 ${y} L 105 ${y + 18} L 52 ${y + 14} Z`, '#e6e9ef'); }
         } else if (C.look === 'shirt') crew(lt(C.top, .35), true);   // a plain top: a lighter crew band
         else crew(dk(C.top, .78));                                    // tee neckline
@@ -172,7 +212,7 @@ const People34 = (() => {
       const ty = a && a.y != null ? a.y : F ? -430 : sy + 340;
       const bend = a && a.bend != null ? a.bend : F ? (ty < sy ? -1 : 1) * side : -1;
       const j = ik(sx, sy, tx, ty, bend, 185, 170);
-      const sl = F ? dk(C.top, .9) : dk(C.top, far ? .78 : 1), skin = F ? C.skin : dk(C.skin, far ? .85 : 1);
+      const sl = F ? dk(C.top, .9) : dk(C.top, far ? .78 : .86), skin = F ? C.skin : dk(C.skin, far ? .85 : 1);
       fill(cap(sx, sy, j.ex, j.ey, 34, 29), sl);
       if (LONG[C.look]) {
         fill(cap(j.ex, j.ey, j.hx, j.hy, 29, 24), sl);
@@ -198,7 +238,11 @@ const People34 = (() => {
       const sk = C.skin, eyeMode = o.eyes || 'open', closed = blinkOn(t, o.seed || 1) && eyeMode !== 'happy', dots = o.dotEyes !== false;
       if (C.hairStyle === 'bun') cel(ell(-62, -982, 36, 34), C.hair, 6);
       ctx.save(); ctx.beginPath(); trace(FACE); ctx.clip(); fill(FACE, sk);
-      fill('M -120 -1000 L -38 -1000 C -60 -930 -50 -860 -6 -800 L -120 -800 Z', dk(sk, .92)); ctx.restore();   // back of the head
+      // the shade side of the head: the back when the face is toward the light. Turned away from it, the face stays lit (it
+      // carries the beat): only a thin rim along the nose, the mouth corner and the jaw, never a plane across the mouth
+      if (curLX > 0) fill('M -120 -1000 L -38 -1000 C -60 -930 -50 -860 -6 -800 L -120 -800 Z', dk(sk, .92));
+      else { fill(FACE, dk(sk, .92)); ctx.translate(-7, -3.5); fill(FACE, sk); }
+      ctx.restore();
       if (C.hairStyle !== 'bob') { fill(ell(-26, -886, 14, 21), sk); fill(ell(-24, -884, 7, 12), dk(sk, .82)); }   // the one ear, at the back
       if (C.hairStyle === 'quiff') {
         // seen turned, not the front cap with its tuft: the lift overhangs the forehead, the crown slopes down to the back
@@ -223,10 +267,13 @@ const People34 = (() => {
       if (o.brow === 'worry') { stroke('M 22 -914 L 48 -922', bc, 8); stroke('M 62 -922 L 76 -916', bc, 7); }
       else { stroke(`M 22 ${-918 + up} Q 36 ${-926 + up} 50 ${-920 + up}`, bc, 8); stroke(`M 62 ${-921 + up} Q 70 ${-925 + up} 77 ${-920 + up}`, bc, 6); }
       const ink = '#20182c', es = dots ? 1.5 : 1;   // the near eye full, the far one narrow by the nose
+      const lx = o.look || 0, ly = o.lookY || 0;     // pupils: the near eye moves the full offset, the far eye .6 of it
       if (closed) { stroke('M 30 -896 L 46 -896', ink, 5); stroke('M 66 -896 L 74 -896', ink, 4); }
       else if (eyeMode === 'happy') { stroke('M 28 -892 Q 38 -906 48 -892', ink, 5.5); stroke('M 64 -893 Q 70 -903 76 -893', ink, 4.5); }
-      else if (eyeMode === 'wide') { fill(ell(38, -896, 10, 12), '#fff'); fill(ell(41, -896, 6, 7), ink); fill(ell(71, -896, 6, 11), '#fff'); fill(ell(73, -896, 4, 6), ink); }
-      else { fill(ell(38, -896, 6.5 * es, 8.5 * es), ink); fill(ell(71, -896, 4.5 * es, 8 * es), ink); if (dots) fill(ell(40, -900, 2.6, 2.6), '#fff'); }
+      else if (eyeMode === 'wide') {   // the pupil moves inside the white
+        fill(ell(38, -896, 10, 12), '#fff'); fill(ell(38 + clamp(3 + lx * .6, -3, 3), -896 + clamp(ly * .8, -4, 4), 6, 7), ink);
+        fill(ell(71, -896, 6, 11), '#fff'); fill(ell(71 + clamp(2 + lx * .4, -2, 2), -896 + clamp(ly * .6, -4, 4), 4, 6), ink);
+      } else { fill(ell(38 + lx, -896 + ly, 6.5 * es, 8.5 * es), ink); fill(ell(71 + lx * .6, -896 + ly * .6, 4.5 * es, 8 * es), ink); if (dots) fill(ell(40 + lx, -900 + ly, 2.6, 2.6), '#fff'); }
       const blush = cheeks(C);   // the near cheek under the eye, a sliver of the far one by the nose
       if (blush) { fill(ell(22, -866, 15, 10), blush); fill(ell(60, -863, 6, 7), blush); }
       if (C.stache) fill('M 46 -846 C 58 -856 76 -856 90 -848 C 86 -836 74 -836 66 -840 C 58 -834 48 -836 46 -846 Z', C.stache);
@@ -241,6 +288,7 @@ const People34 = (() => {
         fill('M 32 -843 L 77 -844 L 75 -823 L 34 -821 Z', '#fff'); stroke('M 33 -832 L 76 -833', '#c9c4d0', 2.5);
         for (const x of [44, 55, 66]) stroke(`M ${x} -843 L ${x} -822`, '#c9c4d0', 2);
       } else if (m === 'o') fill(ell(56, -832, 10, 13), mc);
+      else if (m === 'flat') stroke('M 42 -838 L 70 -839', mc, 6);
       else stroke('M 36 -842 Q 56 -828 74 -844', mc, 6);
       if (o.sweat) { const y = -930 + ((t * .9) % 1) * 40;
         fill(`M -46 ${y - 22} C -40 ${y - 8} -34 ${y} -40 ${y + 8} C -46 ${y + 12} -54 ${y + 6} -52 ${y} C -51 ${y - 6} -48 ${y - 12} -46 ${y - 22} Z`, '#8fd8e6'); }
@@ -268,21 +316,22 @@ const People34 = (() => {
       else if (C.look === 'coat') {
         cel(BODY_F, C.top, 16, .86);
         fill('M -22 -814 L 22 -814 L 16 -470 L -16 -470 Z', C.shirt); collar(dk(C.shirt, .9));
-        fill('M -22 -814 L -42 -760 L -8 -640 Z', '#d9d4c8'); fill('M 22 -814 L 42 -760 L 8 -640 Z', '#e6e2d8');   // lapels
+        { const [la, lb] = pair('#d9d4c8', '#e6e2d8'); fill('M -22 -814 L -42 -760 L -8 -640 Z', la); fill('M 22 -814 L 42 -760 L 8 -640 Z', lb); }   // lapels
         fill('M 44 -560 L 84 -560 L 84 -500 L 46 -500 Z', '#e2ded3');                                           // breast pocket
       } else if (C.look === 'suit') {
         cel(BODY_F, C.top, 16);
         fill('M -34 -816 L 34 -816 L 0 -640 Z', C.shirt); collar('#f2f2f5');
         if (C.tie) { fill('M -8 -806 L 8 -806 L 12 -690 L 0 -664 L -12 -690 Z', C.tie); fill('M -10 -812 L 10 -812 L 6 -796 L -6 -796 Z', dk(C.tie, .8)); }
-        fill('M -34 -816 L -54 -770 L -30 -760 L 0 -640 Z', dk(C.top, .72)); fill('M 34 -816 L 54 -770 L 30 -760 L 0 -640 Z', dk(C.top, .86));   // lapels
+        { const [la, lb] = pair(.72, .86); fill('M -34 -816 L -54 -770 L -30 -760 L 0 -640 Z', dk(C.top, la)); fill('M 34 -816 L 54 -770 L 30 -760 L 0 -640 Z', dk(C.top, lb)); }   // lapels
         stroke('M 0 -640 C 0 -560 0 -500 0 -462', dk(C.top, .7), 4);
         fill(ell(8, -560, 6, 6), dk(C.top, .6)); fill(ell(8, -520, 6, 6), dk(C.top, .6));
       } else {
         cel(BODY_F, C.top, 16);
         if (C.look === 'vest') {
           collar(dk(C.top, .86)); fill('M -14 -812 L 14 -812 L 10 -770 L -10 -770 Z', dk(C.top, .78));   // polo placket
-          cel('M -112 -770 C -108 -790 -80 -800 -62 -800 L -46 -470 L -108 -478 Z', C.vest, 10, .82);
-          cel('M 112 -770 C 108 -790 80 -800 62 -800 L 46 -470 L 108 -478 Z', C.vest, 10, .9);
+          const [va, vb] = pair(.82, .9);
+          cel('M -112 -770 C -108 -790 -80 -800 -62 -800 L -46 -470 L -108 -478 Z', C.vest, 10, va);
+          cel('M 112 -770 C 108 -790 80 -800 62 -800 L 46 -470 L 108 -478 Z', C.vest, 10, vb);
           for (const y of [-640, -560]) { fill(`M -108 ${y} L -46 ${y - 4} L -46 ${y + 14} L -108 ${y + 18} Z`, '#e6e9ef'); fill(`M 46 ${y - 4} L 108 ${y} L 108 ${y + 18} L 46 ${y + 14} Z`, '#e6e9ef'); }
         } else if (C.look === 'shirt') crew(lt(C.top, .35));
         else crew(dk(C.top, .78));
@@ -319,12 +368,12 @@ const People34 = (() => {
       const bc = C.hairStyle === 'hat' ? (C.stache || dk(C.hair, .6)) : dk(C.hair, .8), up = o.brow === 'up' ? -8 : 0;
       if (o.brow === 'worry') { stroke('M -58 -916 L -30 -924', bc, 8); stroke('M 30 -924 L 58 -916', bc, 8); }
       else for (const sd of [-1, 1]) stroke(`M ${sd * 58} ${-918 + up} Q ${sd * 44} ${-926 + up} ${sd * 30} ${-920 + up}`, bc, 8);
-      const ink = '#20182c', es = dots ? 1.5 : 1;
+      const ink = '#20182c', es = dots ? 1.5 : 1, lx = o.look || 0, ly = o.lookY || 0;
       for (const sd of [-1, 1]) {
         if (closed) stroke(`M ${sd * 28} -896 L ${sd * 44} -896`, ink, 5);
         else if (eyeMode === 'happy') stroke(`M ${sd * 26} -892 Q ${sd * 36} -906 ${sd * 46} -892`, ink, 5.5);
-        else if (eyeMode === 'wide') { fill(ell(sd * 36, -896, 10, 12), '#fff'); fill(ell(sd * 36 + 2, -896, 6, 7), ink); }
-        else { fill(ell(sd * 36, -896, 6.5 * es, 8.5 * es), ink); if (dots) fill(ell(sd * 36 + 2, -900, 2.6, 2.6), '#fff'); }
+        else if (eyeMode === 'wide') { fill(ell(sd * 36, -896, 10, 12), '#fff'); fill(ell(sd * 36 + clamp(2 + lx * .6, -4, 4), -896 + clamp(ly * .8, -4, 4), 6, 7), ink); }
+        else { fill(ell(sd * 36 + lx, -896 + ly, 6.5 * es, 8.5 * es), ink); if (dots) fill(ell(sd * 36 + 2 + lx, -900 + ly, 2.6, 2.6), '#fff'); }
       }
       const blush = cheeks(C);
       if (blush) for (const sd of [-1, 1]) fill(ell(sd * 56, -862, 15, 10), blush);
@@ -340,6 +389,7 @@ const People34 = (() => {
         fill('M -22 -843 L 22 -843 L 20 -821 L -20 -821 Z', '#fff'); stroke('M -21 -832 L 21 -832', '#c9c4d0', 2.5);
         for (const x of [-11, 0, 11]) stroke(`M ${x} -843 L ${x} -822`, '#c9c4d0', 2);
       } else if (m === 'o') fill(ell(0, -832, 10, 13), mc);
+      else if (m === 'flat') stroke('M -14 -838 L 14 -838', mc, 6);
       else stroke('M -18 -842 Q 0 -826 18 -842', mc, 6);
       if (o.sweat) { const y = -930 + ((t * .9) % 1) * 40;
         fill(`M -74 ${y - 22} C -68 ${y - 8} -62 ${y} -68 ${y + 8} C -74 ${y + 12} -82 ${y + 6} -80 ${y} C -79 ${y - 6} -76 ${y - 12} -74 ${y - 22} Z`, '#8fd8e6'); }
@@ -348,10 +398,14 @@ const People34 = (() => {
     function person(o, t) {
       const C = o.C || CAST.off, seed = o.seed || 1, hs = o.hs != null ? o.hs : 1.28, dir = o.dir || 1, s = o.s, front = o.view === 'front';
       const belly = o.belly != null ? o.belly : !!C.belly;
-      const br = Math.sin(t * 2.3 + seed) * 3.5, nod = (o.nod || 0) + .025 * Math.sin(t * 1.9 + seed * 1.7), nx = C.narrow || 1;
-      curT = t; curSeed = seed;
+      const wa = o.walkAmt != null ? clamp(o.walkAmt, 0, 1) : 1, W = !front && o.walk != null && wa > 0 ? gait(o.walk, wa) : null, sl = Math.tan(o.slope || 0);
+      const onGround = fn => { if (!sl) return fn(); ctx.save(); ctx.transform(1, -sl, 0, 1, 0, 0); fn(); ctx.restore(); };
+      const br = W ? W.bob + Math.sin(t * 2.3 + seed) * 1.2 : Math.sin(t * 2.3 + seed) * 3.5, nod = (o.nod || 0) + .025 * Math.sin(t * 1.9 + seed * 1.7), nx = C.narrow || 1;
+      curT = t; curSeed = seed; curLX = (o.light > 0 ? 1 : -1) * dir;   // world-fixed light: the mirror must not carry it
       ctx.save(); ctx.translate(o.x, o.y); ctx.scale(s * dir, s);
-      if (o.ground !== false) fill(ell(front ? 0 : 10, -2, 150, 16), 'rgba(40,25,30,.16)');
+      if (o.ground !== false) onGround(() => fill(ell(front ? 0 : 10, -2, 150, 16), 'rgba(40,25,30,.16)'));
+      // a walking arm with no target swings against its own leg (the near arm goes back as the near leg comes forward)
+      const swing = (a, sx, sy, g) => a || !W ? a : { x: sx - Math.sin(g.th) * 300 + 20, y: sy + 330 - Math.abs(Math.sin(g.th)) * 40, bend: -1 };
       const headSpace = fn => { ctx.save(); ctx.translate(0, br - 812); ctx.rotate(nod); ctx.scale(hs, hs); ctx.translate(0, 812); fn(); ctx.restore(); };
       // the neck goes under the collar: narrow, skin, the top in the chin's shadow
       const neck = (nk, shade) => headSpace(() => { fill(nk, C.skin); ctx.save(); ctx.beginPath(); trace(nk); ctx.clip(); fill(shade, dk(C.skin, .8)); ctx.restore(); });
@@ -364,14 +418,15 @@ const People34 = (() => {
         jf = arm(C, -104 * nx, -770 + br, o.armL, false, { side: -1 });
         jn = arm(C, 104 * nx, -770 + br, o.armR, false, { side: 1 });
       } else {
-        jf = arm(C, 64 * nx, -772 + br, o.armF, true);
-        legs(C, true); legs(C, false);
+        jf = arm(C, 64 * nx, -772 + br, swing(o.armF, 64 * nx, -772 + br, W && W.far), true);
+        if (W) onGround(() => { legW(C, W.far, true, W.hipY); legW(C, W.near, false, W.hipY); fill(cap(-22, W.hipY, 34, W.hipY, 47, 47), C.pants); });
+        else { legs(C, true); legs(C, false); }
         neck('M -10 -760 L 30 -760 L 28 -852 L -8 -852 Z', 'M -40 -900 L 60 -900 L 60 -824 C 30 -812 0 -814 -40 -826 Z');
         torso(C, br, belly);
         headSpace(() => head(C, o, t));
-        jn = arm(C, -58 * nx, -768 + br, o.armN, false);
+        jn = arm(C, -58 * nx, -768 + br, swing(o.armN, -58 * nx, -768 + br, W && W.near), false);
       }
-      ctx.restore();
+      ctx.restore(); curLX = 1;
       const w = (x, y, fa) => ({ x: o.x + dir * s * x, y: o.y + s * y, a: Math.atan2(Math.sin(fa), dir * Math.cos(fa)) });
       const top = o.y + s * (br - 812 - hs * ((TOP[C.hairStyle] || TOP.quiff) - 812));
       const out = { top, nearHand: w(jn.hx, jn.hy, jn.fa), farHand: w(jf.hx, jf.hy, jf.fa) };
