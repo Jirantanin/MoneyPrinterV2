@@ -116,6 +116,21 @@ class UploadPackTests(unittest.TestCase):
         self.assertLess(description.index("Source 5"), description.index("Source 0"))
         self.assertNotIn("Source 1", description)
 
+    def test_description_sources_match_plans_that_key_sources_by_id(self) -> None:
+        # Producer Mode plans store research sources as {"id": "src_01", ...}; the selection must find them too.
+        plan = _plan(upload_description="คำอธิบายสาธารณะ")
+        plan["research"]["sources"] = [
+            {"id": f"src_{i:02d}", "title": f"Paper {i}", "url": f"https://example.org/{i}"} for i in range(1, 6)
+        ]
+        plan["seo_packaging"]["description_source_ids"] = ["src_04", "src_01"]
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        episode_dir = Path(temp_dir.name)
+        write_upload_pack(episode_dir=episode_dir, plan=plan, final_qc={"status": "pass"}, render_props={})
+        description = (episode_dir / "upload_pack" / "description.txt").read_text(encoding="utf-8")
+        self.assertLess(description.index("Paper 4"), description.index("Paper 1"))
+        self.assertNotIn("Paper 2", description)
+
     def test_description_lists_source_names_without_links(self) -> None:
         plan = _plan(upload_description="คำอธิบายสาธารณะ")
         plan["research"]["sources"] = [

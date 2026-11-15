@@ -94,7 +94,7 @@ def _source_lines(research: dict[str, Any], *, source_ids: list[Any] | None = No
     sources = [source for source in _as_list(research.get("sources")) if isinstance(source, dict)]
     if source_ids:
         # Producer-chosen order (seo_packaging.description_source_ids); research order is not a ranking.
-        by_id = {_clean_text(source.get("source_id")): source for source in sources}
+        by_id = {_clean_text(source.get("source_id") or source.get("id")): source for source in sources}
         sources = [by_id[key] for key in (_clean_text(item) for item in source_ids) if key in by_id]
         limit = MAX_DESCRIPTION_SOURCES
     rows: list[str] = []
