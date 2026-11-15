@@ -54,6 +54,17 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual(styles, {Tts.DEADPAN_STYLE})
         self.assertIn("deadpan", Tts.DEADPAN_STYLE)
 
+    def test_brisk_and_upbeat_styles_are_constant_across_scenes(self):
+        self.assertEqual(Tts.normalize_gemini_tts_tone_preset("brisk"), "deadpan_brisk")
+        self.assertEqual(Tts.normalize_gemini_tts_tone_preset("deadpan-brisk"), "deadpan_brisk")
+        self.assertEqual(Tts.normalize_gemini_tts_tone_preset("upbeat"), "upbeat")
+        self.assertEqual(Tts.normalize_gemini_tts_tone_preset("brisk-wit"), "brisk_wit")
+        for preset, style in (("deadpan_brisk", Tts.DEADPAN_BRISK_STYLE), ("upbeat", Tts.UPBEAT_STYLE),
+                              ("brisk_wit", Tts.BRISK_WIT_STYLE)):
+            self.assertEqual({gemini_speech_style(preset, i, 34) for i in (-1, 0, 17, 33)}, {style})
+        self.assertIn("brisk", Tts.DEADPAN_BRISK_STYLE)
+        self.assertNotIn("unhurried", Tts.DEADPAN_BRISK_STYLE)
+
 
 class AudioTests(unittest.TestCase):
     def test_find_audio_in_steps(self):

@@ -23,6 +23,19 @@ HOST_DRY_STYLE = "dry humor, wry, storytelling like chatting with an old friend"
 # Calm deadpan for Kurzgesagt-style episodes (นน picked it over host_dry, universe-doesnt-care 2026-10-29).
 DEADPAN_STYLE = ("calm, understated documentary narration with a deadpan wit; unhurried and even, never chatty or excited; "
                  "let the short punchlines land flat with a small pause before them")
+# Brisk deadpan (นน picked it for wormhole-shortcut-mission 2026-11-10: host_dry sounded like "the uncle next door",
+# deadpan was too slow). About a quarter faster than deadpan with the same voice.
+DEADPAN_BRISK_STYLE = ("understated documentary narration with a deadpan wit; brisk, forward-moving pace like a science "
+                       "explainer, even and confident, never chatty, never slow or drawn out; only a very short pause "
+                       "before a punchline")
+# Upbeat explainer with dry wit (auditioned beside deadpan_brisk on 2026-11-10; นน liked both).
+UPBEAT_STYLE = ("upbeat, curious science-explainer narration with dry wit; energetic and forward-moving, clear and "
+                "confident, building excitement toward each reveal and landing punchlines with a short beat; "
+                "not chatty, not slow, not solemn")
+# deadpan_brisk and upbeat mixed into one style; นน picked it for wormhole-shortcut-mission ("เอา I แบบผสม", 2026-11-10).
+BRISK_WIT_STYLE = ("science-explainer narration with a deadpan wit and real curiosity; brisk, forward-moving pace, even and "
+                   "confident; let the energy build toward each reveal, then land the punchline dry after a very short "
+                   "beat; never chatty, never slow or drawn out, not solemn")
 HTTP_SESSION = requests.Session()
 HTTP_SESSION.trust_env = False
 
@@ -43,6 +56,10 @@ def normalize_gemini_tts_tone_preset(value: str | None) -> str:
         "host_dry": "host_dry",
         "deadpan": "deadpan",
         "kurz": "deadpan",
+        "brisk": "deadpan_brisk",
+        "deadpan_brisk": "deadpan_brisk",
+        "upbeat": "upbeat",
+        "brisk_wit": "brisk_wit",
     }
     return aliases.get(preset, DEFAULT_GEMINI_TTS_TONE_PRESET)
 
@@ -84,6 +101,12 @@ def gemini_speech_style(preset: str, scene_index: int = -1, total_scenes: int = 
         return HOST_DRY_STYLE
     if preset == "deadpan":
         return DEADPAN_STYLE
+    if preset == "deadpan_brisk":
+        return DEADPAN_BRISK_STYLE
+    if preset == "upbeat":
+        return UPBEAT_STYLE
+    if preset == "brisk_wit":
+        return BRISK_WIT_STYLE
     return f"{_gemini_audio_profile(preset)} {_gemini_directors_notes(preset, scene_index, total_scenes)}"
 
 
