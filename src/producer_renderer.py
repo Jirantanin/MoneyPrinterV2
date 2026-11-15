@@ -379,12 +379,21 @@ def _mix_sfx_cues(*, episode_dir: Path, audio_path: Path, log_path: Path) -> tup
     return output_path, {"status": "mixed", "cue_count": len(cues), "cues_path": str(cues_path)}
 
 
+LOUDNESS_TARGET_I, LOUDNESS_TARGET_TP = -16.0, -1.5
+LOUDNORM_FILTER = "loudnorm=I=-16:TP=-1.5:LRA=11"   # single-pass delivery loudness (dynamic mode)
+FINAL_SAMPLE_RATE = 48000                            # loudnorm resamples to 192 kHz; deliver 48 kHz
+
+
 def _normalize_rendered_audio(
     input_path: Path,
     output_path: Path,
     log_path: Path,
     min_video_bytes: int,
+    *,
+    loudnorm: bool = True,
 ) -> None:
+    """Encode the delivery file: video copied, AAC 192k at 48 kHz, loudness-normalized unless the renderer
+    already brought every part to the target (minimal_doc with an end CTA, see append_end_cta)."""
     temp_output = Path(str(output_path) + ".tmp.mp4")
     if temp_output.exists():
         temp_output.unlink()
@@ -400,8 +409,9 @@ def _normalize_rendered_audio(
             "aac",
             "-b:a",
             "192k",
-            "-af",
-            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            *(["-af", LOUDNORM_FILTER] if loudnorm else []),
+            "-ar",
+            str(FINAL_SAMPLE_RATE),
             "-movflags",
             "+faststart",
             str(temp_output),
@@ -681,7 +691,9 @@ def orchestrate_render(
         manifest["render_result"] = render_result
         if not raw_final_path.exists() or raw_final_path.stat().st_size <= min_render_bytes:
             raise RuntimeError("final_unnormalized.mp4 was not created or is too small")
-        _normalize_rendered_audio(raw_final_path, final_path, log_path, min_render_bytes)
+        already_normalized = isinstance(render_result, dict) and bool(render_result.get("audio_normalized"))
+        _normalize_rendered_audio(raw_final_path, final_path, log_path, min_render_bytes,
+                                  loudnorm=not already_normalized)
         if raw_final_path.exists():
             raw_final_path.unlink()
         if not final_path.exists() or final_path.stat().st_size <= min_render_bytes:

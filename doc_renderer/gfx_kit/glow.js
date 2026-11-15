@@ -132,7 +132,7 @@ function glowFrame(svg, { vignette = true, grain = GLW.grain, fps = 25 } = {}) {
   if (vignette) el('rect', { width: KW, height: KH, fill: 'url(#glwVig)', 'pointer-events': 'none' }, svg);
   if (grain) el('rect', { width: KW, height: KH, filter: 'url(#glwGrain)', opacity: grain, style: 'mix-blend-mode:overlay', 'pointer-events': 'none' }, svg);
   const turb = svg.querySelector('#glwTurb');
-  return t => turb && turb.setAttribute('seed', String(1 + Math.floor(t * fps / 2) % 8));   // grain changes on 2s
+  return t => turb && turb.setAttribute('seed', String(1 + Math.floor(t * fps / 2 + 1e-6) % 8));   // grain changes on 2s
 }
 
 // A planet or any round body lit from one side by crisp lines instead of a blurred halo (big halos turn the frame muddy):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -161,7 +162,8 @@ class RevisionAndDispatchTests(unittest.TestCase):
                 Path(kwargs["raw_props"]["outputPath"]).write_bytes(b"0" * 2_000_000)
                 return {"renderer": "minimal_doc"}
 
-            def fake_normalize(src, dst, log, minimum):
+            def fake_normalize(src, dst, log, minimum, **kwargs):
+                calls["loudnorm"] = kwargs.get("loudnorm", True)
                 Path(dst).write_bytes(Path(src).read_bytes())
 
             with patch("producer_contract.validate_render_authorization", return_value={"revision": "r"}), \
@@ -173,6 +175,44 @@ class RevisionAndDispatchTests(unittest.TestCase):
             self.assertEqual(manifest["status"], "complete", manifest.get("errors"))
             self.assertEqual(manifest["renderer"], "minimal_doc")
             self.assertEqual(calls["narration_end"], 10.0)
+            self.assertTrue(calls["loudnorm"])                   # no end CTA: the delivery encode normalizes
+
+    def test_delivery_encode_skips_loudnorm_when_the_cta_join_already_normalized(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            episode = Path(tmp)
+            audio = episode / "merged_audio_with_bed.wav"
+            audio.write_bytes(b"0" * 1000)
+            preflight = {"status": "ready", "summary": {"scene_count": 1, "render_duration_seconds": 13.0,
+                                                         "outro_hold_seconds": 3.0},
+                         "props_preview": {"renderer": "minimal_doc", "audioPath": str(audio), "imagePaths": []}}
+            seen = {}
+
+            def fake_minimal(**kwargs):
+                Path(kwargs["raw_props"]["outputPath"]).write_bytes(b"0" * 2_000_000)
+                return {"renderer": "minimal_doc", "audio_normalized": True}
+
+            def fake_normalize(src, dst, log, minimum, **kwargs):
+                seen.update(kwargs)
+                Path(dst).write_bytes(Path(src).read_bytes())
+
+            with patch("producer_contract.validate_render_authorization", return_value={"revision": "r"}), \
+                 patch.object(producer_minimal_renderer, "render_minimal_doc", side_effect=fake_minimal), \
+                 patch.object(producer_renderer, "_normalize_rendered_audio", side_effect=fake_normalize):
+                manifest = producer_renderer.orchestrate_render(root_dir=ROOT, episode_dir=episode, preflight=preflight)
+            self.assertEqual(manifest["status"], "complete", manifest.get("errors"))
+            self.assertEqual(seen, {"loudnorm": False})
+
+
+def sample_rate(path: Path) -> int:
+    return int(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate",
+                               "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True).stdout.strip())
+
+
+def loudness(path: Path, start: float, end: float) -> float:
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-vn", "-af",
+                          f"atrim={start}:{end},ebur128", "-f", "null", "-"], capture_output=True, text=True,
+                         check=True).stderr
+    return float(out[out.rindex("I:"):].split()[1])
 
 
 def probe(path: Path, stream: str) -> tuple[float, int]:
@@ -193,18 +233,61 @@ class EndCtaTests(unittest.TestCase):
     def ff(self, *args):
         subprocess.run(["ffmpeg", "-v", "error", "-y", *args], check=True)
 
-    def test_sign_off_clip_joins_after_exactly_the_episode(self):
+    def make_fixture(self):
         video, audio, cta = self.dir / "video.mp4", self.dir / "mix.wav", self.dir / "cta.mp4"
-        # the episode as render.cjs encodes it, its audio a little longer than the frames, a CTA at another size
-        self.ff("-f", "lavfi", "-i", "testsrc=size=320x180:rate=25:duration=2", "-c:v", "libx264", "-preset", "medium",
+        # the episode as render.cjs encodes it, its quiet audio a little longer than the frames; a loud CTA at another
+        # size and rate whose audio stops 0.3 s before its last frame (end_cta_v5: 16.00 s video, 15.92 s audio)
+        self.ff("-f", "lavfi", "-i", "testsrc=size=320x180:rate=25:duration=4", "-c:v", "libx264", "-preset", "medium",
                 "-crf", "16", "-pix_fmt", "yuv420p", "-r", "25", str(video))
-        self.ff("-f", "lavfi", "-i", "sine=frequency=440:duration=2.3:sample_rate=48000", "-ac", "2", str(audio))
-        self.ff("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=1", "-f", "lavfi", "-i",
-                "sine=frequency=660:duration=1:sample_rate=44100", "-c:v", "libx264", "-c:a", "aac", "-shortest", str(cta))
+        self.ff("-f", "lavfi", "-i", "sine=frequency=440:duration=4.3:sample_rate=48000", "-af", "volume=-30dB",
+                "-ac", "2", str(audio))
+        self.ff("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=2", "-f", "lavfi", "-i",
+                "sine=frequency=660:duration=1.7:sample_rate=44100", "-af", "volume=-3dB", "-ac", "2",
+                "-c:v", "libx264", "-c:a", "aac", str(cta))
+        return video, audio, cta
+
+    def test_sign_off_clip_joins_after_exactly_the_episode(self):
+        video, audio, cta = self.make_fixture()
         joined_video, joined_audio = producer_minimal_renderer.append_end_cta(
-            video, audio, cta, seconds=2.0, work=self.dir, log_path=self.dir / "log.txt")
-        self.assertEqual(probe(joined_video, "v:0")[1], 75)          # 50 episode frames + 25 CTA frames
-        self.assertAlmostEqual(probe(joined_audio, "a:0")[0], 3.0, delta=0.03)
+            video, audio, cta, work=self.dir, log_path=self.dir / "log.txt")
+        self.assertEqual(probe(joined_video, "v:0")[1], 150)         # 100 episode frames + 50 CTA frames
+        self.assertAlmostEqual(probe(joined_audio, "a:0")[0], 6.0, delta=0.002)   # CTA audio padded to its last frame
+        self.assertEqual(sample_rate(joined_audio), 48000)
+
+    def test_episode_and_cta_each_sit_at_the_delivery_loudness(self):
+        video, audio, cta = self.make_fixture()
+        _, joined_audio = producer_minimal_renderer.append_end_cta(
+            video, audio, cta, work=self.dir, log_path=self.dir / "log.txt")
+        # before the fix the CTA took the episode's make-up gain (+20 dB here) in the one loudnorm over both
+        self.assertAlmostEqual(loudness(joined_audio, 0.5, 4.0), -16.0, delta=1.0)
+        self.assertAlmostEqual(loudness(joined_audio, 4.0, 5.7), -16.0, delta=0.5)
+
+    def test_linear_gain_never_lifts_the_true_peak_past_the_ceiling(self):
+        gain = producer_minimal_renderer.linear_gain_db
+        self.assertAlmostEqual(gain({"i": -17.98, "tp": -3.72}), 1.98)      # end_cta_v5: loudness decides
+        self.assertAlmostEqual(gain({"i": -20.0, "tp": -2.0}), 0.5)         # the peak ceiling decides
+        self.assertEqual(gain({"i": float("-inf"), "tp": float("-inf")}), 0.0)
+
+    def test_delivery_file_keeps_every_cta_frame_with_audio_to_the_end_at_48k(self):
+        video, audio, cta = self.make_fixture()
+        log = self.dir / "log.txt"
+        joined_video, joined_audio = producer_minimal_renderer.append_end_cta(video, audio, cta, work=self.dir, log_path=log)
+        raw, final = self.dir / "final_unnormalized.mp4", self.dir / "final.mp4"
+        producer_minimal_renderer.mux_audio(joined_video, joined_audio, raw, shortest=False, log_path=log)
+        producer_renderer._normalize_rendered_audio(raw, final, log, 0, loudnorm=False)
+        v_seconds, v_frames = probe(final, "v:0")
+        a_seconds, _ = probe(final, "a:0")
+        self.assertEqual(v_frames, 150)                              # no CTA frame cut by -shortest
+        self.assertAlmostEqual(a_seconds, v_seconds, delta=0.03)     # sound and picture end together
+        self.assertEqual(sample_rate(final), 48000)
+        self.assertAlmostEqual(loudness(final, 4.0, 5.7), -16.0, delta=0.5)   # no second loudnorm moved the CTA
+
+    def test_delivery_encode_with_loudnorm_comes_out_at_48k(self):
+        src, out = self.dir / "in.mp4", self.dir / "out.mp4"
+        self.ff("-f", "lavfi", "-i", "testsrc=size=320x180:rate=25:duration=2", "-f", "lavfi", "-i",
+                "sine=frequency=440:duration=2:sample_rate=48000", "-c:v", "libx264", "-c:a", "alac", "-shortest", str(src))
+        producer_renderer._normalize_rendered_audio(src, out, self.dir / "log.txt", 0)
+        self.assertEqual(sample_rate(out), 48000)                    # loudnorm alone would leave 96 kHz
 
     def test_end_cta_setting_resolves_and_fails_loudly(self):
         cta = self.dir / "cta.mp4"
@@ -228,6 +311,44 @@ class EndCtaTests(unittest.TestCase):
         before = render_revision(self.dir, preflight, ROOT)
         cta.write_bytes(b"b")
         self.assertNotEqual(render_revision(self.dir, preflight, ROOT), before)
+
+
+CLIP_FRAME_CHECK = r"""
+const src = require('fs').readFileSync(process.argv[1], 'utf8');
+const line = src.match(/^const clipFrame = .*;\r?$/m);
+if (!line) throw new Error('clipFrame not found in player.html');
+const clipFrame = new Function(line[0] + '; return clipFrame;')();
+const FPS = 25, COUNT = 100000;
+let wrong = 0, checked = 0;
+// slot starts on whole ms as build_timeline rounds them, entered by the player's XF / CHAPTER_XF dissolves
+for (const base of [0, 290000, 760000]) for (let ms = 0; ms < 20000; ms++) for (const xf of [0, 1000, 1600]) {
+  const startMs = base + ms, aMs = startMs - xf / 2;
+  const a = startMs / 1000 - (xf / 1000) / 2;              // as player.html computes s._a
+  const f0 = Math.ceil(aMs / 40);                           // first render.cjs frame inside the slot
+  for (let f = f0; f < f0 + 40; f++) {
+    const want = Math.floor((40 * f - aMs) / 40) + 1;       // exact: frame k covers [a + (k-1)/fps, a + k/fps)
+    if (clipFrame(f / FPS, a, FPS, COUNT) !== want) wrong++;
+    checked++;
+  }
+}
+if (clipFrame(0, 0, FPS, 10) !== 1 || clipFrame(99, 0, FPS, 10) !== 10 || clipFrame(-1, 0, FPS, 10) !== 1)
+  throw new Error('clamping changed');
+console.log(JSON.stringify({ wrong, checked }));
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class PlayerClipFrameTests(unittest.TestCase):
+    def test_video_slot_shows_every_clip_frame_once_at_render_frame_times(self):
+        out = subprocess.run(["node", "-e", CLIP_FRAME_CHECK, str(ROOT / "doc_renderer" / "player.html")],
+                             capture_output=True, text=True, check=True).stdout
+        result = json.loads(out)
+        self.assertGreater(result["checked"], 1_000_000)
+        self.assertEqual(result["wrong"], 0)          # Math.floor without epsilon: ~1 in 5 frames held/skipped
+
+    def test_player_uses_the_tested_frame_index(self):
+        player = (ROOT / "doc_renderer" / "player.html").read_text(encoding="utf-8")
+        self.assertIn("clipFrame(t, s._a, TL.fps, s.frameCount)", player)
 
 
 class RelativeEpisodePathTests(unittest.TestCase):

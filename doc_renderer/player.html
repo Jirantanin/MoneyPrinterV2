@@ -83,6 +83,10 @@ const ramp = (t, a, b) => b <= a ? (t >= b ? 1 : 0) : clamp((t - a) / (b - a));
 const win = (t, a, b, din, dout = din) => ease(ramp(t, a, a + din)) * (1 - ease(ramp(t, b - dout, b)));
 const bell = (t, c, w) => { const x = Math.abs(t - c) / w; return x >= 1 ? 0 : ease(1 - x); };
 const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+// 1-based clip frame at render time t (render.cjs seeks f / fps) for a clip visible from a: frame k covers
+// [a + (k-1)/fps, a + k/fps). The epsilon absorbs float error: (t - a) * fps landing at k - 1e-12 held frame k and
+// skipped k + 1 on ~1 in 5 frames (judder). Slot times are whole ms, so a real fraction is 0 or at least 0.025.
+const clipFrame = (t, a, fps, count) => Math.min(count, Math.max(1, Math.floor((t - a) * fps + 1e-6) + 1));
 
 // deterministic film grain
 const g = document.getElementById('grain'), gx = g.getContext('2d');
@@ -206,7 +210,7 @@ window.__seek = (t) => {
       mover.style.transform = `translate(${dx * (p - .5)}px, ${dy * (p - .5)}px) scale(${z0 + (z1 - z0) * p})`;
     } else if (s.kind === 'video') {
       // play the clip once from the start of its visible window; hold the last frame, never loop
-      const n = Math.min(s.frameCount, Math.max(1, Math.floor((t - s._a) * TL.fps) + 1));
+      const n = clipFrame(t, s._a, TL.fps, s.frameCount);
       const src = s.framesBase + String(n).padStart(5, '0') + '.jpg';
       if (mover.dataset.frame !== src) {
         mover.dataset.frame = src; mover.src = src;

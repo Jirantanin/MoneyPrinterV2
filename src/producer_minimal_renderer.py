@@ -37,12 +37,16 @@ carry designed transitions); every shot boundary then uses the plain crossfade. 
 
 ``producer_plan.json`` -> ``render_settings.end_cta.path`` (repo-relative or absolute) appends the channel's sign-off
 clip after the outro hold: it is re-encoded with render.cjs's x264 settings at the episode's size and joined by stream
-copy, and its audio follows exactly the episode's frames. New plans get the current clip (producer_mode init).
+copy, and its audio follows exactly the episode's frames. The two parts are loudness-normalized separately before the
+join (the episode with the usual single-pass loudnorm, the CTA with one linear gain to -16 LUFS / TP -1.5) and the CTA
+audio is padded to its last frame, so the delivery encode skips its own loudnorm. New plans get the current clip
+(producer_mode init).
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -299,9 +303,37 @@ def resolve_end_cta(root_dir: str | Path, render_settings: Any) -> Path | None:
     return path.resolve()
 
 
-def append_end_cta(video: Path, audio: Path, cta: Path, *, seconds: float, work: Path,
-                   log_path: Path) -> tuple[Path, Path]:
-    """Join the sign-off clip after the episode: video by stream copy, audio after exactly ``seconds``."""
+def _probe_frames(video: Path) -> int:
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries",
+                          "stream=nb_read_packets", "-of", "csv=p=0", str(video)], capture_output=True, text=True, check=True)
+    return int(out.stdout.strip().split(",")[0])
+
+
+def measure_loudness(path: Path) -> dict[str, float]:
+    """Integrated loudness / true peak of ``path``'s audio (loudnorm's measuring pass)."""
+    from producer_renderer import LOUDNORM_FILTER
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-vn", "-af",
+                          f"{LOUDNORM_FILTER}:print_format=json", "-f", "null", "-"],
+                         capture_output=True, text=True, check=True, encoding="utf-8", errors="replace").stderr
+    stats = json.loads(out[out.rindex("{"):out.rindex("}") + 1])
+    return {"i": float(stats["input_i"]), "tp": float(stats["input_tp"])}
+
+
+def linear_gain_db(measured: dict[str, float]) -> float:
+    """One gain that brings a clip to the delivery loudness without its true peak passing the ceiling."""
+    from producer_renderer import LOUDNESS_TARGET_I, LOUDNESS_TARGET_TP
+    gain = min(LOUDNESS_TARGET_I - measured["i"], LOUDNESS_TARGET_TP - measured["tp"])
+    return gain if math.isfinite(gain) else 0.0     # a silent clip measures -inf: leave it alone
+
+
+def append_end_cta(video: Path, audio: Path, cta: Path, *, work: Path, log_path: Path) -> tuple[Path, Path]:
+    """Join the sign-off clip after the episode, each part already at the delivery loudness.
+
+    Video by stream copy; the episode audio is cut/padded to exactly the episode's frames and gets the same
+    single-pass loudnorm a render without a CTA gets at delivery; the CTA audio gets one linear gain to the target
+    (no make-up gain from the quiet outro before it) and is padded to the CTA's frames, so picture and sound end
+    together. The caller must then encode without another loudnorm."""
+    from producer_renderer import FINAL_SAMPLE_RATE, LOUDNORM_FILTER
     size = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
                            "-of", "csv=p=0:s=x", str(video)], capture_output=True, text=True, check=True).stdout.strip()
     cta_video, joined_video, joined_audio = work / "end_cta.mp4", work / "video_end_cta.mp4", work / "audio_end_cta.wav"
@@ -313,13 +345,23 @@ def append_end_cta(video: Path, audio: Path, cta: Path, *, seconds: float, work:
     listing.write_text("".join(f"file '{p.resolve().as_posix()}'\n" for p in (video, cta_video)), encoding="utf-8")
     _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy",
           str(joined_video)], log_path=log_path)
-    fmt = "aformat=sample_rates=48000:channel_layouts=stereo"
+    episode_s, cta_s = _probe_frames(video) / FPS, _probe_frames(cta_video) / FPS
+    gain = linear_gain_db(measure_loudness(cta))
+    fmt = f"aformat=sample_rates={FINAL_SAMPLE_RATE}:channel_layouts=stereo"   # loudnorm runs at 192 kHz: back to 48
     _run(["ffmpeg", "-y", "-v", "error", "-i", str(audio), "-i", str(cta), "-filter_complex",
-          f"[0:a]{fmt},atrim=0:{seconds},apad=whole_dur={seconds}[a0];[1:a]{fmt}[a1];[a0][a1]concat=n=2:v=0:a=1",
-          "-c:a", "pcm_s16le", str(joined_audio)], log_path=log_path)
+          f"[0:a]{fmt},atrim=0:{episode_s:.6f},apad=whole_dur={episode_s:.6f},{LOUDNORM_FILTER},{fmt}[a0];"
+          f"[1:a]{fmt},volume={gain:.2f}dB,atrim=0:{cta_s:.6f},apad=whole_dur={cta_s:.6f}[a1];"
+          "[a0][a1]concat=n=2:v=0:a=1", "-c:a", "pcm_s16le", str(joined_audio)], log_path=log_path)
     cta_video.unlink(missing_ok=True)
     listing.unlink(missing_ok=True)
     return joined_video, joined_audio
+
+
+def mux_audio(video: Path, audio: Path, output: Path, *, shortest: bool, log_path: Path) -> None:
+    """Video copy + lossless audio. A joined end CTA already has audio of exactly the video's length, and
+    ``-shortest`` would cut its last frames, so it is used only for the bare episode (mix a little longer)."""
+    _run(["ffmpeg", "-y", "-v", "error", "-i", str(video), "-i", str(audio), "-map", "0:v", "-map", "1:a",
+          "-c:v", "copy", "-c:a", "alac", *(["-shortest"] if shortest else []), str(output)], log_path=log_path)
 
 
 def _run(args: list[str], *, log_path: Path, timeout_seconds: int | None = None, cwd: Path | None = None) -> None:
@@ -372,7 +414,8 @@ def render_minimal_stills(*, root_dir: str | Path, episode_dir: str | Path, raw_
 
 def render_minimal_doc(*, root_dir: str | Path, episode_dir: str | Path, raw_props: dict[str, Any],
                        narration_end: float, timeout_seconds: int, log_path: Path) -> dict[str, Any]:
-    """Render ``raw_props['outputPath']`` (video + lossless audio, normalized later by the caller)."""
+    """Render ``raw_props['outputPath']`` (video + lossless audio). The caller normalizes loudness at delivery unless
+    the result says ``audio_normalized`` (an end CTA was joined, each part already at the target)."""
     prep = _prepare_work(root_dir, episode_dir, raw_props, narration_end)
     root_path, base, timeline, work = prep["root_path"], prep["base"], prep["timeline"], prep["work"]
     timeline_path, overrides = prep["timeline_path"], prep["overrides"]
@@ -383,11 +426,10 @@ def render_minimal_doc(*, root_dir: str | Path, episode_dir: str | Path, raw_pro
          log_path=log_path, timeout_seconds=timeout_seconds, cwd=renderer_dir(root_path))
     output, audio, end_cta = Path(str(raw_props["outputPath"])), Path(str(raw_props["audioPath"])), raw_props.get("endCtaPath")
     if end_cta:
-        joined = append_end_cta(video_only, audio, Path(end_cta), seconds=timeline["total"], work=work, log_path=log_path)
+        joined = append_end_cta(video_only, audio, Path(end_cta), work=work, log_path=log_path)
         video_only.unlink(missing_ok=True)
         video_only, audio = joined
-    _run(["ffmpeg", "-y", "-v", "error", "-i", str(video_only), "-i", str(audio),
-          "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "alac", "-shortest", str(output)], log_path=log_path)
+    mux_audio(video_only, audio, output, shortest=not end_cta, log_path=log_path)
     if end_cta:
         audio.unlink(missing_ok=True)
     for leftover in (work / "chunks", work / "profiles", base / "assets" / "video_frames"):
@@ -396,4 +438,5 @@ def render_minimal_doc(*, root_dir: str | Path, episode_dir: str | Path, raw_pro
     return {"renderer": RENDERER_ID, "output_path": str(output), "work_dir": str(work),
             "timeline_path": str(timeline_path), "shots": len(timeline["shots"]),
             "chapters": len(timeline["chapters"]), "video_shots": sum(s["kind"] == "video" for s in timeline["shots"]),
-            "warnings": timeline["warnings"], "end_cta": end_cta, "overrides_applied": sorted((overrides.get("assets") or {}).keys())}
+            "warnings": timeline["warnings"], "end_cta": end_cta, "audio_normalized": bool(end_cta),
+            "overrides_applied": sorted((overrides.get("assets") or {}).keys())}
