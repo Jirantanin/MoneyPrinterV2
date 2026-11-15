@@ -19,7 +19,9 @@ async function launch({ gpu = process.env.PRODUCER_CHROME_GPU === '1' } = {}) {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'gfxkit-'));
   const browser = await puppeteer.launch({ executablePath: findChrome(), headless: true, userDataDir: profile,
     args: ['--no-sandbox', '--allow-file-access-from-files', '--hide-scrollbars', '--force-color-profile=srgb',
-      ...(gpu ? ['--ignore-gpu-blocklist', '--use-angle=d3d11', '--enable-gpu-rasterization', '--enable-zero-copy'] : [])] });
+      // three.js pages: without a GPU, Chrome only gives WebGL through SwiftShader when asked (local trusted pages only)
+      ...(gpu ? ['--ignore-gpu-blocklist', '--use-angle=d3d11', '--enable-gpu-rasterization', '--enable-zero-copy']
+        : ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--use-gl=angle'])] });
   return { browser, cleanup: () => fs.rmSync(profile, { recursive: true, force: true }) };
 }
 

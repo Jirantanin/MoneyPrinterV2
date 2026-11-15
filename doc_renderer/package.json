@@ -4,6 +4,7 @@
   "private": true,
   "description": "Minimal documentary renderer for Producer Mode (HTML player driven frame-by-frame in headless Chrome).",
   "dependencies": {
-    "puppeteer-core": "19.11.1"
+    "puppeteer-core": "19.11.1",
+    "three": "0.149.0"
   }
 }

@@ -605,3 +605,11 @@ trigger it did not hear keeps its phrase time and is marked "(phrase)").
 **Gate (นน):** before recording a world, run `node doc_renderer/gfx_kit/contact_sheet.cjs <page.html> "<scene&f=…>"
 <world>.beats.md <outdir>` and send นน `<outdir>/contact.html` (one still per beat at its peak, the guard-rule problems
 on top). Record only after นน approves that world.
+
+**Look before you report (whoever draws):** while drawing, and before calling a world or Short scene done, run
+`node doc_renderer/gfx_kit/peek.cjs <page.html> "<scene&f=…>" --dur <s>` (or `--at 0,3.5,7`; `--size 1080x1920` for a
+vertical page; `PRODUCER_CHROME_GPU=1` for three.js) and open the one sheet it writes (`peek_<scene>.jpg` next to the
+page). It prints page errors (exit 1) and warns when neighbouring frames are the same picture. Fix what you see, peek
+again. One sheet costs about a tenth of opening the frames one by one, and every image opened stays in the context. In
+the 2026-11-14 blind test (`.mp/model_compare_20261114/SUMMARY.md`) every first draft drawn without looking had a bug
+visible at a glance (a hollow Sun, a cloud shell poking out of the cube, colours wrapping to black).
