@@ -100,7 +100,7 @@ class FacebookUploadTests(unittest.TestCase):
             ("GET", "987"): Response({"status": {"video_status": "processing", "publishing_phase": {
                 "status": "complete", "publish_status": "scheduled", "publish_time": when}}}),
         })
-        receipt = fb.upload(short, graph=fb.Graph(TOKEN, session), page_id="123", log=lambda _: None)
+        receipt = fb.upload(short, graph=fb.Graph(TOKEN, session), page_id="123", log=lambda _: None, now=NOW)
         self.assertEqual(receipt["status"], "scheduled_verified")
         self.assertEqual(fb._unix("2026-10-27T05:00:00+0000"), when)  # what the live API actually returns
         self.assertEqual(receipt["video_id"], "987")
@@ -126,13 +126,13 @@ class FacebookUploadTests(unittest.TestCase):
             ("POST", "987"): ConnectionError(f"boom access_token={TOKEN}"),
         })
         with self.assertRaises(fb.GraphError) as caught:
-            fb.upload(short, graph=fb.Graph(TOKEN, session), page_id="123", log=lambda _: None)
+            fb.upload(short, graph=fb.Graph(TOKEN, session), page_id="123", log=lambda _: None, now=NOW)
         self.assertNotIn(TOKEN, str(caught.exception))
         receipt = fb.read_json(short / "upload_pack" / fb.RECEIPT_NAME)
         self.assertEqual((receipt["status"], receipt["video_id"]), ("upload_interrupted", "987"))
         retry = Session({})
         with self.assertRaises(RuntimeError):
-            fb.upload(short, graph=fb.Graph(TOKEN, retry), page_id="123")
+            fb.upload(short, graph=fb.Graph(TOKEN, retry), page_id="123", now=NOW)
         self.assertEqual(retry.calls, [])
 
     def test_graph_error_and_page_mismatch_stop(self) -> None:
@@ -140,11 +140,11 @@ class FacebookUploadTests(unittest.TestCase):
         self._request(short)
         wrong_page = Session({("GET", "123"): Response({"id": "555", "name": "Other"})})
         with self.assertRaises(RuntimeError):
-            fb.upload(short, graph=fb.Graph(TOKEN, wrong_page), page_id="123")
+            fb.upload(short, graph=fb.Graph(TOKEN, wrong_page), page_id="123", now=NOW)
         self.assertFalse((short / "upload_pack" / fb.RECEIPT_NAME).exists())
         denied = Session({("GET", "123"): Response({"error": {"message": "(#200) Permissions error", "code": 200}}, 403)})
         with self.assertRaises(fb.GraphError) as caught:
-            fb.upload(short, graph=fb.Graph(TOKEN, denied), page_id="123")
+            fb.upload(short, graph=fb.Graph(TOKEN, denied), page_id="123", now=NOW)
         self.assertIn("Permissions error", str(caught.exception))
 
     def test_upload_state_and_resume_finish(self) -> None:
@@ -160,7 +160,7 @@ class FacebookUploadTests(unittest.TestCase):
             ("POST", "video_reels", "finish"): Response({"success": True}),
             ("GET", "987"): Response({"status": {"video_status": "processing", "publishing_phase": {"status": "in_progress"}}}),
         })
-        receipt = fb.upload(short, graph=fb.Graph(TOKEN, session), page_id="123")
+        receipt = fb.upload(short, graph=fb.Graph(TOKEN, session), page_id="123", now=NOW)
         self.assertEqual([c["json"].get("upload_phase") for c in session.calls], ["finish", None])
         self.assertEqual(session.calls[0]["json"]["video_state"], "PUBLISHED")
         self.assertEqual(receipt["status"], "finished")  # still processing; `status` verifies later

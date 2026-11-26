@@ -229,7 +229,8 @@ def verify(request: dict[str, Any], status: dict[str, Any]) -> str | None:
     return None
 
 
-def upload(short_dir: Path, *, graph: Graph | None = None, page_id: str | None = None, log=print) -> dict[str, Any]:
+def upload(short_dir: Path, *, graph: Graph | None = None, page_id: str | None = None, log=print,
+           now: datetime | None = None) -> dict[str, Any]:
     pack = short_dir / "upload_pack"
     request = read_json(pack / REQUEST_NAME)
     if not request:
@@ -249,7 +250,7 @@ def upload(short_dir: Path, *, graph: Graph | None = None, page_id: str | None =
     if file_sha256(video) != request["video_sha256"]:
         raise RuntimeError("video.mp4 changed since the request; run `request` again")
     if state == "new":
-        validate_request(request)
+        validate_request(request, now=now)
         page_name = check_page(graph, page_id)
         receipt = {"status": "starting", "started_at": utc_now(), "page_id": page_id, "page_name": page_name,
                    "video_path": str(video), "video_sha256": request["video_sha256"], "video_state": request["video_state"],
@@ -278,7 +279,7 @@ def upload(short_dir: Path, *, graph: Graph | None = None, page_id: str | None =
     finish: dict[str, Any] = {"upload_phase": "finish", "video_id": receipt["video_id"],
                               "video_state": request["video_state"], "description": request["description"]}
     if request["video_state"] == "SCHEDULED":
-        validate_request(request)  # the 10-minute floor may have passed while uploading
+        validate_request(request, now=now)  # the 10-minute floor may have passed while uploading
         finish["scheduled_publish_time"] = request["scheduled_publish_time"]
     receipt["status"] = "finishing"
     write_json(receipt_path, receipt)
