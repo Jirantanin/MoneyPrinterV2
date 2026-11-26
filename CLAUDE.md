@@ -24,6 +24,7 @@ The adjacent `moneyprinter-shorts-pack` skill uses the Remotion `ClipShort` comp
 - `src/llm_provider.py`: Anthropic, MiniMax/OpenRouter, and local Ollama routing
 - `scripts/youtube_upload.py` + `src/youtube_upload.py`: user-directed YouTube upload/schedule of a finished episode (private or scheduled `publishAt`, receipts in `upload_pack/`); see the `moneyprinter-youtube-upload` skill
 - `scripts/facebook_upload.py` + `src/facebook_upload.py`: user-directed Facebook Page Reel upload/schedule of a finished Short (Graph API, receipts in `upload_pack/`); same skill
+- `scripts/facebook_post.py` + `src/facebook_post.py`: user-directed Facebook Page photo post (image + caption, now or scheduled) for the daily fact posts; post folders in `.mp/fb_posts/`; same skill
 - `scripts/episode_storage.py` + `src/episode_storage.py`: user-directed prune/archive of uploaded episodes in `.mp/` (removals staged in `.mp/_trash/` for the user to empty; reference records in `.mp/archive/INDEX.md`); see the `moneyprinter-episode-archive` skill
 
 The former Studio server/UI, automated Podcast/Shorts flows, scheduled runner, and separate APOD automation have been removed. The YouTube uploader is not automation: nothing runs on a schedule, and each upload records the user's explicit instruction.

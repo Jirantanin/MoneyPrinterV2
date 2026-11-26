@@ -143,7 +143,11 @@ def upload_state(receipt: dict[str, Any]) -> str:
 
 
 class GraphError(RuntimeError):
-    pass
+    """http_status is set when Facebook answered (so the call failed cleanly); None for network errors (outcome unknown)."""
+
+    def __init__(self, message: str, http_status: int | None = None):
+        super().__init__(message)
+        self.http_status = http_status
 
 
 class Graph:
@@ -170,7 +174,7 @@ class Graph:
             error = payload.get("error") or {}
             raise GraphError(f"{method} {url} -> HTTP {response.status_code}: {error.get('message', 'no message')} "
                              f"(code {error.get('code')}, subcode {error.get('error_subcode')}, "
-                             f"fbtrace {error.get('fbtrace_id')})")
+                             f"fbtrace {error.get('fbtrace_id')})", http_status=response.status_code)
         return payload
 
     def get(self, path: str, **params) -> dict[str, Any]:
@@ -178,6 +182,12 @@ class Graph:
 
     def post(self, path: str, data: dict[str, Any]) -> dict[str, Any]:
         return self._call("POST", f"{GRAPH_URL}/{path}", json=data)
+
+    def post_file(self, path: str, data: dict[str, Any], field: str, file: Path, content_type: str) -> dict[str, Any]:
+        """Multipart POST (form fields + one file), e.g. a Page photo."""
+        with file.open("rb") as stream:
+            return self._call("POST", f"{GRAPH_URL}/{path}", data=data, timeout=UPLOAD_TIMEOUT,
+                              files={field: (file.name, stream, content_type)})
 
     def upload_bytes(self, video_id: str, video: Path) -> dict[str, Any]:
         size = video.stat().st_size

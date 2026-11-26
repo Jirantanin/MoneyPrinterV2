@@ -35,6 +35,8 @@ Provider use depends on the selected plan and asset. Missing optional stock or i
 
 The user creates the Meta app and the token and pastes them into `config.json` themselves. The tool sends the token only in the `Authorization` header and never prints or writes it. Reels must be 3-90 seconds, and a schedule must be more than 10 minutes and at most 29 days ahead. See the `moneyprinter-youtube-upload` skill for the steps.
 
+`scripts/facebook_post.py` uses the same two keys to post one image + caption on the Page (`/{page-id}/photos`, now or scheduled with `published=false` + `scheduled_publish_time`), for the daily fact posts. Each post folder holds `post.json` (`caption`, `image`, `sources`) and a PNG/JPEG under 4 MB.
+
 ## Local requirements
 
 Install Python dependencies from `requirements.txt`. Remotion rendering also requires Node.js and dependencies installed under `remotion/`. The local preflight checks configuration and tool presence only; it does not send API requests or spend credits.
